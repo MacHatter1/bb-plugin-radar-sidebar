@@ -1,0 +1,3013 @@
+/* Radar Sidebar. All rules are prefixed `radar-` and read BB's live theme
+   tokens (with fallbacks), so custom palettes keep working. */
+
+.radar-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 13px;
+  color: var(--foreground);
+  container-type: inline-size;
+  container-name: radar-thread-list;
+}
+
+/* Narrow sidebar: status words go first (glyphs + tooltips remain). */
+@container radar-thread-list (max-width: 249px) {
+  .radar-status-word {
+    display: none;
+  }
+}
+
+/* Very narrow: project chips go, badges slim to status + unread. */
+@container radar-thread-list (max-width: 194px) {
+  .radar-row-project {
+    display: none;
+  }
+  .radar-row-badges > :not(.radar-row-status-badge):not(.radar-unread) {
+    display: none;
+  }
+}
+
+/* ---- Sticky header: New button, filter, lifecycle + grouping controls. ---- */
+
+.radar-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 8px 10px;
+  background: var(--sidebar, var(--background));
+  border-bottom: 1px solid var(--border);
+}
+
+.radar-search {
+  position: relative;
+}
+
+.radar-search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.radar-search-input {
+  width: 100%;
+  height: 30px;
+  padding-left: 28px !important;
+  padding-right: 28px !important;
+  font-size: 13px;
+}
+
+.radar-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.radar-search-clear:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-search-clear [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-search-shortcut {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  color: var(--muted-foreground);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.radar-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.radar-status-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0 0 0;
+}
+
+.radar-status-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.radar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.radar-chip:hover {
+  color: var(--foreground);
+  background: var(--muted);
+  border-color: color-mix(in srgb, var(--border) 80%, var(--foreground) 20%);
+}
+
+.radar-chip-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+.radar-chip-active:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.radar-chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-chip-active .radar-chip-count {
+  background: color-mix(in srgb, var(--primary-foreground) 22%, transparent);
+  color: var(--primary-foreground);
+}
+
+.radar-chip-indicator [data-icon-root] {
+  width: 11px;
+  height: 11px;
+}
+
+.radar-chip-active .radar-chip-indicator,
+.radar-chip-active .radar-tone-running {
+  color: inherit;
+}
+
+.radar-chip .radar-unread {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #2563eb;
+  display: inline-block;
+}
+
+.radar-chip-active .radar-unread {
+  background: var(--primary-foreground);
+}
+
+/* Compact (touch) viewports: no hover exists, so the ⋯ menu lives
+   inline instead of overlaying — every action stays one tap away. */
+.radar-list-compact .radar-row-actions {
+  position: static;
+  flex: none;
+  align-self: center;
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.radar-list-compact .radar-action:not(.radar-action-more) {
+  display: none;
+}
+
+.radar-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--muted);
+}
+
+.radar-segmented-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.radar-segmented-button:hover {
+  color: var(--foreground);
+}
+
+.radar-segmented-button:active {
+  transform: scale(0.94);
+  transition: transform 80ms ease;
+}
+
+.radar-list-switching {
+  opacity: 0.65;
+  transition: opacity 120ms ease;
+}
+
+.radar-segmented-button-active {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+.radar-segmented-icon {
+  padding: 2px 6px;
+}
+
+.radar-segmented-icon [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---- Scrolling body + groups. ---- */
+
+/* ---------- Hover peek card ---------- */
+
+.radar-hover-card {
+  --radar-hover-w: 300px;
+  position: fixed;
+  z-index: 1000;
+  /* Overwritten by the placement effect before first paint. */
+  left: 0;
+  top: 0;
+  width: var(--radar-hover-w);
+  max-width: min(var(--radar-hover-w), calc(100vw - 16px));
+  max-height: calc((100vh - 16px) * 0.92);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--popover, var(--card));
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--border) 40%, transparent),
+    0 12px 32px rgb(0 0 0 / 0.22),
+    0 2px 8px rgb(0 0 0 / 0.12);
+  animation: radar-hover-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Pointer bridging the gap between row and card. */
+.radar-hover-card::before,
+.radar-hover-card::after {
+  content: "";
+  position: absolute;
+  top: var(--radar-arrow-y, 18px);
+  margin-top: -4px;
+  width: 9px;
+  height: 9px;
+  background: var(--popover, var(--card));
+  transform: rotate(45deg);
+}
+
+.radar-hover-card::before {
+  left: -5px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.radar-hover-card::after {
+  right: -5px;
+  display: none;
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+/* Placed to the left of the row: show the right-hand arrow instead. */
+.radar-hover-card[data-side="left"]::before {
+  display: none;
+}
+
+.radar-hover-card[data-side="left"]::after {
+  display: block;
+}
+
+@keyframes radar-hover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+}
+
+/* Header */
+
+.radar-hover-head {
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+}
+
+.radar-hover-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.radar-hover-provider {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding-top: 2px;
+  color: var(--muted-foreground);
+}
+
+.radar-hover-provider [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-hover-provider-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 3px;
+  line-height: 0;
+}
+
+.radar-hover-provider-icon * {
+  width: 14px !important;
+  height: 14px !important;
+  max-width: 14px;
+  max-height: 14px;
+  object-fit: contain;
+}
+
+.radar-hover-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.radar-hover-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-left: 21px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.radar-hover-status {
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Goal */
+
+.radar-hover-goal {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 9px 0 0;
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.radar-hover-goal-label {
+  margin-right: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--muted-foreground) 80%, var(--foreground));
+}
+
+/* Chips */
+
+.radar-hover-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.radar-hover-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  color: var(--muted-foreground);
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-hover-chip [data-icon-root] {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+
+.radar-hover-chip-strong {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+/* Git rows */
+
+.radar-hover-git {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.radar-hover-git-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.radar-hover-git-row:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-hover-git-row [data-icon-root] {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.radar-hover-git-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.radar-hover-git-hint {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0;
+}
+
+.radar-hover-git-row:hover .radar-hover-git-hint {
+  opacity: 0.75;
+}
+
+.radar-hover-git-ext {
+  opacity: 0;
+}
+
+.radar-hover-git-row:hover .radar-hover-git-ext {
+  opacity: 0.7;
+}
+
+.radar-hover-pr {
+  font-weight: 650;
+  color: var(--foreground);
+}
+
+/* Context meter */
+
+.radar-hover-context {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.radar-hover-context-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.radar-hover-context-title {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+}
+
+.radar-hover-context-values {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-hover-context-values strong {
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.radar-hover-context-sep {
+  color: var(--muted-foreground);
+}
+
+/* Percentage badge. Text is mixed toward --foreground so it stays readable
+   on light and dark palettes alike; the fill is a soft tint, never a solid
+   block behind small type. */
+.radar-hover-context-pct {
+  margin-left: 4px;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--muted-foreground) 10%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 55%, var(--foreground));
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.radar-pct-warning {
+  border-color: color-mix(in srgb, var(--warning, #b98533) 55%, transparent);
+  background: color-mix(in srgb, var(--warning, #b98533) 16%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--warning, #b98533) 45%,
+    var(--foreground)
+  );
+}
+
+.radar-pct-critical {
+  border-color: color-mix(in srgb, var(--destructive, #d43d3d) 60%, transparent);
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 18%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--destructive, #d43d3d) 40%,
+    var(--foreground)
+  );
+}
+
+.radar-hover-bar {
+  position: relative;
+  display: flex;
+  gap: 1px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 14%, transparent);
+  overflow: hidden;
+}
+
+.radar-hover-bar-seg {
+  height: 100%;
+  min-width: 2px;
+  transition: width 220ms ease;
+}
+
+/* Bar-segment fills: background only. For text badges use .radar-pct-*. */
+.radar-token-normal {
+  background: var(--primary);
+}
+
+.radar-token-warning {
+  background: color-mix(in srgb, var(--warning, #b98533) 85%, var(--foreground));
+}
+
+.radar-token-critical {
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 85%, var(--foreground));
+}
+
+/* Auto-compact threshold marker */
+.radar-hover-bar-mark {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--foreground);
+  opacity: 0.55;
+}
+
+.radar-hover-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-top: 6px;
+}
+
+.radar-hover-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.radar-hover-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: none;
+  /* Ring keeps faint segments legible against any card background. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 25%, transparent);
+}
+
+.radar-hover-legend-tokens {
+  font-weight: 600;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Folded family */
+
+.radar-hover-kids {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 9px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  color: var(--muted-foreground);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.radar-hover-kids [data-icon-root] {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-top: 1px;
+}
+
+/* Actions */
+
+.radar-hover-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.radar-hover-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.radar-hover-action:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-hover-action [data-icon-root] {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.radar-hover-action-primary {
+  flex: 1.35;
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--foreground);
+}
+
+.radar-hover-action-primary:hover {
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.radar-hover-action-on {
+  color: var(--primary);
+}
+
+.radar-list-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 4px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.radar-list-body::before {
+  content: "";
+  display: block;
+  height: 4px;
+}
+
+.radar-result-count {
+  margin: 6px 8px 2px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.radar-group {
+  margin-top: 1px;
+}
+
+/* Subtle breathing room only after an expanded section */
+.radar-group-expanded + .radar-group {
+  margin-top: 8px;
+}
+
+.radar-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 5px 8px;
+  background: color-mix(
+    in srgb,
+    var(--sidebar, var(--background)) 82%,
+    transparent
+  );
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-radius: 6px;
+  box-shadow: none;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.radar-group-header:hover {
+  background: color-mix(
+    in srgb,
+    var(--muted) 60%,
+    transparent
+  );
+  color: var(--foreground);
+}
+
+.radar-group-expanded > .radar-group-header {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.radar-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.radar-group-header:hover .radar-group-toggle {
+  color: var(--foreground);
+}
+
+.radar-group-header-sortable .radar-group-toggle {
+  cursor: grab;
+}
+
+.radar-group-header-sortable .radar-group-toggle:active {
+  cursor: grabbing;
+}
+
+.radar-group-chevron {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-group-chevron [data-icon-root],
+.radar-group-header [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-group-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 150ms ease;
+}
+
+.radar-group-header:hover .radar-group-icon {
+  color: var(--foreground);
+}
+
+.radar-group-icon [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radar-group-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.radar-group-count {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-group-unread {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-group-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.radar-group-status [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-group-new-thread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease;
+  flex-shrink: 0;
+}
+
+.radar-group-header:hover .radar-group-new-thread {
+  opacity: 0.9;
+}
+
+.radar-group-new-thread:hover {
+  opacity: 1;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.radar-group-new-thread:active {
+  background: color-mix(in srgb, var(--foreground) 18%, transparent);
+  transform: scale(0.92);
+}
+
+.radar-group-new-thread:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 1px;
+}
+
+.radar-group-new-thread [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-group-new-thread-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  opacity: 0.7;
+  color: var(--muted-foreground);
+}
+
+.radar-group-new-thread-preview [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-group-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  opacity: 0.35;
+  transition: opacity 150ms ease, color 150ms ease;
+  flex-shrink: 0;
+}
+
+.radar-group-header:hover .radar-group-grip {
+  opacity: 0.9;
+  color: var(--foreground);
+}
+
+.radar-group-grip [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-group-dragging {
+  opacity: 0.35;
+}
+
+.radar-group-drag-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--sidebar, var(--background));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 4px 10px -2px rgba(0, 0, 0, 0.15);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--foreground);
+  cursor: grabbing;
+  pointer-events: none;
+  user-select: none;
+  z-index: 9999;
+}
+
+.radar-group-drag-preview .radar-group-grip {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.radar-group-drag-preview .radar-group-drag-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.radar-group-drag-preview .radar-group-drag-icon [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-group-drag-preview .radar-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radar-group-drag-preview .radar-group-count {
+  margin-left: auto;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+.radar-group > .radar-fold > .radar-fold-inner {
+  padding-top: 2px;
+  padding-bottom: 4px;
+}
+
+/* ---- Thread clusters & top-level thread separation ---- */
+
+.radar-thread-cluster {
+  position: relative;
+}
+
+.radar-thread-cluster + .radar-thread-cluster {
+  margin-top: 3px;
+  padding-top: 4px;
+}
+
+.radar-thread-cluster + .radar-thread-cluster::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+/* Smoothly hide divider when either the thread above or below is hovered or active */
+.radar-thread-cluster:has(.radar-row:hover)::before,
+.radar-thread-cluster:has(.radar-row-active)::before,
+.radar-thread-cluster:has(.radar-row:hover) + .radar-thread-cluster::before,
+.radar-thread-cluster:has(.radar-row-active) + .radar-thread-cluster::before {
+  opacity: 0;
+}
+
+/* ---- Thread rows. ---- */
+
+.radar-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  margin: 1px 0;
+  border-radius: 8px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+  box-shadow: inset 3px 0 0 transparent;
+  transition:
+    background-color 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.radar-row:hover {
+  background: var(--muted);
+}
+
+.radar-row-active {
+  background: var(--accent, var(--muted));
+}
+
+.radar-row-keyboard-focused {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.radar-row-selected {
+  background: color-mix(in srgb, var(--primary) 12%, transparent) !important;
+  box-shadow: inset 3px 0 0 var(--primary) !important;
+}
+
+.radar-row-selected:hover {
+  background: color-mix(in srgb, var(--primary) 18%, transparent) !important;
+}
+
+/* Compact compresses vertically only. Inline padding and the child indent
+   stay identical to comfortable, so tree guides keep lining up with text.
+   `margin-block` rather than `margin`: the shorthand would zero margin-left
+   and wipe .radar-row-child / .radar-row-deep's indent. */
+.radar-density-compact .radar-row,
+.radar-row-compact {
+  contain-intrinsic-size: auto 28px;
+  margin-block: 0;
+  min-height: 28px;
+}
+
+.radar-density-compact .radar-row-main,
+.radar-row-compact .radar-row-main {
+  min-height: 24px;
+  padding: 2px 8px;
+}
+
+/* Single-line rows. The subtitle lives in a grid wrapper, so it collapses
+   the same way the adaptive fold does and still animates; the branch line is
+   a plain flex row outside that wrapper, so it needs display:none. */
+.radar-density-compact .radar-row-extra,
+.radar-row-compact .radar-row-extra {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.radar-density-compact .radar-branch-line,
+.radar-row-compact .radar-branch-line {
+  display: none;
+}
+
+.radar-density-compact .radar-tree-gutter,
+.radar-row-compact .radar-tree-gutter {
+  padding-top: 4px;
+}
+
+.radar-select-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border-radius: 4px;
+  transition:
+    transform 100ms ease,
+    color 120ms ease;
+}
+
+.radar-select-checkbox [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-select-checkbox-checked {
+  color: var(--primary);
+}
+
+.radar-select-checkbox:hover {
+  color: var(--foreground);
+  transform: scale(1.1);
+}
+
+.radar-row-child {
+  margin-left: 16px;
+}
+
+.radar-row-deep {
+  margin-left: 28px;
+}
+
+.radar-row-child::before,
+.radar-row-deep::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.radar-row-child.radar-row-last::before,
+.radar-row-deep.radar-row-last::before {
+  bottom: auto;
+  height: 15px;
+}
+
+.radar-row-child::after,
+.radar-row-deep::after {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 14px;
+  width: 8px;
+  height: 1px;
+  background: var(--border);
+}
+
+.radar-tree-gutter {
+  width: 18px;
+  flex: none;
+  align-self: flex-start;
+  padding-top: 6px;
+}
+
+.radar-tree-toggle {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.radar-tree-toggle:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-tree-toggle [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-kids-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  align-self: center;
+  animation: radar-badge-in 200ms ease-out;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition:
+    grid-template-rows 280ms ease,
+    opacity 220ms ease,
+    visibility 0s;
+}
+
+.radar-fold-collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 280ms ease,
+    opacity 220ms ease,
+    visibility 0s linear 280ms;
+}
+
+.radar-fold-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.radar-kids-pill-unread {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.radar-kids-pill .radar-dot {
+  margin-top: 0;
+}
+
+.radar-kids-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  animation: radar-badge-in 200ms ease-out;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.radar-kids-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-face-stack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.radar-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: -5px;
+  border: 1px solid var(--sidebar, var(--background));
+  border-radius: 50%;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.radar-face:first-child {
+  margin-left: 0;
+}
+
+.radar-face [data-icon-root] {
+  width: 9px;
+  height: 9px;
+}
+
+.radar-row-child .radar-row-subtitle,
+.radar-row-deep .radar-row-subtitle {
+  margin-left: 16px;
+}
+
+.radar-row-split {
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
+.radar-row-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.radar-row-main:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
+.radar-row-lead {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  min-width: 14px;
+  padding-top: 2px;
+}
+
+.radar-row-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.radar-status-word {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.radar-row-status-badge .radar-dot {
+  margin-top: 0;
+}
+
+.radar-provider-icon {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  overflow: hidden;
+  border-radius: 3px;
+  line-height: 0;
+}
+
+.radar-provider-icon * {
+  width: 14px !important;
+  height: 14px !important;
+  max-width: 14px;
+  max-height: 14px;
+  object-fit: contain;
+}
+
+.radar-spinner {
+  display: inline-flex;
+}
+
+.radar-spinner [data-icon-root] {
+  width: 14px;
+  height: 14px;
+  animation: radar-spin 1s linear infinite;
+}
+
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-spinner [data-icon-root] {
+    animation: none;
+  }
+}
+
+.radar-status-icon {
+  display: inline-flex;
+}
+
+.radar-status-icon [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-row-text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.radar-row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.radar-row-title-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-row-title-text > :last-child {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-row-project {
+  --radar-project-hue: 220;
+  flex: none;
+  align-self: center;
+  max-width: 110px;
+  padding: 0 5px;
+  border: 1px solid
+    color-mix(
+      in oklch,
+      hsl(var(--radar-project-hue) 65% 62%) 45%,
+      var(--border)
+    );
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.6;
+  font-weight: 500;
+  color: color-mix(
+    in oklch,
+    hsl(var(--radar-project-hue) 65% 62%) 60%,
+    var(--foreground)
+  );
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-row-time {
+  flex: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-row-active .radar-row-title {
+  font-weight: 600;
+}
+
+.radar-child-glyph {
+  flex: none;
+  align-self: center;
+  color: var(--muted-foreground);
+}
+
+.radar-pin-marker {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  color: var(--primary);
+}
+
+.radar-pin-marker [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-child-glyph[data-icon-root],
+.radar-row-title [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-row-subtitle {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-draft-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--warning, #b98533);
+  flex: none;
+}
+
+.radar-branch-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
+.radar-branch-line [data-icon-root] {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.radar-branch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  margin-left: -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+  min-width: 0;
+  max-width: calc(100% - 70px);
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.radar-branch-btn:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-branch-copied {
+  background: color-mix(in srgb, #2da44e 16%, transparent);
+  color: #3fb950 !important;
+}
+
+.radar-branch-copied-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #2da44e;
+  color: #fff;
+  margin-left: 2px;
+  animation: radarBadgePop 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes radarBadgePop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.radar-branch-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-pr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--card);
+  padding: 1px 6px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    filter 120ms ease,
+    transform 100ms ease;
+}
+
+.radar-pr-link:hover {
+  filter: brightness(1.08);
+  transform: scale(1.02);
+  text-decoration: none;
+}
+
+.radar-pr-link [data-icon-root] {
+  width: 11px;
+  height: 11px;
+}
+
+.radar-pr-open {
+  background: rgba(46, 160, 67, 0.12);
+  color: #3fb950;
+  border-color: rgba(46, 160, 67, 0.35);
+}
+
+.radar-pr-merged {
+  background: rgba(130, 80, 223, 0.14);
+  color: #a371f7;
+  border-color: rgba(130, 80, 223, 0.35);
+}
+
+.radar-pr-draft {
+  background: rgba(110, 118, 129, 0.12);
+  color: var(--muted-foreground);
+  border-color: var(--border);
+}
+
+.radar-pr-closed {
+  background: rgba(248, 81, 73, 0.12);
+  color: #f85149;
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.radar-row-extra {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 280ms ease,
+    opacity 220ms ease;
+}
+
+.radar-row-extra-collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.radar-row-extra-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.radar-model-chip {
+  display: inline-block;
+  max-width: 130px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.6;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-thinking-chip {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.radar-model-chip [data-icon-root] {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 3px;
+  vertical-align: -1px;
+}
+
+.radar-section-chip {
+  --radar-section-hue: 220;
+  display: inline-block;
+  max-width: 110px;
+  padding: 0 5px;
+  border: 1px solid
+    color-mix(
+      in oklch,
+      hsl(var(--radar-section-hue) 65% 62%) 45%,
+      var(--border)
+    );
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.6;
+  font-weight: 500;
+  color: color-mix(
+    in oklch,
+    hsl(var(--radar-section-hue) 65% 62%) 60%,
+    var(--foreground)
+  );
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-celebrate {
+  animation: radar-celebrate 600ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes radar-celebrate {
+  0% {
+    transform: scale(0.3);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.radar-model-loading {
+  display: inline-block;
+  width: 56px;
+  height: 9px;
+  border-radius: 4px;
+  background: var(--muted);
+  animation: radar-pulse 1.6s ease-in-out infinite;
+  vertical-align: 1px;
+}
+
+.radar-row-badges {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding-top: 3px;
+}
+
+.radar-row-badges > * {
+  animation: radar-badge-in 200ms ease-out;
+}
+
+@keyframes radar-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+.radar-badge-icon {
+  display: inline-flex;
+}
+
+.radar-badge-icon [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-tone-running {
+  color: var(--primary);
+  animation: radar-pulse 1.6s ease-in-out infinite;
+}
+
+/* Success tones mix toward the foreground so they stay readable in light
+   mode (deep green) and dark mode (bright mint) alike. */
+
+.radar-tone-success {
+  color: color-mix(in srgb, var(--success, #3f9a6b) 62%, var(--foreground));
+}
+
+.radar-tone-error {
+  color: var(--destructive, #d43d3d);
+}
+
+.radar-tone-muted {
+  color: var(--muted-foreground);
+}
+
+.radar-tone-warning {
+  color: var(--warning, #b98533);
+}
+
+.radar-tone-info {
+  color: var(--primary);
+}
+
+/* Status dots read the host status tokens; unknown indicators draw nothing. */
+
+.radar-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 2px;
+  border-radius: 9999px;
+  flex: none;
+}
+
+.radar-row-unread .radar-row-title {
+  font-weight: 600;
+}
+
+/* Unseen rows are unmissable: tinted wash + solid accent bar. */
+
+.radar-row-unread {
+  background: color-mix(in srgb, var(--success, #3f9a6b) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--success, #3f9a6b);
+}
+
+.radar-row-unread:hover {
+  background: color-mix(in srgb, var(--success, #3f9a6b) 18%, var(--muted));
+}
+
+.radar-row-active.radar-row-unread {
+  background: var(--accent, var(--muted));
+  box-shadow: inset 3px 0 0 var(--success, #3f9a6b);
+}
+
+.radar-row-failed {
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--destructive, #d43d3d);
+}
+
+.radar-row-failed:hover {
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 18%, var(--muted));
+}
+
+.radar-row-active.radar-row-failed {
+  background: var(--accent, var(--muted));
+  box-shadow: inset 3px 0 0 var(--destructive, #d43d3d);
+}
+
+.radar-row-needs-user {
+  background: color-mix(in srgb, var(--warning, #b98533) 14%, transparent);
+  box-shadow: inset 3px 0 0 var(--warning, #b98533);
+}
+
+.radar-row-needs-user:hover {
+  background: color-mix(in srgb, var(--warning, #b98533) 20%, var(--muted));
+}
+
+.radar-row-active.radar-row-needs-user {
+  background: var(--accent, var(--muted));
+  box-shadow: inset 3px 0 0 var(--warning, #b98533);
+}
+
+.radar-row-split.radar-row-unread {
+  box-shadow:
+    inset 2px 0 0 var(--primary),
+    inset 5px 0 0 var(--success, #3f9a6b);
+}
+
+.radar-row-split.radar-row-failed {
+  box-shadow:
+    inset 2px 0 0 var(--primary),
+    inset 5px 0 0 var(--destructive, #d43d3d);
+}
+
+.radar-row-split.radar-row-needs-user {
+  box-shadow:
+    inset 2px 0 0 var(--primary),
+    inset 5px 0 0 var(--warning, #b98533);
+}
+
+/* Gentle glow pulse, reserved for rows that need action. FYI-done rows
+   (and everything else) stay static so motion always means "act". */
+
+.radar-row-pulse-amber {
+  animation: radar-glow-amber 2.4s ease-in-out infinite;
+}
+
+.radar-row-pulse-red {
+  animation: radar-glow-red 2.4s ease-in-out infinite;
+}
+
+@keyframes radar-glow-amber {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgb(0 0 0 / 0));
+  }
+  50% {
+    filter: drop-shadow(
+      0 0 7px color-mix(in srgb, var(--warning, #b98533) 65%, transparent)
+    );
+  }
+}
+
+@keyframes radar-glow-red {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgb(0 0 0 / 0));
+  }
+  50% {
+    filter: drop-shadow(
+      0 0 7px color-mix(in srgb, var(--destructive, #d43d3d) 65%, transparent)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-row-pulse-amber,
+  .radar-row-pulse-red {
+    animation: none;
+  }
+  .radar-row,
+  .radar-row-actions,
+  .radar-row-extra,
+  .radar-fold,
+  .radar-list-switching,
+  .radar-segmented-button:active {
+    transition: none;
+    transform: none;
+  }
+  .radar-kids-pill,
+  .radar-kids-line,
+  .radar-celebrate,
+  .radar-hover-card {
+    animation: none;
+  }
+  .radar-row-badges > * {
+    animation: none;
+  }
+}
+
+.radar-dot-running {
+  background: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+}
+
+.radar-dot-attention {
+  background: var(--warning, #b98533);
+}
+
+.radar-dot-error {
+  background: var(--destructive, #d43d3d);
+}
+
+.radar-dot-pulse {
+  animation: radar-pulse 1.6s ease-in-out infinite;
+}
+
+.radar-icon-pulse {
+  animation: radar-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes radar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-dot-pulse,
+  .radar-icon-pulse,
+  .radar-tone-running {
+    animation: none;
+  }
+}
+
+.radar-unread {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary);
+  flex: none;
+}
+
+.radar-kbd {
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.radar-kbd-on-primary {
+  border-color: transparent;
+  background: rgb(255 255 255 / 0.18);
+  color: inherit;
+}
+
+/* Hover actions overlay the badges; keyboard users get the context menu. */
+
+.radar-row-actions {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  transition: opacity 150ms ease, transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--muted);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+  opacity: 0;
+  transform: translateX(4px);
+  pointer-events: none;
+}
+
+.radar-row-active .radar-row-actions {
+  background: var(--accent, var(--muted));
+}
+
+.radar-row:hover .radar-row-actions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.radar-action {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.radar-action:hover {
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.radar-action [data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-action-active {
+  color: var(--primary);
+}
+
+.radar-row-collapsed .radar-row-actions {
+  top: 3px;
+  padding: 1px;
+}
+
+.radar-row-collapsed .radar-action {
+  width: 20px;
+  height: 20px;
+}
+
+.radar-row-collapsed .radar-action [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-rename {
+  width: 100%;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--ring, var(--primary));
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  outline: none;
+}
+
+/* ---- Context menu. ---- */
+
+.radar-menu {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--popover, var(--card));
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.08);
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+  outline: none;
+}
+
+.radar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.radar-menu-item:hover,
+.radar-menu-item:focus-visible {
+  background: var(--accent, var(--muted));
+  outline: none;
+}
+
+.radar-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.radar-menu-item-danger {
+  color: var(--destructive, #d43d3d);
+}
+
+.radar-menu-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted-foreground);
+}
+
+.radar-menu-item-danger .radar-menu-icon {
+  color: inherit;
+}
+
+.radar-menu-icon[data-icon-root] {
+  width: 16px;
+  height: 16px;
+}
+
+.radar-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radar-menu-check {
+  flex: none;
+  color: var(--primary);
+}
+
+.radar-menu-check[data-icon-root] {
+  width: 14px;
+  height: 14px;
+}
+
+.radar-menu-header {
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.radar-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+/* ---- Empty / loading states + archived pager. ---- */
+
+.radar-state {
+  padding: 8px 4px;
+}
+
+.radar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.radar-empty [data-icon-root] {
+  width: 22px;
+  height: 22px;
+  opacity: 0.7;
+}
+
+.radar-empty p {
+  margin: 0;
+}
+
+.radar-empty-hint {
+  font-size: 12px;
+}
+
+.radar-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.radar-skeleton-title,
+.radar-skeleton-subtitle {
+  border-radius: 4px;
+  background: var(--muted);
+  animation: radar-pulse 1.6s ease-in-out infinite;
+}
+
+.radar-skeleton-title {
+  width: 72%;
+  height: 12px;
+}
+
+.radar-skeleton-subtitle {
+  width: 48%;
+  height: 10px;
+}
+
+.radar-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+/* ---- Navigation replacement. ---- */
+
+.radar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 8px 4px;
+}
+
+.radar-nav-compact {
+  align-items: center;
+  padding: 8px 4px 4px;
+}
+
+.radar-nav-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: var(--primary-foreground, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.radar-nav-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.radar-nav-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.radar-nav-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.radar-nav-search:hover:not(:disabled) {
+  color: var(--foreground);
+  border-color: var(--ring, var(--primary));
+}
+
+.radar-nav-search:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.radar-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.radar-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.radar-nav-row:hover:not(:disabled) {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-nav-row:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.radar-nav-row-active {
+  background: var(--accent, var(--muted));
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.radar-nav-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.radar-nav-icon[data-icon-root] {
+  width: 15px;
+  height: 15px;
+}
+
+.radar-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.radar-nav-icon-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.radar-nav-icon-button:hover:not(:disabled) {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-nav-icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.radar-nav-icon-primary {
+  background: var(--primary);
+  color: var(--primary-foreground, #fff);
+}
+
+.radar-nav-icon-primary:hover:not(:disabled) {
+  background: var(--primary);
+  color: var(--primary-foreground, #fff);
+  filter: brightness(1.06);
+}
+
+.radar-nav-icon-button [data-icon-root] {
+  width: 16px;
+  height: 16px;
+}
+
+.radar-nav-count {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-nav-icon-button .radar-nav-count {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.radar-nav-icon-button {
+  position: relative;
+}
+
+/* "More" overflow popover: fixed beside the trigger, like stock BB. */
+
+.radar-nav-more-pop {
+  position: fixed;
+  z-index: 100;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--popover, var(--card));
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.16),
+    0 2px 6px rgb(0 0 0 / 0.08);
+  outline: none;
+}
+
+.radar-nav-more-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+}
+
+.radar-nav-more-list .radar-nav-row {
+  min-height: 32px;
+}
+
+.radar-nav-primary-in-pop {
+  margin: 2px;
+  width: calc(100% - 4px);
+}
+
+.radar-nav-more-list .radar-nav-search {
+  margin: 2px;
+  width: calc(100% - 4px);
+}
+
+/* Loading shimmer while the stored arrangement arrives. */
+
+.radar-nav-loading-bar {
+  height: 30px;
+  border-radius: 8px;
+  background: var(--muted);
+  animation: radar-pulse 1.6s ease-in-out infinite;
+}
+
+.radar-nav-loading-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.radar-nav-loading-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--muted);
+  animation: radar-pulse 1.6s ease-in-out infinite;
+}
+
+/* ---- Floating Bulk Action Dock. ---- */
+
+.radar-bulk-bar {
+  position: sticky;
+  bottom: 12px;
+  margin: 0 auto;
+  width: calc(100% - 20px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, var(--primary) 25%);
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.18),
+    0 2px 6px rgb(0 0 0 / 0.1);
+  z-index: 40;
+  animation: radarSlideUp 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes radarSlideUp {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.radar-bulk-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.radar-bulk-count {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.radar-bulk-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.radar-bulk-clear:hover {
+  background: var(--muted-foreground);
+  color: var(--background);
+}
+
+.radar-bulk-clear [data-icon-root] {
+  width: 10px;
+  height: 10px;
+}
+
+.radar-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.radar-bulk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    transform 80ms ease;
+}
+
+.radar-bulk-btn:hover {
+  background: color-mix(in srgb, var(--primary) 20%, var(--muted));
+  color: var(--foreground);
+}
+
+.radar-bulk-btn:active {
+  transform: scale(0.95);
+}
+
+.radar-bulk-btn [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---- Smart views bar. ---- */
+
+.radar-smart-views-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 2px 2px;
+}
+
+.radar-smart-views-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.radar-smart-views-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.radar-smart-view-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.radar-smart-view-pill:hover {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.radar-smart-view-active {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.radar-smart-view-pill [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-smart-view-count {
+  padding: 0 4px;
+  border-radius: 9999px;
+  background: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pill + its delete affordance sit side by side as siblings. */
+.radar-smart-view-group {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+}
+
+.radar-smart-view-del {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted-foreground);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.radar-smart-view-group:hover .radar-smart-view-del,
+.radar-smart-view-del:focus-visible {
+  opacity: 0.7;
+}
+
+.radar-smart-view-del:hover {
+  background: var(--destructive);
+  color: var(--destructive-foreground, #fff);
+  opacity: 1;
+}
+
+.radar-smart-view-del [data-icon-root] {
+  width: 10px;
+  height: 10px;
+}
+
+.radar-smart-view-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--border);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.radar-smart-view-add:hover {
+  border-color: var(--primary);
+  color: var(--foreground);
+}
+
+.radar-smart-view-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.radar-smart-view-input {
+  width: 110px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--primary);
+  border-radius: 9999px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 11px;
+  outline: none;
+}
+
+.radar-smart-view-save-btn,
+.radar-smart-view-cancel-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.radar-smart-view-save-btn {
+  background: var(--primary);
+  color: var(--primary-foreground, #fff);
+}
+
+.radar-smart-view-save-btn [data-icon-root],
+.radar-smart-view-cancel-btn [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---- Drag-to-section organization. ---- */
+
+.radar-row-draggable {
+  display: contents;
+}
+
+.radar-row-draggable.radar-row-dragging {
+  display: block;
+}
+
+.radar-row-grip {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+}
+
+.radar-row:hover .radar-row-grip,
+.radar-row-grip:focus-visible {
+  opacity: 1;
+}
+
+.radar-row-grip:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.radar-row-grip:active {
+  cursor: grabbing;
+}
+
+.radar-row-grip [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
+.radar-tree-gutter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-group-drop-active {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+.radar-group-drop-same {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted-foreground) 8%, transparent);
+}
+
+.radar-thread-drag-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.2);
+}
+
+.radar-thread-drag-preview > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.radar-thread-drag-preview [data-icon-root] {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.radar-group-empty {
+  margin: 2px 8px 6px;
+  padding: 10px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ---- Settings-driven behaviour gates. ----
+   data-* lives on the list root so a settings change re-styles without
+   remounting rows. `off` disables the assertive visuals entirely. */
+
+[data-radar-motion="off"] .radar-row-pulse-amber,
+[data-radar-motion="off"] .radar-row-pulse-red,
+[data-radar-motion="off"] .radar-icon-pulse,
+[data-radar-motion="off"] .radar-dot-pulse,
+[data-radar-motion="off"] .radar-celebrate,
+[data-radar-motion="off"] .radar-group-status .radar-dot-pulse {
+  animation: none;
+}
+
+/* Loud unread off: drop the wash + bar on finished-but-unseen rows, keeping
+   the check icon and unread pip. The needs-you and failed washes are NOT
+   gated here: they mean "act now", not "look at me". */
+[data-radar-loud-unread="off"] .radar-row-unread {
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-radar-loud-unread="off"] .radar-row-unread:hover {
+  background: var(--muted);
+}
+
+[data-radar-loud-unread="off"] .radar-row-active.radar-row-unread {
+  box-shadow: none;
+}
