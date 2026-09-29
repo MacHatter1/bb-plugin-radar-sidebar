@@ -2614,31 +2614,6 @@ a.radar-row-main:hover {
   width: calc(100% - 4px);
 }
 
-/* Loading shimmer while the stored arrangement arrives. */
-
-.radar-nav-loading-bar {
-  height: 30px;
-  border-radius: 8px;
-  background: var(--muted);
-  animation: radar-pulse 1.6s ease-in-out infinite;
-}
-
-.radar-nav-loading-compact {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.radar-nav-loading-dot {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--muted);
-  animation: radar-pulse 1.6s ease-in-out infinite;
-}
-
 /* ---- Floating Bulk Action Dock. ---- */
 
 .radar-bulk-bar {

@@ -195,9 +195,9 @@ flowchart LR
   D --> R[rendered list]
   R -->|actions| A[BB host actions &amp; public SDK]
   A --> H
-  N[BB server UI preferences] --> V[nav placement]
-  V --> NAV[navigation]
-  NAV -->|keep / move| N
+  N[BB navigation state] --> NAV[navigation]
+  NAV -->|keep / move| NA[BB navigation actions]
+  NA --> N
 ```
 
 - **Reads BB's live state, owns none of it.** Threads, projects and sections
@@ -205,15 +205,15 @@ flowchart LR
   through BB's own actions, so optimistic updates, confirmations and toasts
   behave exactly as they do in the stock list.
 - **Derivation stays out of the components.** Grouping, tree building and
-  filter matching live in one hook, `useThreadGroups`, and time bucketing and
-  nav placement are plain functions with no React, so the rows only render.
+  filter matching live in one hook, `useThreadGroups`, and time bucketing is
+  a plain function with no React, so the rows only render.
 - **Model info is fetched, then cached per window.** The options endpoint
   resolves *defaults*, so model and thinking are shown only while a thread is
   actually in flight. Remounts within the same run reuse cached values;
   new activity, a restart or window focus triggers a refresh.
-- **Nav placement is shared, not mirrored.** Radar reads and writes BB's
-  `sidebar.pluginPanelOrder` and `sidebar.visiblePluginPanels` preferences
-  using the same merge rules the stock sidebar applies.
+- **Nav placement is shared, not mirrored.** BB's navigation hook supplies
+  the saved order and visibility. Radar passes visibility changes to its
+  host actions, which own preference saves and updates.
 - **It will not move a thread between projects.** BB's thread API exposes no
   `projectId` on update, so project grouping is view-only; drag-to-organise
   files threads into sections, which BB does allow.

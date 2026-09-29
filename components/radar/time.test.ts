@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   activityTime,
   isLiveThread,
+  isRunningThread,
   timeAgo,
   timeGroupFor,
 } from "./time";
@@ -43,6 +44,23 @@ describe("isLiveThread", () => {
   });
 });
 
+describe("isRunningThread", () => {
+  it("keeps queued, failed and blocked work live without calling it running", () => {
+    for (const thread of [
+      makeThread({ id: "queued", queuedWork: "waiting" }),
+      makeThread({ id: "failed", queuedWork: "failed", indicator: "queued-failed" }),
+      makeThread({ id: "approval", hasPendingInteraction: true, indicator: "waiting-for-input" }),
+    ]) {
+      expect(isLiveThread(thread)).toBe(true);
+      expect(isRunningThread(thread)).toBe(false);
+    }
+    expect(isRunningThread(makeThread({ id: "run", status: "active" }))).toBe(true);
+    expect(isRunningThread(makeThread({ id: "background", activity: {
+      workflows: 1, backgroundAgents: 0, backgroundCommands: 0, planMode: 0, goals: 0,
+    } }))).toBe(true);
+  });
+});
+
 describe("activityTime", () => {
   it("counts a live thread as now so it lands in Today", () => {
     const stale = makeThread({
@@ -79,6 +97,18 @@ describe("timeGroupFor", () => {
     expect(timeGroupFor(NOW - 6 * DAY, NOW)).toBe("week");
     expect(timeGroupFor(NOW - 8 * DAY, NOW)).toBe("month");
     expect(timeGroupFor(NOW - 60 * DAY, NOW)).toBe("older");
+  });
+
+  it.each([
+    [new Date(2026, 9, 26, 12), new Date(2026, 9, 25), "yesterday", "week"],
+    [new Date(2026, 10, 1, 12), new Date(2026, 9, 25), "week", "month"],
+    [new Date(2026, 10, 24, 12), new Date(2026, 9, 25), "month", "older"],
+    [new Date(2026, 2, 30, 12), new Date(2026, 2, 29), "yesterday", "week"],
+    [new Date(2026, 3, 5, 12), new Date(2026, 2, 29), "week", "month"],
+    [new Date(2026, 3, 28, 12), new Date(2026, 2, 29), "month", "older"],
+  ])("uses calendar boundaries across DST (%s, %s)", (now, boundary, group, preceding) => {
+    expect(timeGroupFor(Number(boundary) + 30 * MINUTE, Number(now))).toBe(group);
+    expect(timeGroupFor(Number(boundary) - MINUTE, Number(now))).toBe(preceding);
   });
 });
 

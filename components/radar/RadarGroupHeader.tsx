@@ -36,16 +36,15 @@ function plural(count: number, noun: string): string {
 }
 
 function GroupStatus({ group }: { group: GroupHeaderData }) {
-  // Loudest state wins: something running, then something needing you, then
-  // a failure. All three being absent renders nothing.
-  if (group.live > 0) {
+  // Attention takes priority over execution, matching the folded-family dot.
+  if (group.failed > 0) {
     return (
       <span
-        className="radar-group-status radar-spinner radar-tone-running"
-        title={plural(group.live, "running thread")}
-        aria-label={`${group.live} running`}
+        className="radar-group-status"
+        title={plural(group.failed, "failed thread")}
+        aria-label={`${group.failed} failed`}
       >
-        <Icon name="Loading" aria-hidden="true" />
+        <span className="radar-dot radar-dot-error" />
       </span>
     );
   }
@@ -60,14 +59,14 @@ function GroupStatus({ group }: { group: GroupHeaderData }) {
       </span>
     );
   }
-  if (group.failed > 0) {
+  if (group.live > 0) {
     return (
       <span
-        className="radar-group-status"
-        title={plural(group.failed, "failed thread")}
-        aria-label={`${group.failed} failed`}
+        className="radar-group-status radar-spinner radar-tone-running"
+        title={plural(group.live, "running thread")}
+        aria-label={`${group.live} running`}
       >
-        <span className="radar-dot radar-dot-error" />
+        <Icon name="Loading" aria-hidden="true" />
       </span>
     );
   }

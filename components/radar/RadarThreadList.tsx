@@ -16,6 +16,7 @@ import {
   MouseSensor,
   TouchSensor,
   closestCenter,
+  defaultKeyboardCoordinateGetter,
   useDraggable,
   useDroppable,
   useSensor,
@@ -44,7 +45,8 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { preloadExtendedIcons } from "@/components/ui/icon";
-import { RadarThreadRow, type RowProviderIcon } from "./RadarThreadRow";
+import { RadarThreadRow } from "./RadarThreadRow";
+import { isRunningThread } from "./time";
 import {
   GroupHeader,
   SortableGroupSection,
@@ -261,6 +263,7 @@ function renderSubtree(
             folded && "radar-fold-collapsed",
           )}
           aria-hidden={folded || undefined}
+          inert={folded || undefined}
         >
           <div
             className="radar-fold-inner"
@@ -346,6 +349,7 @@ export function RadarThreadList({
   const [draggingThreadId, setDraggingThreadId] = useState<string | null>(
     null,
   );
+  const draggingThreadIds = useRef<string[]>([]);
   const [groupMenu, setGroupMenu] = useState<{
     x: number;
     y: number;
@@ -359,7 +363,10 @@ export function RadarThreadList({
       activationConstraint: { delay: 250, tolerance: 5 },
     }),
     useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+      coordinateGetter:
+        grouping === "project"
+          ? sortableKeyboardCoordinates
+          : defaultKeyboardCoordinateGetter,
     }),
   );
   // Regrouping remounts every row: run it as a transition so the click
@@ -452,7 +459,6 @@ export function RadarThreadList({
     rowById,
     childrenOf,
     statusCounts,
-    shownIds,
     shownChildren,
     countSubtree,
     pinnedGroup,
@@ -515,28 +521,26 @@ export function RadarThreadList({
     setCollapsed(new Set(allGroupIds));
   }, [allGroupIds]);
 
-  /** File a thread into a section (or unfile it) via BB's own update API. */
+  /** File the dragged thread or its selection via BB's own update API. */
   const moveThreadToSection = useCallback(
-    (threadId: string, sectionId: string | null) => {
-      const thread = rowById.get(threadId);
-      if (!thread) return;
-      if ((thread.sectionId ?? null) === sectionId) return;
+    (threadId: string, sectionId: string | null, threadIds = [threadId]) => {
+      const ids = threadIds.filter((id) => {
+        const thread = rowById.get(id);
+        return thread && (thread.sectionId ?? null) !== sectionId;
+      });
+      if (ids.length === 0) return;
       const label = sectionId
         ? (sectionById.get(sectionId)?.name ?? "section")
         : "Unfiled";
-      sdk.threads
-        .update({ threadId, sectionId })
-        .then(
-          () => {
-            toast.success(`Moved to ${label}`);
-          },
-          (cause: unknown) => {
-            toast.error(problem(cause));
-          },
-        )
-        .finally(() => {
-          setDraggingThreadId(null);
-        });
+      void Promise.allSettled(
+        ids.map((id) => sdk.threads.update({ threadId: id, sectionId })),
+      ).then((results) =>
+        reportBulk(
+          results,
+          (count) => `Moved ${nThreads(count)} to ${label}`,
+          (count) => `Couldn’t move ${nThreads(count)} to ${label}.`,
+        ),
+      );
     },
     [rowById, sectionById, sdk],
   );
@@ -608,13 +612,13 @@ export function RadarThreadList({
 
   const visibleFlattenedThreadIds = useMemo(() => {
     const list: string[] = [];
-    const walk = (threadList: PluginSidebarThread[]) => {
+    const walk = (threadList: PluginSidebarThread[], depth = 0) => {
       for (const t of threadList) {
         list.push(t.id);
-        if (!collapseIds.has(t.id)) {
+        if (depth <= 25 && !collapseIds.has(t.id)) {
           const kids = shownChildren.get(t.id);
           if (kids && kids.length > 0) {
-            walk(kids);
+            walk(kids, depth + 1);
           }
         }
       }
@@ -629,6 +633,10 @@ export function RadarThreadList({
     }
     return list;
   }, [pinnedGroup, groups, collapsedGroupIds, collapseIds, shownChildren]);
+  const visibleThreadIds = useMemo(
+    () => new Set(visibleFlattenedThreadIds),
+    [visibleFlattenedThreadIds],
+  );
 
   const handleToggleSelect = useCallback(
     (event: { shiftKey: boolean }, threadId: string) => {
@@ -659,25 +667,48 @@ export function RadarThreadList({
   useEffect(() => {
     setSelectedIds((previous) => {
       if (previous.size === 0) return previous;
-      const next = new Set([...previous].filter((id) => shownIds.has(id)));
+      const next = new Set([...previous].filter((id) => visibleThreadIds.has(id)));
       return next.size === previous.size ? previous : next;
     });
-  }, [shownIds]);
+    if (lastSelectedIdRef.current && !visibleThreadIds.has(lastSelectedIdRef.current)) {
+      lastSelectedIdRef.current = null;
+    }
+  }, [visibleThreadIds]);
 
   useEffect(() => {
-    if (keyboardFocusedId && !shownIds.has(keyboardFocusedId)) {
-      setKeyboardFocusedId(null);
+    const hiddenKeyboardId = keyboardFocusedId && !visibleThreadIds.has(keyboardFocusedId)
+      ? keyboardFocusedId : null;
+    if (hiddenKeyboardId) setKeyboardFocusedId(null);
+    const focusedRow = document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest<HTMLElement>("[data-sidebar-thread-id]") : null;
+    const focusedRowId = focusedRow && rootRef.current?.contains(focusedRow)
+      ? focusedRow.getAttribute("data-sidebar-thread-id") : null;
+    const hiddenFocusId = focusedRowId && !visibleThreadIds.has(focusedRowId)
+      ? focusedRowId
+      : document.activeElement === document.body ? hiddenKeyboardId : null;
+    if (!hiddenFocusId) return;
+    // Folds stay mounted for their animation. Move focus out of hidden rows,
+    // preserving focus on any visible control the user clicked to fold them.
+    let parentId = rowById.get(hiddenFocusId)?.parentThreadId;
+    const visited = new Set<string>();
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      if (visibleThreadIds.has(parentId)) break;
+      parentId = rowById.get(parentId)?.parentThreadId;
     }
-  }, [keyboardFocusedId, shownIds]);
+    const parent = parentId && visibleThreadIds.has(parentId)
+      ? rootRef.current?.querySelector<HTMLElement>(`[data-sidebar-thread-id="${parentId}"]`)
+      : null;
+    const groupControl = focusedRow?.closest("section")?.querySelector<HTMLElement>(".radar-group-toggle");
+    (parent || groupControl || searchInputRef.current)?.focus({ preventScroll: true });
+  }, [keyboardFocusedId, visibleThreadIds, rowById]);
 
   const handleBulkArchive = useCallback(() => {
-    const count = selectedIds.size;
     for (const id of selectedIds) {
-      actions.archive(id);
+      if (visibleThreadIds.has(id)) actions.archive(id);
     }
     setSelectedIds(new Set());
-    toast.success(`Archived ${nThreads(count)}`);
-  }, [selectedIds, actions]);
+  }, [selectedIds, actions, visibleThreadIds]);
 
   const handleBulkPin = useCallback(async () => {
     const ids = [...selectedIds];
@@ -775,8 +806,10 @@ export function RadarThreadList({
         target?.closest("a, button, [role='button'], [role='menuitem']") != null;
       // The row under focus wins over the last arrow-key position.
       const rowTarget = target?.closest<HTMLElement>("[data-sidebar-thread-id]");
-      const focusedId =
+      const candidateId =
         rowTarget?.getAttribute("data-sidebar-thread-id") ?? keyboardFocusedId;
+      const focusedId =
+        candidateId && visibleThreadIds.has(candidateId) ? candidateId : null;
 
       if (event.key === "/") {
         event.preventDefault();
@@ -805,9 +838,9 @@ export function RadarThreadList({
       }
 
       if (event.key === "Enter") {
-        if (onControl || !keyboardFocusedId) return;
+        if (onControl || !focusedId) return;
         event.preventDefault();
-        actions.open(keyboardFocusedId);
+        actions.open(focusedId);
         onNavigate();
         return;
       }
@@ -841,7 +874,6 @@ export function RadarThreadList({
         } else if (focusedId) {
           event.preventDefault();
           actions.archive(focusedId);
-          toast.success("Archived thread");
         }
         return;
       }
@@ -887,6 +919,7 @@ export function RadarThreadList({
   }, [
     query,
     visibleFlattenedThreadIds,
+    visibleThreadIds,
     keyboardFocusedId,
     selectedIds,
     shownChildren,
@@ -1120,21 +1153,20 @@ export function RadarThreadList({
               hiddenTotal: counts.total - 1,
               hiddenUnread:
                 counts.unread - (thread.isUnread ? 1 : 0),
-              hiddenLive: counts.live,
-              hiddenNeedsUser: counts.needsUser,
-              hiddenFailed: counts.failed,
+              hiddenLive: counts.live - Number(isRunningThread(thread)) > 0,
+              hiddenNeedsUser:
+                counts.needsUser -
+                  Number(thread.indicator === "waiting-for-input") > 0,
+              hiddenFailed:
+                counts.failed - Number(
+                  thread.indicator === "unread-error" ||
+                  thread.indicator === "queued-failed",
+                ) > 0,
               hiddenKids: counts.kids,
               onToggle: () => toggleThreadCollapse(thread.id),
             }
           : null;
       const provider = providerById.get(thread.providerId) ?? null;
-      const providerIcon: RowProviderIcon | null = provider
-        ? {
-            id: provider.id,
-            logoUrl: provider.logoUrl ?? null,
-            icon: provider.icon ?? null,
-          }
-        : null;
       return (
         <RadarThreadRow
           key={thread.id}
@@ -1168,7 +1200,7 @@ export function RadarThreadList({
           onCancelRename={cancelRename}
           onUnarchive={unarchive}
           providerName={provider?.displayName ?? thread.providerId}
-          providerIcon={providerIcon}
+          providerIcon={provider}
           collapse={collapse}
           sdk={sdk}
           modelEpoch={modelEpoch}
@@ -1186,6 +1218,9 @@ export function RadarThreadList({
       projectNameFor,
       sectionById,
       celebrateIds,
+      settings.celebrate,
+      settings.hoverCard,
+      settings.adaptiveCollapse,
       activeThreadId,
       editingId,
       actions,
@@ -1227,6 +1262,7 @@ export function RadarThreadList({
             isCollapsed && "radar-fold-collapsed",
           )}
           aria-hidden={isCollapsed || undefined}
+          inert={isCollapsed || undefined}
         >
           <div
             className="radar-fold-inner"
@@ -1705,18 +1741,28 @@ export function RadarThreadList({
                 onDragStart={(event) => {
                   const id = event.active.data.current?.threadId;
                   setDraggingThreadId(typeof id === "string" ? id : null);
+                  draggingThreadIds.current = typeof id === "string"
+                    ? selectedIds.has(id)
+                      ? [...selectedIds].filter((selected) => visibleThreadIds.has(selected))
+                      : [id]
+                    : [];
                 }}
                 onDragEnd={(event) => {
                   const threadId = event.active.data.current?.threadId;
                   const target = event.over?.data.current;
+                  const ids = draggingThreadIds.current;
+                  draggingThreadIds.current = [];
                   setDraggingThreadId(null);
                   if (typeof threadId !== "string") return;
                   if (!target || typeof target !== "object") return;
                   const sectionId = (target as { sectionId?: string | null })
                     .sectionId;
-                  moveThreadToSection(threadId, sectionId ?? null);
+                  moveThreadToSection(threadId, sectionId ?? null, ids.length ? ids : [threadId]);
                 }}
-                onDragCancel={() => setDraggingThreadId(null)}
+                onDragCancel={() => {
+                  draggingThreadIds.current = [];
+                  setDraggingThreadId(null);
+                }}
               >
                 {groups.map((group) => renderGroup(group, false, true))}
                 <DragOverlay dropAnimation={null}>

@@ -4,6 +4,27 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Folding groups or families clears hidden selections and keyboard targets,
+  and restores focus when the focused row disappears.
+- Group status prioritizes failures and input waits over running work, counts
+  each descendant, and excludes queued or blocked work from running counts.
+- Folded-family status describes only hidden descendants, excluding the parent.
+- Mounted rows react to changes in celebration, hover-card and adaptive-collapse
+  settings, and reuse unchanged provider records to preserve row memoization.
+- Navigation follows BB's live order and visibility hook and delegates saves to
+  host actions, removing duplicate preference fetches, races and merge logic.
+- Section grip drags move the selected threads together and report partial
+  failures. Keyboard section dragging works and exposes its grip to assistive
+  technology while project sorting retains its own keyboard behavior.
+- Archive shortcuts and bulk actions leave completion feedback to BB, which
+  may require confirmation before archiving a family.
+- Opening a row menu closes its hover preview and cancels pending previews.
+- Time buckets use local calendar boundaries across daylight-saving changes.
+
 ## 0.2.0 - 2026-09-29
 
 ### Added
