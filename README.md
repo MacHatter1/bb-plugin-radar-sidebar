@@ -153,7 +153,7 @@ named smart view.
 ## Install
 
 ```sh
-bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.2.0' --yes
+bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.2.1' --yes
 ```
 
 The Git semver range tracks compatible `v0.2.x` releases.
