@@ -38,7 +38,7 @@ const extensions = item({
   id: "extensions",
   action: { kind: "open-extensions" },
 });
-const skills = item({ id: "skills", action: { kind: "open-extensions" } });
+const skills = item({ id: "skills", action: { kind: "open-skills" } });
 const panelA = item({
   id: "pa",
   action: { kind: "open-plugin-panel", pluginId: "alpha", panelId: "board" },
@@ -55,6 +55,8 @@ describe("stockKeyFor", () => {
     expect(stockKeyFor(search)).toBe(STOCK_KEY_SEARCH_THREADS);
     expect(stockKeyFor(extensions)).toBe(STOCK_KEY_EXTENSIONS);
     expect(stockKeyFor(skills)).toBe(STOCK_KEY_SKILLS);
+    const legacySkills = item({ id: "skills", action: { kind: "open-extensions" } });
+    expect(stockKeyFor(legacySkills)).toBe(STOCK_KEY_SKILLS);
   });
 
   it("names plugin panels as pluginId/panelId", () => {

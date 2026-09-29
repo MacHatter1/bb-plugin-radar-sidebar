@@ -41,7 +41,7 @@ export function stockKeyFor(
     case "search-threads":
       return STOCK_KEY_SEARCH_THREADS;
     case "open-extensions":
-      return STOCK_KEY_EXTENSIONS;
+      return item.id === "skills" ? STOCK_KEY_SKILLS : STOCK_KEY_EXTENSIONS;
     case "open-skills":
       return STOCK_KEY_SKILLS;
     case "open-plugin-panel":
