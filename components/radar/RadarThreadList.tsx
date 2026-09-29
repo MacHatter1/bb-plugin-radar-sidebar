@@ -56,6 +56,7 @@ import {
   type ThreadGroup,
 } from "./useThreadGroups";
 import { RadarSmartViews } from "./RadarSmartViews";
+import { RadarNewSection } from "./RadarNewSection";
 
 void preloadExtendedIcons().catch(() => undefined);
 
@@ -1619,6 +1620,7 @@ export function RadarThreadList({
             writeStored(LIFECYCLE_KEY, "active");
           }}
         />
+        {grouping === "section" ? <RadarNewSection /> : null}
       </div>
 
       <div
@@ -1648,7 +1650,7 @@ export function RadarThreadList({
               </p>
             </div>
           </div>
-        ) : shownTotal === 0 ? (
+        ) : shownTotal === 0 && (grouping !== "section" || sections.length === 0) ? (
           <div className="radar-state" role="status">
             <div className="radar-empty">
               <Icon name="MessageSquare" aria-hidden="true" />

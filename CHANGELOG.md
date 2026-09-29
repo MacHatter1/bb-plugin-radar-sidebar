@@ -6,6 +6,12 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- Create sections directly in Radar's section view with **New section**:
+  inline naming, keyboard cancellation, pending-state protection and retryable
+  error feedback through BB's section API.
+
 ### Fixed
 
 - Keyboard shortcuts no longer take over the rest of BB. They stay out of
@@ -21,7 +27,8 @@ All notable changes to Radar Sidebar are documented here. The format follows
   overwriting saved fold preferences.
 - Archived pagination stays available when loaded threads do not match the
   active filters.
-- Empty sections remain visible as drag-and-drop destinations.
+- Empty sections remain visible as drag-and-drop destinations, including
+  when there are no threads or the current filters match nothing.
 - Execution details refresh for new runs and newer activity, including rows
   returning from a filter, without stale requests overwriting the cache.
 - Completion celebrations expire despite intervening thread updates and

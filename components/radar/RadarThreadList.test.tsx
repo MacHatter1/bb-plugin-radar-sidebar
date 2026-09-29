@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginSidebarThread, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
@@ -40,6 +40,7 @@ function renderThreads(
     sections?: ReturnType<typeof makeSection>[];
     execution?: Record<string, unknown> | null;
     archived?: PluginSidebarThreadsState["experimental_archived"];
+    sdk?: Record<string, unknown>;
   } = {},
 ) {
   return renderSlot(
@@ -696,6 +697,103 @@ describe("review regressions", () => {
     expect(screen.getByText(/No threads match/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show more" }));
     expect(fetchNextPage).toHaveBeenCalledOnce();
+  });
+});
+
+describe("section creation", () => {
+  const sectionMode = () => fireEvent.click(screen.getByRole("button", {
+    name: "Group by section (drag threads between them)",
+  }));
+  const openForm = () => {
+    sectionMode();
+    fireEvent.click(screen.getByRole("button", { name: "New section" }));
+    return screen.getByRole("textbox", { name: "Section name" }) as HTMLInputElement;
+  };
+  const createSdk = (create: (args: { name: string }) => Promise<unknown>) => ({
+    ...sdkFakes(),
+    threadSections: { create },
+  });
+
+  it("creates a trimmed section through the SDK, even before there are threads", async () => {
+    const create = vi.fn(async ({ name }: { name: string }) => makeSection({ id: "new", name }));
+    const slot = renderThreads([], { sdk: createSdk(create) });
+    expect(screen.queryByRole("button", { name: "New section" })).toBeNull();
+    const input = openForm();
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "  Research  " } });
+    fireEvent.submit(screen.getByRole("form", { name: "New section" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Section name" })).toBeNull());
+    expect(slot.inspection.sdkCalls).toContainEqual({
+      method: "threadSections.create", args: [{ name: "Research" }],
+    });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "New section" }));
+  });
+
+  it("rejects blank names and cancels without creating or firing row shortcuts", () => {
+    const create = vi.fn();
+    const slot = renderThreads([makeThread({ id: "one" })], { sdk: createSdk(create) });
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    const input = openForm();
+    fireEvent.change(input, { target: { value: "   " } });
+    expect((screen.getByRole("button", { name: "Create section" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(screen.getByRole("form", { name: "New section" }));
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    fireEvent.keyDown(cancel, { key: "e" });
+    fireEvent.keyDown(cancel, { key: "p" });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("form", { name: "New section" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "New section" }));
+    fireEvent.click(screen.getByRole("button", { name: "New section" }));
+    expect((screen.getByRole("textbox", { name: "Section name" }) as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(create).not.toHaveBeenCalled();
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+  });
+
+  it("keeps a failed name for retry and shows the API error", async () => {
+    const create = vi.fn()
+      .mockRejectedValueOnce(new Error("Could not create section"))
+      .mockResolvedValueOnce(makeSection({ id: "new", name: "Research" }));
+    renderThreads([], { sdk: createSdk(create) });
+    const input = openForm();
+    fireEvent.change(input, { target: { value: "Research" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create section" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not create section");
+    expect(input.value).toBe("Research");
+    expect(document.activeElement).toBe(input);
+    fireEvent.click(screen.getByRole("button", { name: "Create section" }));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "New section" })).toBeNull());
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("prevents duplicate submissions while creation is pending", async () => {
+    let resolve!: (section: ReturnType<typeof makeSection>) => void;
+    const create = vi.fn(() => new Promise<ReturnType<typeof makeSection>>((done) => { resolve = done; }));
+    renderThreads([], { sdk: createSdk(create) });
+    const input = openForm();
+    fireEvent.change(input, { target: { value: "Research" } });
+    const form = screen.getByRole("form", { name: "New section" });
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(create).toHaveBeenCalledOnce();
+    expect(input.disabled).toBe(true);
+    expect(form.getAttribute("aria-busy")).toBe("true");
+    expect((screen.getByRole("button", { name: "Creating…" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(form, { key: "Escape" });
+    expect(screen.getByRole("form", { name: "New section" })).toBe(form);
+    await act(async () => resolve(makeSection({ id: "new", name: "Research" })));
+    expect(screen.queryByRole("form", { name: "New section" })).toBeNull();
+  });
+
+  it.each([false, true])("shows empty sections from the host with no matching threads (filter=%s)", (filtered) => {
+    renderThreads(filtered ? [makeThread({ id: "one" })] : [], {
+      sections: [makeSection({ id: "new", name: "Research" })],
+    });
+    sectionMode();
+    if (filtered) fireEvent.change(screen.getByRole("searchbox"), { target: { value: "no match" } });
+    expect(screen.getByRole("region", { name: "Research" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New section" })).toBeTruthy();
   });
 });
 

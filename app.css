@@ -115,6 +115,36 @@
   user-select: none;
 }
 
+.radar-section-create {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.radar-section-create > button {
+  align-self: flex-start;
+}
+
+.radar-section-create-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.radar-section-create-input {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.radar-section-create-error {
+  width: 100%;
+  margin: 0;
+  color: var(--destructive);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .radar-filters {
   display: flex;
   align-items: center;

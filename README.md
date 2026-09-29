@@ -62,7 +62,9 @@ quiet get out of the way.
 Threads group by Today, Yesterday, Previous 7 days, Previous 30 days or Older,
 keyed off last *activity* — not last read. A thread you merely opened stays
 where it belongs, and anything running or waiting surfaces to Today. Group by
-project or section instead with one toggle.
+project or section instead with one toggle. In section view, choose **New
+section**, enter a name, then **Create section**. Drag threads onto its header
+or use **Move to section** in a thread's right-click menu.
 
 </td>
 <td width="50%" valign="top">

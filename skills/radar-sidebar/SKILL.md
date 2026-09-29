@@ -38,6 +38,13 @@ through BB's own flows (pins, reads, renames, archives, deletes).
   project, or section. Project groups are drag-reorderable by their header
   (order persisted in `radar-sidebar:project-order:v1`; right-click a header
   to reset). Each project header also carries a New-thread-in-project button.
+- **Create a section**: switch to section grouping, choose **New section**,
+  enter its name and submit with **Create section** or Enter. Cancel or Escape
+  closes the form without creating anything. Names are trimmed; blank names
+  are rejected. Creation uses `sdk.threadSections.create({ name })`, with
+  duplicate submissions blocked while pending and inline API errors that keep
+  the name for retry. BB's realtime sidebar state supplies the new section;
+  empty sections stay visible even with no threads or no filter matches.
 - **Drag to file**: in section grouping, hover a root thread to reveal its
   grip, then drag it onto a section header (or **Unfiled**) to set its
   `sectionId` through BB's own thread update — the drop target highlights,
