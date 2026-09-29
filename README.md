@@ -153,10 +153,10 @@ named smart view.
 ## Install
 
 ```sh
-bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.1.0' --yes
+bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.2.0' --yes
 ```
 
-The Git semver range tracks compatible `v0.1.x` releases.
+The Git semver range tracks compatible `v0.2.x` releases.
 
 Then pick it in **Settings → Appearance**: choose **Radar** for the sidebar and
 **Radar navigation** for the controls above it.

@@ -4,13 +4,18 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.2.0 - 2026-09-29
 
 ### Added
 
 - Create sections directly in Radar's section view with **New section**:
   inline naming, keyboard cancellation, pending-state protection and retryable
   error feedback through BB's section API.
+
+### Changed
+
+- Update to BB 0.44 navigation API: use host sidebar navigation hooks, split
+  drag handles, and support dedicated skills panel actions.
 
 ### Fixed
 
