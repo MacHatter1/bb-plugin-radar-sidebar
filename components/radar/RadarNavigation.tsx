@@ -9,6 +9,9 @@ import {
 import { createPortal } from "react-dom";
 import {
   experimental_Icon as HostIcon,
+  experimental_SidebarNavigationIcon as SidebarNavigationIcon,
+  experimental_useSidebarNavigation,
+  experimental_useSidebarNavigationSplit,
   useSdk,
   type ExperimentalSidebarNavigationItem,
   type ExperimentalSidebarNavigationProps,
@@ -28,21 +31,6 @@ const ORDER_PREF = "sidebar.pluginPanelOrder" as const;
 const VISIBLE_PREF = "sidebar.visiblePluginPanels" as const;
 const MAX_SAVE_ATTEMPTS = 5;
 
-/** Resolve a host navigation item to a BB icon name. */
-function iconNameFor(item: ExperimentalSidebarNavigationItem): string {
-  if (item.icon.kind === "host") {
-    switch (item.icon.name) {
-      case "new-thread":
-        return "Plus";
-      case "search":
-        return "Search";
-      case "extensions":
-        return "Puzzle";
-    }
-  }
-  return item.icon.icon ?? "Zap";
-}
-
 function hintFor(item: ExperimentalSidebarNavigationItem): string {
   const parts = [item.label];
   if (item.shortcut) parts.push(`(${item.shortcut.label})`);
@@ -56,8 +44,55 @@ function RowIcon({
   item: ExperimentalSidebarNavigationItem;
   className?: string;
 }) {
+  return <SidebarNavigationIcon icon={item.icon} className={className} />;
+}
+
+function NavigationButton({
+  item,
+  isActive,
+  onActivate,
+  className,
+  title,
+  onContextMenu,
+  splitActivation = "sidebar",
+  onSplitDragStart,
+  children,
+}: {
+  item: ExperimentalSidebarNavigationItem;
+  isActive: boolean;
+  onActivate: (
+    item: ExperimentalSidebarNavigationItem,
+    openInSplit: boolean,
+  ) => void;
+  className: string;
+  title?: string;
+  onContextMenu?: React.MouseEventHandler<HTMLButtonElement>;
+  splitActivation?: "distance" | "sidebar";
+  onSplitDragStart?: () => void;
+  children: React.ReactNode;
+}) {
+  const split = experimental_useSidebarNavigationSplit(
+    item.id,
+    splitActivation === "distance"
+      ? { activation: "distance", onDragStart: onSplitDragStart }
+      : undefined,
+  );
+
   return (
-    <HostIcon name={iconNameFor(item)} aria-hidden="true" className={className} />
+    <button
+      type="button"
+      disabled={item.isDisabled || item.isLoading}
+      aria-label={hintFor(item)}
+      aria-current={isActive ? "page" : undefined}
+      aria-keyshortcuts={item.shortcut?.ariaKeyShortcuts}
+      title={title ?? hintFor(item)}
+      {...split.splitProps}
+      onClick={(event) => onActivate(item, event.altKey)}
+      onContextMenu={onContextMenu}
+      className={className}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -161,18 +196,14 @@ function MorePopover({
         {items.map((item) => {
           const isActive = item.id === activeItemId;
           return (
-            <button
+            <NavigationButton
               key={item.id}
-              type="button"
-              disabled={item.isDisabled}
-              aria-label={hintFor(item)}
-              aria-current={isActive ? "page" : undefined}
+              item={item}
+              isActive={isActive}
+              onActivate={onActivate}
               title={`${hintFor(item)} — Option-click opens in a split`}
-              {...item.experimental_splitProps}
-              onClick={(event) => {
-                if (item.isDisabled) return;
-                onActivate(item, event.altKey);
-              }}
+              splitActivation="distance"
+              onSplitDragStart={onClose}
               onContextMenu={(event) => {
                 event.preventDefault();
                 onOpenMenu(event.clientX, event.clientY, item);
@@ -181,7 +212,7 @@ function MorePopover({
             >
               <RowIcon item={item} className="radar-nav-icon" />
               <span className="radar-nav-label">{item.label}</span>
-            </button>
+            </NavigationButton>
           );
         })}
       </div>
@@ -198,11 +229,9 @@ function MorePopover({
  * arranging in either nav carries over to the other.
  */
 export function RadarNavigation({
-  items,
-  activeItemId,
   isCompactViewport,
-  experimental_activate,
 }: ExperimentalSidebarNavigationProps) {
+  const { items, activeItemId, actions } = experimental_useSidebarNavigation();
   const sdk = useSdk();
   const [prefs, setPrefs] = useState<PrefsSnapshot | null>(null);
   const [prefsSettled, setPrefsSettled] = useState(false);
@@ -252,10 +281,10 @@ export function RadarNavigation({
     item: ExperimentalSidebarNavigationItem,
     openInSplit: boolean,
   ) => {
-    if (item.isDisabled) return;
+    if (item.isDisabled || item.isLoading) return;
     setMoreAt(null);
     setMenu(null);
-    experimental_activate(item.id, { openInSplit });
+    actions.activate(item.id, { openInSplit });
   };
 
   const placement = useMemo(() => {
@@ -420,25 +449,21 @@ export function RadarNavigation({
   const renderDestinationRow = (item: ExperimentalSidebarNavigationItem) => {
     const isActive = item.id === activeItemId;
     return (
-      <button
+      <NavigationButton
         key={item.id}
-        type="button"
-        disabled={item.isDisabled}
-        aria-label={hintFor(item)}
-        aria-current={isActive ? "page" : undefined}
-        aria-keyshortcuts={item.shortcut?.ariaKeyShortcuts}
+        item={item}
+        isActive={isActive}
+        onActivate={activate}
         title={`${hintFor(item)} — Option-click opens in a split`}
-        {...item.experimental_splitProps}
-        onClick={(event) => activate(item, event.altKey)}
+        className={cn("radar-nav-row", isActive && "radar-nav-row-active")}
         onContextMenu={(event) => {
           event.preventDefault();
           openMenu(event.clientX, event.clientY, item);
         }}
-        className={cn("radar-nav-row", isActive && "radar-nav-row-active")}
       >
         <RowIcon item={item} className="radar-nav-icon" />
         <span className="radar-nav-label">{item.label}</span>
-      </button>
+      </NavigationButton>
     );
   };
 
@@ -563,15 +588,18 @@ export function RadarNavigation({
           {prefsSettled ? (
             <>
               {inlineItems.map((item) => (
-                <button
+                <NavigationButton
                   key={item.id}
-                  type="button"
-                  disabled={item.isDisabled}
-                  aria-label={hintFor(item)}
-                  aria-keyshortcuts={item.shortcut?.ariaKeyShortcuts}
+                  item={item}
+                  isActive={item.id === activeItemId}
+                  onActivate={activate}
                   title={hintFor(item)}
-                  {...item.experimental_splitProps}
-                  onClick={(event) => activate(item, event.altKey)}
+                  className={cn(
+                    "radar-nav-icon-button",
+                    item.id === activeItemId && "radar-nav-row-active",
+                    item.action.kind === "new-thread" &&
+                      "radar-nav-icon-primary",
+                  )}
                   onContextMenu={
                     item.action.kind !== "new-thread" &&
                     item.action.kind !== "search-threads"
@@ -581,15 +609,9 @@ export function RadarNavigation({
                         }
                       : undefined
                   }
-                  className={cn(
-                    "radar-nav-icon-button",
-                    item.id === activeItemId && "radar-nav-row-active",
-                    item.action.kind === "new-thread" &&
-                      "radar-nav-icon-primary",
-                  )}
                 >
                   <RowIcon item={item} />
-                </button>
+                </NavigationButton>
               ))}
               {renderMoreRow()}
             </>
@@ -611,15 +633,12 @@ export function RadarNavigation({
     <>
       <nav aria-label="Primary" className="radar-nav">
         {showNewThread && newThread ? (
-          <button
+          <NavigationButton
             key={newThread.id}
-            type="button"
-            disabled={newThread.isDisabled}
-            aria-label={hintFor(newThread)}
-            aria-keyshortcuts={newThread.shortcut?.ariaKeyShortcuts}
+            item={newThread}
+            isActive={newThread.id === activeItemId}
+            onActivate={activate}
             title={`${hintFor(newThread)} — Option-click opens in a split`}
-            {...newThread.experimental_splitProps}
-            onClick={(event) => activate(newThread, event.altKey)}
             className="radar-nav-primary"
           >
             <RowIcon item={newThread} className="radar-nav-icon" />
@@ -629,7 +648,7 @@ export function RadarNavigation({
                 {newThread.shortcut.label}
               </kbd>
             ) : null}
-          </button>
+          </NavigationButton>
         ) : null}
 
         {!prefsSettled ? (

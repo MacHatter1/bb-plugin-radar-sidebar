@@ -41,12 +41,16 @@ export function stockKeyFor(
     case "search-threads":
       return STOCK_KEY_SEARCH_THREADS;
     case "open-extensions":
-      // Stock ids are `extensions` (Plugins) and `skills` (Skills).
-      return `__bb__/${item.id}`;
+      return STOCK_KEY_EXTENSIONS;
+    case "open-skills":
+      return STOCK_KEY_SKILLS;
     case "open-plugin-panel":
       return item.action.pluginId === "automations"
         ? STOCK_KEY_AUTOMATIONS
         : `${item.action.pluginId}/${item.action.panelId}`;
+    default:
+      // New host actions already carry their canonical arrangement key.
+      return item.id;
   }
 }
 
