@@ -8,6 +8,15 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
  * count as active right now for grouping and sorting.
  */
 export function isLiveThread(thread: PluginSidebarThread): boolean {
+  return (
+    isRunningThread(thread) ||
+    thread.queuedWork !== "none" ||
+    thread.hasPendingInteraction
+  );
+}
+
+/** Execution and background work, excluding queued or blocked work. */
+export function isRunningThread(thread: PluginSidebarThread): boolean {
   if (
     thread.status === "starting" ||
     thread.status === "active" ||
@@ -26,8 +35,6 @@ export function isLiveThread(thread: PluginSidebarThread): boolean {
   ) {
     return true;
   }
-  if (thread.queuedWork !== "none") return true;
-  if (thread.hasPendingInteraction) return true;
   return false;
 }
 
@@ -61,20 +68,19 @@ export const TIME_GROUP_LABELS: Record<TimeGroupId, string> = {
   older: "Older",
 };
 
-const DAY_MS = 86_400_000;
-
-function startOfLocalDay(ts: number): number {
+function startOfLocalDay(ts: number, daysAgo = 0): number {
   const date = new Date(ts);
   date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - daysAgo);
   return date.getTime();
 }
 
 export function timeGroupFor(updatedAt: number, now: number): TimeGroupId {
   const todayStart = startOfLocalDay(now);
   if (updatedAt >= todayStart) return "today";
-  if (updatedAt >= todayStart - DAY_MS) return "yesterday";
-  if (updatedAt >= todayStart - 7 * DAY_MS) return "week";
-  if (updatedAt >= todayStart - 30 * DAY_MS) return "month";
+  if (updatedAt >= startOfLocalDay(now, 1)) return "yesterday";
+  if (updatedAt >= startOfLocalDay(now, 7)) return "week";
+  if (updatedAt >= startOfLocalDay(now, 30)) return "month";
   return "older";
 }
 

@@ -764,7 +764,7 @@ function RadarThreadRowImpl({
     <span
       className="radar-tree-gutter"
       onClick={collapse ? () => collapse.onToggle() : undefined}
-      aria-hidden={collapse ? undefined : true}
+      aria-hidden={collapse || dragHandle ? undefined : true}
     >
       {dragHandle ? (
         <button
@@ -951,7 +951,7 @@ function RadarThreadRowImpl({
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          closeHoverCard();
+          closeHoverCard(true);
           onOpenMenu(event.clientX, event.clientY, thread);
         }}
         onDoubleClick={(event) => {
@@ -1149,6 +1149,7 @@ function RadarThreadRowImpl({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
+            closeHoverCard(true);
             const rect = event.currentTarget.getBoundingClientRect();
             onOpenMenu(rect.left - 200, rect.bottom + 4, thread);
           }}

@@ -26,8 +26,9 @@ through BB's own flows (pins, reads, renames, archives, deletes).
   own stock arrangement exactly — the server-synced `sidebar.pluginPanelOrder`
   and `sidebar.visiblePluginPanels` preferences behind Settings →
   Customize sidebar — so More holds precisely what the user put there.
-  Right-click a destination for Keep in sidebar / Move to More (writes back
-  to that same store, so arranging in either nav carries over) and Open in
+  The host navigation hook supplies the live arrangement, and its actions
+  save visibility changes. Right-click a destination for Keep in sidebar /
+  Move to More (so arranging in either nav carries over) and Open in
   split for panels. Option-click opens in a split. New thread is the fixed
   Radar header — always inline — while destinations follow the stock
   arrangement exactly.
@@ -49,6 +50,9 @@ through BB's own flows (pins, reads, renames, archives, deletes).
   grip, then drag it onto a section header (or **Unfiled**) to set its
   `sectionId` through BB's own thread update — the drop target highlights,
   the thread's own section is marked as a no-op, and a toast confirms.
+  Dragging a selected thread files the whole selection. For keyboard filing,
+  focus the grip, press Space, move with arrow keys, and press Enter to drop
+  or Escape to cancel.
   Threads cannot be moved between *projects*: BB's update API has no
   `projectId` field, so project grouping is view-only.
 - **Smart views** (`RadarSmartViews.tsx`): the bar under the filters offers a
@@ -184,7 +188,8 @@ back to BB's list automatically.
   the tooltip), keeps its branch line, and shows a pill
   only when the fold hides unseen threads (blue count) or loud states
   (red failed, amber needs-you, pulsing green live rollup dot). Group
-  counts/rollups always include folded members.
+  counts/rollups always include folded members and count each thread. Failed
+  work takes priority over input waits, which take priority over running work.
 - Hidden helper threads (`isHidden`) are filtered out, as in BB's list.
 
 ## Keyboard and selection

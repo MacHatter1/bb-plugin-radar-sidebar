@@ -9,6 +9,7 @@ import {
   TIME_GROUP_ORDER,
   activityTime,
   isLiveThread,
+  isRunningThread,
   timeGroupFor,
 } from "./time";
 
@@ -23,7 +24,7 @@ export interface ThreadGroup {
   total: number;
   /** Shown unread members including nested descendants. */
   unread: number;
-  /** Number of live threads in group. */
+  /** Number of executing threads in group, including background work. */
   live: number;
   /** Number of threads waiting for input in group. */
   needsUser: number;
@@ -252,32 +253,33 @@ export function useThreadGroups(args: {
     (root: PluginSidebarThread): {
       total: number;
       unread: number;
-      live: boolean;
-      needsUser: boolean;
-      failed: boolean;
+      live: number;
+      needsUser: number;
+      failed: number;
       kids: { id: string; title: string; dot: string | null }[];
     } => {
       let total = 1;
       let unread = root.isUnread ? 1 : 0;
-      let live = isLiveThread(root);
-      let needsUser = root.indicator === "waiting-for-input";
-      let failed =
+      let live = Number(isRunningThread(root));
+      let needsUser = Number(root.indicator === "waiting-for-input");
+      let failed = Number(
         root.indicator === "unread-error" ||
-        root.indicator === "queued-failed";
+        root.indicator === "queued-failed",
+      );
       const kids: { id: string; title: string; dot: string | null }[] = [];
       const walk = (id: string, depth: number) => {
         if (depth > 25) return;
         for (const child of shownChildren.get(id) ?? []) {
           total += 1;
           if (child.isUnread) unread += 1;
-          const childLive = isLiveThread(child);
-          if (childLive) live = true;
+          const childLive = isRunningThread(child);
+          if (childLive) live += 1;
           const childNeeds = child.indicator === "waiting-for-input";
-          if (childNeeds) needsUser = true;
+          if (childNeeds) needsUser += 1;
           const childFailed =
             child.indicator === "unread-error" ||
             child.indicator === "queued-failed";
-          if (childFailed) failed = true;
+          if (childFailed) failed += 1;
           if (kids.length < 5) {
             kids.push({
               id: child.id,
@@ -320,9 +322,9 @@ export function useThreadGroups(args: {
         const counts = countSubtree(root);
         total += counts.total;
         unread += counts.unread;
-        if (counts.live) live += 1;
-        if (counts.needsUser) needsUser += 1;
-        if (counts.failed) failed += 1;
+        live += counts.live;
+        needsUser += counts.needsUser;
+        failed += counts.failed;
       }
       return {
         id,
