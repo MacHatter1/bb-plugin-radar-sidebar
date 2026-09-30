@@ -44,6 +44,11 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_SWIPE_LEFT,
+  DEFAULT_SWIPE_RIGHT,
+  swipeActionFromSetting,
+} from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
 import { RadarThreadRow } from "./RadarThreadRow";
 import { isRunningThread } from "./time";
@@ -142,6 +147,12 @@ function useSidebarSettings() {
     adaptiveCollapse: flag("adaptiveCollapse", true),
     defaultDensity,
     wrapTitles,
+    swipeRight: flag("swipeActions", true)
+      ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
+      : "none",
+    swipeLeft: flag("swipeActions", true)
+      ? swipeActionFromSetting(values?.swipeLeft, DEFAULT_SWIPE_LEFT)
+      : "none",
   };
 }
 
@@ -1231,6 +1242,8 @@ export function RadarThreadList({
           isKeyboardFocused={keyboardFocusedId === thread.id}
           onToggleSelect={handleToggleSelect}
           dragHandle={dragHandle}
+          swipeRight={settings.swipeRight}
+          swipeLeft={settings.swipeLeft}
         />
       );
     },
@@ -1241,6 +1254,8 @@ export function RadarThreadList({
       settings.celebrate,
       settings.hoverCard,
       settings.adaptiveCollapse,
+      settings.swipeRight,
+      settings.swipeLeft,
       activeThreadId,
       editingId,
       actions,
@@ -1401,6 +1416,11 @@ export function RadarThreadList({
       )}
       data-radar-motion={settings.motion ? "on" : "off"}
       data-radar-loud-unread={settings.loudUnread ? "on" : "off"}
+      data-radar-swipe={
+        settings.swipeRight !== "none" || settings.swipeLeft !== "none"
+          ? "on"
+          : "off"
+      }
     >
       <div className="radar-list-header">
         <div className="radar-search">

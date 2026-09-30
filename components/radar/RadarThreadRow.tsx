@@ -32,6 +32,12 @@ import {
   useThreadExecution,
 } from "./useThreadExecution";
 import { RadarHoverCard, type ContextUsage } from "./RadarHoverCard";
+import { useRowSwipe } from "./useRowSwipe";
+import {
+  swipeActionView,
+  type SwipeActionId,
+  type SwipeActionView,
+} from "@/lib/swipe";
 
 /** Family folding for threads with shown children (null for leaves). */
 export interface RowCollapse {
@@ -311,6 +317,8 @@ function RadarThreadRowImpl({
   isKeyboardFocused = false,
   onToggleSelect,
   dragHandle,
+  swipeRight = "none",
+  swipeLeft = "none",
 }: {
   thread: PluginSidebarThread;
   depth: number;
@@ -350,6 +358,9 @@ function RadarThreadRowImpl({
   onToggleSelect?: (event: React.MouseEvent, threadId: string) => void;
   /** Grip affordance for drag-to-section (section grouping only). */
   dragHandle?: import("./RadarThreadList").RowDragHandle | null;
+  /** Touch swipe actions per direction; "none" leaves that side inert. */
+  swipeRight?: SwipeActionId;
+  swipeLeft?: SwipeActionId;
 }) {
   const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
   const rowStatus = useSidebarThreadRowStatus(thread.id);
@@ -491,6 +502,58 @@ function RadarThreadRowImpl({
       });
     }
   }, [isEditing]);
+
+  const swipeState = {
+    isUnread: thread.isUnread,
+    isPinned: thread.isPinned,
+    isArchived: thread.isArchived,
+  };
+  const rightSwipe = swipeActionView(swipeRight, swipeState);
+  const leftSwipe = swipeActionView(swipeLeft, swipeState);
+  const runSwipeAction = (action: SwipeActionView) => {
+    closeHoverCard(true);
+    switch (action.id) {
+      case "read":
+        actions.setRead(thread.id, thread.isUnread).catch(() => {
+          toast.error("Couldn’t update read state");
+        });
+        break;
+      case "pin":
+        actions.setPinned(thread.id, !thread.isPinned).catch(() => {
+          toast.error("Couldn’t update pin");
+        });
+        break;
+      case "archive":
+        if (thread.isArchived) onUnarchive(thread);
+        else actions.archive(thread.id);
+        break;
+      case "split":
+        actions.open(thread.id, { split: true });
+        onNavigate();
+        break;
+      case "rename":
+        onStartRename(thread);
+        break;
+      case "menu": {
+        const rect = rowRef.current?.getBoundingClientRect();
+        if (rect) onOpenMenu(rect.right - 220, rect.bottom + 4, thread);
+        break;
+      }
+      case "delete":
+        actions.requestDelete(thread.id);
+        break;
+    }
+  };
+  const swipeSide = useRowSwipe({
+    rowRef,
+    enabled: !isEditing && !selectionActive && !!(rightSwipe || leftSwipe),
+    right: rightSwipe,
+    left: leftSwipe,
+    restoreKey: `${thread.isArchived}`,
+    onCommit: runSwipeAction,
+  });
+  const swipeView =
+    swipeSide === "right" ? rightSwipe : swipeSide === "left" ? leftSwipe : null;
 
   const visual: StatusVisual = statusVisualFor(thread.indicator);
   // Action states get the full wash+bar+pulse treatment whether read or not:
@@ -930,6 +993,18 @@ function RadarThreadRowImpl({
       onMouseEnter={scheduleHoverCard}
       onMouseLeave={() => closeHoverCard(false)}
     >
+      {swipeSide && swipeView ? (
+        <span
+          className={cn("radar-swipe-underlay", `radar-swipe-${swipeView.id}`)}
+          data-side={swipeSide}
+          aria-hidden="true"
+        >
+          <span className="radar-swipe-content">
+            <Icon name={swipeView.icon} aria-hidden="true" />
+            <span className="radar-swipe-label">{swipeView.label}</span>
+          </span>
+        </span>
+      ) : null}
       {gutterNode}
       <a
         href={thread.href}

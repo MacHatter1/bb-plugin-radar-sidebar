@@ -301,6 +301,97 @@ describe("actions", () => {
   });
 });
 
+describe("swipe actions", () => {
+  const row = (container: HTMLElement) =>
+    container.querySelector(".radar-row") as HTMLElement;
+
+  function swipe(container: HTMLElement, dx: number, dy = 0) {
+    const target = row(container);
+    fireEvent.touchStart(target, { touches: [{ clientX: 150, clientY: 20 }] });
+    // Two steps: the first (just past the slop) decides swipe versus scroll.
+    const step = 12 / Math.max(Math.abs(dx), Math.abs(dy));
+    fireEvent.touchMove(target, {
+      touches: [{ clientX: 150 + dx * step, clientY: 20 + dy * step }],
+    });
+    fireEvent.touchMove(target, {
+      touches: [{ clientX: 150 + dx, clientY: 20 + dy }],
+    });
+    fireEvent.touchEnd(target, { touches: [] });
+  }
+
+  beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get: () => 300,
+    });
+  });
+
+  it("marks read on a right swipe by default", () => {
+    const slot = renderThreads([
+      makeThread({ id: "t", lastReadAt: null, latestAttentionAt: NOW }),
+    ]);
+    swipe(slot.container, 160);
+    expect(slot.inspection.sidebarActionCalls).toContainEqual(
+      expect.objectContaining({ method: "setRead", threadId: "t" }),
+    );
+  });
+
+  it("slides the row away, then archives on a left swipe by default", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })]);
+      swipe(slot.container, -160);
+      expect(row(slot.container).dataset.swipePhase).toBe("out");
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(slot.inspection.sidebarActionCalls).toContainEqual({
+        method: "archive",
+        threadId: "t",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the configured action for each side", () => {
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      settings: { swipeLeft: "Pin / unpin" },
+    });
+    swipe(slot.container, -160);
+    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+      method: "setPinned",
+      threadId: "t",
+      pinned: true,
+    });
+  });
+
+  it("springs back without acting on a short drag", () => {
+    const slot = renderThreads([makeThread({ id: "t" })]);
+    swipe(slot.container, -30);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBe("settle");
+  });
+
+  it("leaves vertical movement to the scroller", () => {
+    const slot = renderThreads([makeThread({ id: "t" })]);
+    swipe(slot.container, -20, 160);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+  });
+
+  it("does nothing when turned off", () => {
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      settings: { swipeActions: false },
+    });
+    swipe(slot.container, -160);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    expect(slot.container.querySelector("[data-radar-swipe=\"off\"]")).not.toBeNull();
+  });
+});
+
 describe("density", () => {
   const root = (slot: { container: HTMLElement }) =>
     slot.container.querySelector(".radar-list") as HTMLElement;

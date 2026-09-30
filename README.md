@@ -119,7 +119,8 @@ Arrow keys walk the list, <kbd>Enter</kbd> opens, <kbd>Space</kbd> folds,
 stay out of text fields, open dialogs and menus, and buttons or links outside the
 list, so they never steal keys from the rest of BB. <kbd>⌘</kbd>-click or <kbd>⇧</kbd>-click also selects several,
 to act on them together from a floating dock. Save a query plus filters as a
-named smart view.
+named smart view. On touch screens, swipe a row to mark it read or archive
+it; each direction's action is a setting.
 
 </td>
 </tr>
@@ -145,7 +146,7 @@ named smart view.
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/nav-more.png" alt="Radar navigation with Skills and Automations moved into More" width="440"><br><sub><b>Navigation with More</b></sub></td>
-<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the seven settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
+<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the plugin settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
 </tr>
 </table>
 </div>
@@ -242,6 +243,9 @@ flowchart LR
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows down to title, project and time. |
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
 | `twoLineTitles` | `false` | Enable **Two-line titles** to wrap long titles, including mentions, before truncating. Short titles keep their project chip and time beside them when they fit; otherwise metadata wraps below, aligned with the title text. Applies in both densities. |
+| `swipeActions` | `true` | On touch screens, swipe a row left or right to act on it. Mouse and trackpad are unaffected. |
+| `swipeRight` | `"Mark read / unread"` | Action for a rightward swipe: `Mark read / unread`, `Pin / unpin`, `Archive / unarchive`, `Open in split`, `Rename`, `More actions`, `Delete…` (BB confirms) or `Nothing`. |
+| `swipeLeft` | `"Archive / unarchive"` | Action for a leftward swipe, from the same list. |
 
 The list never waits on settings: until they load it uses the defaults above,
 except that `defaultDensity` and `twoLineTitles` use the value this client last
@@ -278,11 +282,12 @@ bb plugin dev                      # rebuild and reload on every save
 ```
 
 ```
-server.ts               the seven settings the frontend reads; no storage, no CLI
+server.ts               the settings the frontend reads; no storage, no CLI
 app.tsx                 registers the thread-list and navigation slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, nav, menus, peek card and smart views
 components/radar/*.ts   grouping hook, time bucketing, nav placement, model cache
+lib/swipe.ts            swipe actions and gesture math, shared with server.ts
 components/storage.ts   one-time migration of codex-sidebar: preferences
 components/ui/          vendored BB UI primitives
 skills/                 the bundled agent skill

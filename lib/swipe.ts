@@ -1,0 +1,131 @@
+// Swipe-to-act on thread rows: the setting vocabulary and the gesture math.
+// Plain TypeScript (no React, no DOM) so the backend can define the settings
+// from the same list the row resolves them against.
+
+export type SwipeActionId =
+  | "read"
+  | "pin"
+  | "archive"
+  | "split"
+  | "rename"
+  | "menu"
+  | "delete"
+  | "none";
+
+/** Setting option text → action. The text is what the settings UI shows. */
+export const SWIPE_ACTION_OPTIONS = {
+  "Mark read / unread": "read",
+  "Pin / unpin": "pin",
+  "Archive / unarchive": "archive",
+  "Open in split": "split",
+  Rename: "rename",
+  "More actions": "menu",
+  "Delete…": "delete",
+  Nothing: "none",
+} as const satisfies Record<string, SwipeActionId>;
+
+export type SwipeActionOption = keyof typeof SWIPE_ACTION_OPTIONS;
+
+export const SWIPE_ACTION_OPTION_LABELS = Object.keys(
+  SWIPE_ACTION_OPTIONS,
+) as SwipeActionOption[];
+
+export const DEFAULT_SWIPE_RIGHT: SwipeActionOption = "Mark read / unread";
+export const DEFAULT_SWIPE_LEFT: SwipeActionOption = "Archive / unarchive";
+
+/** Unknown or missing setting values fall back instead of disabling a side. */
+export function swipeActionFromSetting(
+  value: unknown,
+  fallback: SwipeActionOption,
+): SwipeActionId {
+  return typeof value === "string" && value in SWIPE_ACTION_OPTIONS
+    ? SWIPE_ACTION_OPTIONS[value as SwipeActionOption]
+    : SWIPE_ACTION_OPTIONS[fallback];
+}
+
+/** How the underlay presents an action for this thread's current state. */
+export interface SwipeActionView {
+  id: Exclude<SwipeActionId, "none">;
+  label: string;
+  icon: string;
+  /** Slides the row away and folds it before acting, instead of springing back. */
+  removes: boolean;
+}
+
+export function swipeActionView(
+  id: SwipeActionId,
+  thread: { isUnread: boolean; isPinned: boolean; isArchived: boolean },
+): SwipeActionView | null {
+  switch (id) {
+    case "read":
+      return thread.isUnread
+        ? { id, label: "Read", icon: "MailOpen", removes: false }
+        : { id, label: "Unread", icon: "Mail", removes: false };
+    case "pin":
+      return thread.isPinned
+        ? { id, label: "Unpin", icon: "PinOff", removes: false }
+        : { id, label: "Pin", icon: "Pin", removes: false };
+    case "archive":
+      return thread.isArchived
+        ? { id, label: "Unarchive", icon: "ArchiveRestore", removes: false }
+        : { id, label: "Archive", icon: "Archive", removes: true };
+    case "split":
+      return { id, label: "Split", icon: "Columns2", removes: false };
+    case "rename":
+      return { id, label: "Rename", icon: "Edit", removes: false };
+    case "menu":
+      return { id, label: "More", icon: "MoreHorizontal", removes: false };
+    case "delete":
+      // The host confirms deletion, so the row stays until that resolves.
+      return { id, label: "Delete", icon: "Trash2", removes: false };
+    case "none":
+    default:
+      return null;
+  }
+}
+
+/** Movement before a touch is read as a swipe or a scroll. */
+export const SWIPE_SLOP_PX = 10;
+
+/** Distance that arms the action: a third of the row, within finger reach. */
+export function swipeThreshold(rowWidth: number): number {
+  return Math.min(128, Math.max(64, rowWidth * 0.3));
+}
+
+/**
+ * Finger travel → row offset. Tracks 1:1 so the row stays under the finger,
+ * then resists past most of the row. A side with no action only gives a
+ * short elastic tug so it still answers the touch.
+ */
+export function swipeOffset(
+  dx: number,
+  rowWidth: number,
+  hasAction: boolean,
+): number {
+  const sign = Math.sign(dx);
+  const distance = Math.abs(dx);
+  if (!hasAction) return sign * Math.min(28, distance * 0.2);
+  const free = rowWidth * 0.8;
+  if (distance <= free) return dx;
+  return sign * (free + (distance - free) * 0.25);
+}
+
+/** A quick flick commits even short of the threshold. */
+const FLING_PX_PER_MS = 0.5;
+const FLING_MIN_PX = 32;
+
+/**
+ * Release decision. `velocity` is px/ms along x (positive = rightwards).
+ * Past the threshold commits unless the finger was clearly pulling back.
+ */
+export function shouldCommitSwipe(
+  offset: number,
+  velocity: number,
+  threshold: number,
+): boolean {
+  if (offset === 0) return false;
+  const sign = Math.sign(offset);
+  const along = velocity * sign;
+  if (Math.abs(offset) >= threshold) return along > -FLING_PX_PER_MS;
+  return Math.abs(offset) >= FLING_MIN_PX && along >= FLING_PX_PER_MS;
+}

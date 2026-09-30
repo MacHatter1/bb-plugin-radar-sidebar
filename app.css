@@ -835,6 +835,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* A swiped row slides past the edge; never scroll sideways to follow it. */
+  overflow-x: hidden;
   padding: 0 4px 12px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
@@ -1213,6 +1215,155 @@
 
 .radar-row-selected:hover {
   background: color-mix(in srgb, var(--primary) 18%, transparent) !important;
+}
+
+/* Swipe actions. The row itself slides; the underlay sits in the gap it
+   leaves (outside the row box, sized to the offset), so the colored pill
+   grows from the edge instead of showing through the row. Row and underlay
+   share each phase's curve so they never drift apart. */
+.radar-list[data-radar-swipe="on"] .radar-row {
+  touch-action: pan-y pinch-zoom;
+}
+
+.radar-row[data-swipe-phase] {
+  /* content-visibility paints inside the row box, which would clip the
+     underlay. */
+  content-visibility: visible;
+  z-index: 1;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.radar-row[data-swipe-phase="drag"] {
+  will-change: transform;
+}
+
+.radar-row[data-swipe-phase="settle"] {
+  transition:
+    transform 420ms cubic-bezier(0.2, 1.25, 0.4, 1),
+    background-color 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.radar-row[data-swipe-phase="out"] {
+  transition: transform 240ms cubic-bezier(0.25, 0.8, 0.4, 1);
+}
+
+.radar-row[data-swipe-phase="fold"],
+.radar-row[data-swipe-phase="gone"] {
+  min-height: 0;
+  margin-block: 0;
+  opacity: 0;
+  transition:
+    height 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    margin 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 180ms ease;
+}
+
+.radar-swipe-underlay {
+  --radar-swipe-color: var(--muted-foreground);
+  --radar-swipe-fg: #fff;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  width: var(--radar-swipe-w, 0px);
+  overflow: hidden;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--radar-swipe-color) 18%, var(--muted));
+  color: var(--radar-swipe-color);
+  pointer-events: none;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.radar-swipe-underlay[data-side="right"] {
+  right: 100%;
+  justify-content: flex-end;
+}
+
+.radar-swipe-underlay[data-side="left"] {
+  left: 100%;
+  justify-content: flex-start;
+}
+
+.radar-row[data-swipe-phase="settle"] .radar-swipe-underlay {
+  transition:
+    width 420ms cubic-bezier(0.2, 1.25, 0.4, 1),
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.radar-row[data-swipe-phase="out"] .radar-swipe-underlay {
+  transition: width 240ms cubic-bezier(0.25, 0.8, 0.4, 1);
+}
+
+.radar-row[data-swipe-armed] .radar-swipe-underlay {
+  background: var(--radar-swipe-color);
+  color: var(--radar-swipe-fg);
+}
+
+/* The icon stays beside the row's edge, small and quiet until the swipe
+   arms, then pops to full size. */
+.radar-swipe-content {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.75;
+  transform: scale(0.82);
+  transition:
+    transform 280ms cubic-bezier(0.3, 1.8, 0.5, 1),
+    opacity 160ms ease;
+}
+
+.radar-swipe-content [data-icon-root] {
+  width: 18px;
+  height: 18px;
+}
+
+.radar-row[data-swipe-armed] .radar-swipe-content {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.radar-swipe-read {
+  --radar-swipe-color: #3b82f6;
+}
+
+.radar-swipe-pin {
+  --radar-swipe-color: var(--warning, #b98533);
+}
+
+.radar-swipe-archive {
+  --radar-swipe-color: var(--success, #3f9a6b);
+}
+
+.radar-swipe-split {
+  --radar-swipe-color: #0d9488;
+}
+
+.radar-swipe-rename,
+.radar-swipe-menu {
+  --radar-swipe-color: #6b7280;
+}
+
+.radar-swipe-delete {
+  --radar-swipe-color: var(--destructive, #d43d3d);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-row[data-swipe-phase],
+  .radar-row[data-swipe-phase] .radar-swipe-underlay,
+  .radar-swipe-content {
+    transition: none;
+  }
 }
 
 /* Compact compresses vertically only. Inline padding and the child indent

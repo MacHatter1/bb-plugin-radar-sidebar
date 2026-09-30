@@ -4,6 +4,22 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Swipe actions** (`swipeActions`, default `true`): on touch screens, swipe
+  a thread row left or right to act on it. Each side is configurable
+  (`swipeRight`, default mark read / unread; `swipeLeft`, default archive /
+  unarchive) from: mark read / unread, pin / unpin, archive / unarchive, open
+  in split, rename, more actions, delete (host-confirmed), or nothing. The row
+  tracks the finger, a colored pill grows from the edge and pops when the
+  swipe arms (with a short haptic tick where supported), and releasing short
+  springs back. Archiving slides the row away and folds its space before the
+  host archives it. A quick flick commits too. Vertical movement stays a
+  scroll, the host drawer does not react to a row swipe, and mouse and
+  trackpad are unaffected.
+
 ## 0.3.0 - 2026-09-30
 
 ### Added
