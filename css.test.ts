@@ -24,6 +24,59 @@ function rules(): { selector: string; body: string }[] {
 }
 
 describe("app.css", () => {
+  it("keeps metadata and the owned title transparent to one-line layout", () => {
+    for (const selector of [".radar-row-meta", ".radar-thread-title"]) {
+      expect(rules().find((rule) => rule.selector === selector)?.body)
+        .toMatch(/display:\s*contents/);
+    }
+  });
+
+  it("clamps the whole title instead of the last SDK segment", () => {
+    const title = rules().find((rule) =>
+      rule.selector === ".radar-title-wrap .radar-thread-title",
+    );
+    expect(title?.body).toMatch(/-webkit-line-clamp:\s*2/);
+    expect(title?.body).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(rules().filter((rule) => /radar-title-wrap/.test(rule.selector) && /-webkit-line-clamp/.test(rule.body))
+      .map((rule) => rule.selector)).toEqual([".radar-title-wrap .radar-thread-title"]);
+  });
+
+  it("sizes wrapping titles from content and declares wrapping metadata once", () => {
+    expect(rules().find((rule) => rule.selector === ".radar-title-wrap .radar-row-title-text")?.body)
+      .toMatch(/flex:\s*1 1 auto/);
+    expect(rules().filter((rule) => rule.selector === ".radar-title-wrap .radar-row-meta"))
+      .toHaveLength(1);
+  });
+
+  it("lifts two-line hover actions clear of the branch line and never hides them", () => {
+    // The bar sits at the row's bottom in two-line mode. Unlifted, it lands
+    // on the branch line and takes clicks meant for the PR badge. Hiding
+    // actions per row is out too: under project grouping no row has a chip,
+    // so that emptied the bar list-wide.
+    const wrap = rules().filter((rule) => /radar-title-wrap/.test(rule.selector));
+    expect(wrap.find((rule) => /:has\(\.radar-branch-line\)/.test(rule.selector))?.body)
+      .toMatch(/--radar-actions-lift:\s*[1-9]\d*px/);
+    expect(wrap.find((rule) => /\.radar-row-actions$/.test(rule.selector) && /bottom:/.test(rule.body))?.body)
+      .toMatch(/var\(--radar-actions-lift\)/);
+    expect(wrap
+      .filter((rule) => /\.radar-action\b/.test(rule.selector) && /display:\s*none/.test(rule.body))
+      .map((rule) => rule.selector)).toEqual([]);
+    expect(rules().filter((rule) => /radar-title-wrap.*:hover/.test(rule.selector)))
+      .toEqual([]);
+  });
+
+  it("estimates unrendered two-line rows taller than one-line rows", () => {
+    const estimate = (selector: RegExp) => Number(
+      rules()
+        .find((rule) => selector.test(rule.selector) && /contain-intrinsic-size/.test(rule.body))
+        ?.body.match(/contain-intrinsic-size:\s*auto\s+(\d+)px/)?.[1],
+    );
+    expect(estimate(/^\.radar-title-wrap \.radar-row$/))
+      .toBeGreaterThan(estimate(/^\.radar-row$/));
+    expect(estimate(/^\.radar-title-wrap\.radar-density-compact \.radar-row,/))
+      .toBeGreaterThan(estimate(/^\.radar-density-compact \.radar-row,/));
+  });
+
   it("never resets the row margin with the shorthand", () => {
     // `margin: 0` also zeroes margin-left, which silently wipes the child
     // thread indent that .radar-row-child / .radar-row-deep own.

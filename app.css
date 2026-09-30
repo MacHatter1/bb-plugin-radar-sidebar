@@ -1567,12 +1567,154 @@ a.radar-row-main:hover {
   text-overflow: ellipsis;
 }
 
-.radar-row-title-text > :last-child {
+.radar-thread-title {
+  display: contents;
+}
+
+.radar-thread-title > :last-child {
   flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Two-line titles. Size from the title's content so short titles can keep
+   their metadata beside them. Clamp the whole SDK title, including mentions. */
+.radar-title-wrap .radar-row-title {
+  position: relative;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 1px;
+  padding-inline-start: var(--radar-title-indent, 0px);
+}
+
+.radar-title-wrap .radar-row-title-text {
+  flex: 1 1 auto;
+  max-width: 100%;
+  align-items: flex-start;
+}
+
+.radar-title-wrap .radar-thread-title {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.radar-title-wrap .radar-thread-title > * {
+  flex: initial;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Keep wrapped metadata beneath the text, rather than beneath its markers.
+   Removing the markers from flex sizing also keeps their indent on line two. */
+.radar-title-wrap .radar-row-title:has(.radar-child-glyph),
+.radar-title-wrap .radar-row-title:has(.radar-pin-marker) {
+  --radar-title-indent: 16px;
+}
+
+.radar-title-wrap .radar-row-title:has(.radar-child-glyph):has(.radar-pin-marker) {
+  --radar-title-indent: 32px;
+}
+
+.radar-title-wrap .radar-child-glyph,
+.radar-title-wrap .radar-pin-marker {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 3px;
+}
+
+.radar-title-wrap .radar-row-title:has(.radar-child-glyph) .radar-pin-marker {
+  inset-inline-start: 16px;
+}
+
+.radar-title-wrap .radar-kids-pill {
+  margin-top: 1px;
+}
+
+/* Chip and time wrap as one unit in two-line mode. */
+.radar-row-meta {
+  display: contents;
+}
+
+.radar-title-wrap .radar-row-meta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  max-width: 100%;
+}
+
+/* Height estimates for rows not yet rendered. Rows now range from one title
+   line (about 47px, 28px compact) to two lines with metadata below (about
+   84px, 60px compact), so estimate between the two rather than at either
+   end. The auto form remembers each row's real size once it has rendered. */
+.radar-title-wrap .radar-row {
+  contain-intrinsic-size: auto 64px;
+}
+
+.radar-title-wrap.radar-density-compact .radar-row,
+.radar-title-wrap .radar-row-compact {
+  contain-intrinsic-size: auto 40px;
+}
+
+/* Desktop hover actions sit on the row's last line of plain text: the
+   subtitle, or the chip and time where the subtitle is folded away. That
+   keeps them off a wrapped title and off the branch line, whose PR badge has
+   to stay clickable. Only a row one line tall still has them over the end of
+   its title, as in one-line mode. They stay out of flex sizing, so revealing
+   them never resizes a title or moves a row. Offsets are from the row's
+   bottom edge to that line; the lift clears the 18px branch line and its gap. */
+.radar-title-wrap:not(.radar-list-compact) .radar-row {
+  --radar-actions-bottom: 4px;
+  --radar-actions-lift: 0px;
+}
+
+.radar-title-wrap:not(.radar-list-compact) .radar-row-collapsed {
+  --radar-actions-bottom: 7px;
+}
+
+.radar-title-wrap:not(.radar-list-compact) .radar-row:has(.radar-branch-line) {
+  --radar-actions-lift: 20px;
+}
+
+/* Compact density hides the branch line, so nothing needs clearing. A row one
+   line tall is held at 28px with its text at the top, leaving that line 7px
+   above the bottom edge; taller rows end 3px below their last line. */
+.radar-title-wrap.radar-density-compact:not(.radar-list-compact) .radar-row,
+.radar-title-wrap:not(.radar-list-compact) .radar-row.radar-row-compact {
+  --radar-actions-bottom: clamp(3px, calc(35px - 100%), 7px);
+  --radar-actions-lift: 0px;
+}
+
+.radar-title-wrap:not(.radar-list-compact) .radar-row-actions {
+  top: auto;
+  bottom: calc(var(--radar-actions-bottom) + var(--radar-actions-lift));
+  padding: 0;
+}
+
+.radar-title-wrap:not(.radar-list-compact) .radar-action {
+  width: 20px;
+  height: 18px;
+}
+
+/* Should the offsets above ever drift, the PR badge still wins the click. */
+.radar-title-wrap .radar-branch-line {
+  position: relative;
+  z-index: 1;
+}
+
+/* The inline ⋯ on touch layouts holds still instead of sliding. */
+.radar-title-wrap.radar-list-compact .radar-row-actions {
+  transform: none;
 }
 
 .radar-row-project {

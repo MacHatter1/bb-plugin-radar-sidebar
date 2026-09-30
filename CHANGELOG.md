@@ -4,6 +4,21 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Two-line titles** (`twoLineTitles`, default `false`): long thread titles,
+  including mentions, wrap before truncating. Project chip and time stay
+  beside short titles when they fit, or wrap below aligned with the text.
+  Applies in both densities. Hover actions move to the row's last line of
+  plain text, off a wrapped title and clear of the PR badge. Rows use taller
+  offscreen height estimates, and the row-height settings (`defaultDensity`,
+  `twoLineTitles`) are remembered per client so the first paint uses them
+  before settings finish loading.
+- Tests use jsdom storage explicitly so Node 26's native `localStorage`
+  does not cause preference and sidebar tests to fail.
+
 ## 0.2.1 - 2026-09-29
 
 ### Fixed

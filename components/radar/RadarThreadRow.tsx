@@ -982,7 +982,9 @@ function RadarThreadRowImpl({
                   <Icon name="Pin" aria-hidden="true" />
                 </span>
               ) : null}
-              <ThreadTitle threadId={thread.id} />
+              <span className="radar-thread-title">
+                <ThreadTitle threadId={thread.id} />
+              </span>
             </span>
             {(() => {
               if (!collapse?.collapsed || collapse.hiddenTotal === 0) {
@@ -1014,19 +1016,21 @@ function RadarThreadRowImpl({
                 </span>
               );
             })()}
-            {projectTag ? (
-              <span
-                className="radar-row-project"
-                title={projectTag}
-                style={{
-                  "--radar-project-hue":
-                    projectColorHue ?? projectHue(thread.projectId),
-                } as CSSProperties}
-              >
-                {projectTag}
-              </span>
-            ) : null}
-            {timeNode}
+            <span className="radar-row-meta">
+              {projectTag ? (
+                <span
+                  className="radar-row-project"
+                  title={projectTag}
+                  style={{
+                    "--radar-project-hue":
+                      projectColorHue ?? projectHue(thread.projectId),
+                  } as CSSProperties}
+                >
+                  {projectTag}
+                </span>
+              ) : null}
+              {timeNode}
+            </span>
           </span>
           <span
             className={cn(

@@ -145,7 +145,7 @@ named smart view.
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/nav-more.png" alt="Radar navigation with Skills and Automations moved into More" width="440"><br><sub><b>Navigation with More</b></sub></td>
-<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the six settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
+<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the seven settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
 </tr>
 </table>
 </div>
@@ -241,6 +241,15 @@ flowchart LR
 | `loudUnread` | `true` | Wash and accent bar on finished-but-unseen threads. Off keeps the icon and pip only. |
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows down to title, project and time. |
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
+| `twoLineTitles` | `false` | Enable **Two-line titles** to wrap long titles, including mentions, before truncating. Short titles keep their project chip and time beside them when they fit; otherwise metadata wraps below, aligned with the title text. Applies in both densities. |
+
+The list never waits on settings: until they load it uses the defaults above,
+except that `defaultDensity` and `twoLineTitles` use the value this client last
+saw, so rows paint at their final height. In two-line mode, hover actions sit
+on the row's last line of plain text (the subtitle, or the project chip and
+time where the subtitle is folded away), so they stay off a wrapped title and
+off the PR badge. A row that is only one line tall still has them over the end
+of its title, as in one-line mode. They never change the row's layout.
 
 </details>
 
@@ -269,7 +278,7 @@ bb plugin dev                      # rebuild and reload on every save
 ```
 
 ```
-server.ts               the six settings the frontend reads; no storage, no CLI
+server.ts               the seven settings the frontend reads; no storage, no CLI
 app.tsx                 registers the thread-list and navigation slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, nav, menus, peek card and smart views
@@ -286,6 +295,8 @@ rendered list through BB's plugin test harness (`renderSlot` with seeded
 sidebar threads), saved-view validation, preference migration, execution-cache
 refreshes and completion timers. Static guards over `app.css` cover cascade
 mistakes jsdom cannot reproduce.
+The test setup uses jsdom's `localStorage` explicitly, including on Node 26,
+whose native storage global otherwise shadows it without a backing file.
 
 `PLUGIN_OVERVIEW.md` is the store listing. Keep it in step with
 `bb.description` in `package.json`.

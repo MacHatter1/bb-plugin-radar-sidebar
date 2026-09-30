@@ -122,6 +122,8 @@ back to BB's list automatically.
   attention, unknown states) keeps the full row. Editing never collapses.
 - Compact density compresses **vertically only** — inline padding and the
   child indent stay identical to comfortable so tree guides keep lining up.
+  Titles stay on one line by default; **Two-line titles** also applies to
+  compact density and the forced-compact touch layout.
   It uses `margin-block` rather than `margin`, since the shorthand also
   zeroes `margin-left` and wipes `.radar-row-child` / `.radar-row-deep`.
   `css.test.ts` guards both as static assertions (jsdom does not resolve the
@@ -141,6 +143,9 @@ back to BB's list automatically.
   collapsed rows and children, hidden only when it would echo the project
   group header), then a muted tabular last-activity time that never
   truncates.
+  Choose **Two-line titles** to wrap the whole title, including mention
+  chips, before truncating at two lines. Metadata stays beside short titles
+  when it fits, or wraps below aligned with the text after child/pin markers.
   Groups, sorting, and timestamps all key off activity — live threads
   (executing, background work, queued messages, waiting on you) count as
   now, everything else keys off latest attention — so merely opening a
@@ -166,6 +171,11 @@ back to BB's list automatically.
   requested/blocked, blue for review pending, green for ready/merged).
   Clicking the badge opens the PR. The branch never appears on line two.
 - Hover actions: pin, rename (pencil), archive/unarchive, and a menu (⋯).
+  They never resize the row. In one-line mode they sit at its top right. In
+  two-line mode they sit on its last line of plain text (the subtitle, or
+  the chip and time where the subtitle is folded away), lifted clear of the
+  branch line so the PR badge stays clickable; only a row one line tall
+  still has them over the end of its title.
   Right-click opens the fuller menu: open in split, pin, mark read/unread,
   mark family read (whole tree, for threads with parents or children —
   a child's completion lands as the parent's own notification turn, so
@@ -214,7 +224,9 @@ back to BB's list automatically.
 
 `bb plugin config radar-sidebar`, or Settings → Installed plugins → Radar
 Sidebar. The frontend reads them through `useSettings()`, and every value
-has a default.
+has a default, so the list never waits on them. Until they load,
+`defaultDensity` and `twoLineTitles` use the value this client last saw, so
+rows paint at their final height.
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -224,6 +236,7 @@ has a default.
 | `loudUnread` | `true` | Wash and accent bar on finished-but-unseen rows; off keeps the icon and pip only. |
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows to their title line. |
 | `defaultDensity` | `comfortable` | `comfortable` or `compact`, until the header toggle is used; that choice is remembered per client. |
+| `twoLineTitles` | `false` | Enable to wrap long titles, including mentions, in both densities; metadata wraps below when needed. |
 
 ## Rules
 
