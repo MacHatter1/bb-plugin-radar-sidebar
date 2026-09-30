@@ -14,6 +14,8 @@ All notable changes to Radar Sidebar are documented here. The format follows
   Applies in both densities. Rows wait for settings before their first paint,
   use taller offscreen height estimates, and overlay hover actions on metadata
   without changing title widths or moving adjacent rows.
+- Tests use jsdom storage explicitly so Node 26's native `localStorage`
+  does not cause preference and sidebar tests to fail.
 
 ## 0.2.1 - 2026-09-29
 

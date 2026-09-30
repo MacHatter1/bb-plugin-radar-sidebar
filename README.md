@@ -294,6 +294,8 @@ rendered list through BB's plugin test harness (`renderSlot` with seeded
 sidebar threads), saved-view validation, preference migration, execution-cache
 refreshes and completion timers. Static guards over `app.css` cover cascade
 mistakes jsdom cannot reproduce.
+The test setup uses jsdom's `localStorage` explicitly, including on Node 26,
+whose native storage global otherwise shadows it without a backing file.
 
 `PLUGIN_OVERVIEW.md` is the store listing. Keep it in step with
 `bb.description` in `package.json`.
