@@ -9,8 +9,8 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 export default async function plugin(bb: BbPluginApi) {
   bb.log.info("loaded");
 
-  // Read in the frontend through useSettings(); every value has a default,
-  // so the sidebar keeps working before the first load resolves.
+  // Read in the frontend through useSettings(); rows wait for the initial
+  // load so density and title wrapping are correct on their first paint.
   bb.settings.define({
     hoverCard: {
       type: "boolean",
@@ -54,13 +54,12 @@ export default async function plugin(bb: BbPluginApi) {
       options: ["comfortable", "compact"],
       default: "comfortable",
     },
-    titleLines: {
-      type: "select",
-      label: "Title lines",
+    twoLineTitles: {
+      type: "boolean",
+      label: "Two-line titles",
       description:
         "Let long thread titles wrap onto a second line before truncating. Applies in both densities.",
-      options: ["1", "2"],
-      default: "1",
+      default: false,
     },
   });
 

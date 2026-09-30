@@ -982,7 +982,9 @@ function RadarThreadRowImpl({
                   <Icon name="Pin" aria-hidden="true" />
                 </span>
               ) : null}
-              <ThreadTitle threadId={thread.id} />
+              <span className="radar-thread-title">
+                <ThreadTitle threadId={thread.id} />
+              </span>
             </span>
             {(() => {
               if (!collapse?.collapsed || collapse.hiddenTotal === 0) {

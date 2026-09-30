@@ -107,12 +107,13 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** Plugin settings, with the shipped defaults applied while they load. */
+/** Plugin settings; wait for the initial load before laying out rows. */
 function useSidebarSettings() {
-  const { values } = useSettings();
+  const { values, isLoading } = useSettings();
   const flag = (key: string, fallback: boolean): boolean =>
     typeof values?.[key] === "boolean" ? (values[key] as boolean) : fallback;
   return {
+    isLoading,
     hoverCard: flag("hoverCard", true),
     celebrate: flag("celebrate", true),
     motion: flag("motion", true),
@@ -122,7 +123,7 @@ function useSidebarSettings() {
       values?.defaultDensity === "compact"
         ? ("compact" as const)
         : ("comfortable" as const),
-    titleLines: values?.titleLines === "2" ? 2 : 1,
+    wrapTitles: flag("twoLineTitles", false),
   };
 }
 
@@ -1378,7 +1379,7 @@ export function RadarThreadList({
         "radar-list",
         (density === "compact" || isCompactViewport) && "radar-density-compact",
         isCompactViewport && "radar-list-compact",
-        settings.titleLines === 2 && "radar-title-wrap",
+        settings.wrapTitles && "radar-title-wrap",
       )}
       data-radar-motion={settings.motion ? "on" : "off"}
       data-radar-loud-unread={settings.loudUnread ? "on" : "off"}
@@ -1666,9 +1667,9 @@ export function RadarThreadList({
           "radar-list-body",
           switchPending && "radar-list-switching",
         )}
-        aria-busy={switchPending || undefined}
+        aria-busy={switchPending || settings.isLoading || undefined}
       >
-        {status === "loading" ? (
+        {status === "loading" || settings.isLoading ? (
           <div className="radar-state" role="status" aria-label="Loading threads">
             {Array.from({ length: 8 }, (_, index) => (
               // eslint-disable-next-line react/no-array-index-key

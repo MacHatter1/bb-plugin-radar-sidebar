@@ -24,6 +24,50 @@ function rules(): { selector: string; body: string }[] {
 }
 
 describe("app.css", () => {
+  it("keeps metadata and the owned title transparent to one-line layout", () => {
+    for (const selector of [".radar-row-meta", ".radar-thread-title"]) {
+      expect(rules().find((rule) => rule.selector === selector)?.body)
+        .toMatch(/display:\s*contents/);
+    }
+  });
+
+  it("clamps the whole title instead of the last SDK segment", () => {
+    const title = rules().find((rule) =>
+      rule.selector === ".radar-title-wrap .radar-thread-title",
+    );
+    expect(title?.body).toMatch(/-webkit-line-clamp:\s*2/);
+    expect(title?.body).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(rules().filter((rule) => /radar-title-wrap/.test(rule.selector) && /-webkit-line-clamp/.test(rule.body))
+      .map((rule) => rule.selector)).toEqual([".radar-title-wrap .radar-thread-title"]);
+  });
+
+  it("sizes wrapping titles from content and declares wrapping metadata once", () => {
+    expect(rules().find((rule) => rule.selector === ".radar-title-wrap .radar-row-title-text")?.body)
+      .toMatch(/flex:\s*1 1 auto/);
+    expect(rules().filter((rule) => rule.selector === ".radar-title-wrap .radar-row-meta"))
+      .toHaveLength(1);
+  });
+
+  it("keeps desktop hover actions out of row layout and off title lines", () => {
+    const actions = rules().find((rule) =>
+      rule.selector === ".radar-title-wrap:not(.radar-list-compact) .radar-row-actions",
+    );
+    expect(actions?.body).toMatch(/top:\s*auto/);
+    expect(actions?.body).toMatch(/bottom:\s*2px/);
+    expect(actions?.body).not.toMatch(/position:\s*static/);
+    expect(rules().filter((rule) => /radar-title-wrap.*:hover/.test(rule.selector)))
+      .toEqual([]);
+  });
+
+  it("gives unrendered two-line rows taller estimates in both densities", () => {
+    const estimates = rules().filter((rule) =>
+      /radar-title-wrap/.test(rule.selector) && /contain-intrinsic-size/.test(rule.body),
+    );
+    expect(estimates).toHaveLength(2);
+    expect(estimates[0]?.body).toMatch(/auto\s+76px/);
+    expect(estimates[1]?.body).toMatch(/auto\s+52px/);
+  });
+
   it("never resets the row margin with the shorthand", () => {
     // `margin: 0` also zeroes margin-left, which silently wipes the child
     // thread indent that .radar-row-child / .radar-row-deep own.

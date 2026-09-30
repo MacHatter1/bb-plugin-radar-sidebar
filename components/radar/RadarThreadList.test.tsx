@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 import { act, cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import { createElement, Fragment, type FunctionComponent } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
 import { DAY, HOUR, NOW, makeProject, makeSection, makeThread } from "./fixtures";
+
+// Expose configurable test exports while retaining the SDK's slot runtime.
+vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => ({
+  ...await importOriginal<typeof pluginSdk>(),
+}));
 
 const app = await loadPluginApp(() => import("../../app"));
 const threadList = app.threadLists[0]!;
@@ -335,6 +342,63 @@ describe("density", () => {
 });
 
 describe("settings gates", () => {
+  it("waits for settings before painting rows in their final density and title mode", () => {
+    const settings = vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
+      values: undefined, isLoading: true,
+    });
+    const slot = renderThreads([makeThread({ id: "t" })]);
+    expect(visibleRowIds(slot.container)).toEqual([]);
+    expect(screen.getByRole("status", { name: "Loading threads" })).toBeTruthy();
+    expect(slot.container.querySelector(".radar-list-body")?.getAttribute("aria-busy"))
+      .toBe("true");
+
+    settings.mockReturnValue({
+      values: { twoLineTitles: true, defaultDensity: "compact" }, isLoading: false,
+    });
+    slot.rerender(createElement(threadList.component, {
+      activeThreadId: null, activeProjectId: "proj_a", isCompactViewport: false,
+      onNavigate: () => {}, searchQuery: "",
+    }));
+    expect(visibleRowIds(slot.container)).toEqual(["t"]);
+    expect(slot.container.querySelector(".radar-title-wrap.radar-density-compact"))
+      .not.toBeNull();
+    expect(screen.queryByRole("status", { name: "Loading threads" })).toBeNull();
+  });
+
+  it.each([false, true])("owns all title segments when a mention is last: %s", (mentionLast) => {
+    vi.spyOn(pluginSdk as typeof pluginSdk & {
+      ThreadTitle: FunctionComponent<pluginSdk.PluginThreadTitleProps>;
+    }, "ThreadTitle").mockImplementation(() => createElement(
+      Fragment, null,
+      createElement("span", null, "Fix checkout "),
+      createElement("span", { "data-mention": "" }, "@checkout.test.ts"),
+      mentionLast ? null : createElement("span", null, " that times out on CI"),
+    ));
+    const slot = renderThreads([makeThread({ id: "t", isPinned: true })], {
+      settings: { twoLineTitles: true },
+    });
+    const title = slot.container.querySelector(".radar-thread-title");
+    expect(title?.textContent).toBe(
+      `Fix checkout @checkout.test.ts${mentionLast ? "" : " that times out on CI"}`,
+    );
+    expect(title?.children).toHaveLength(mentionLast ? 2 : 3);
+    expect(title?.querySelector(".radar-pin-marker")).toBeNull();
+  });
+
+  it("wraps titles when twoLineTitles is true", () => {
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      settings: { twoLineTitles: true },
+    });
+    expect(slot.container.querySelector(".radar-title-wrap")).not.toBeNull();
+  });
+
+  it.each([undefined, false, "1", "2", "invalid"])("keeps one-line titles when twoLineTitles is %s", (twoLineTitles) => {
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      settings: twoLineTitles === undefined ? {} : { twoLineTitles },
+    });
+    expect(slot.container.querySelector(".radar-title-wrap")).toBeNull();
+  });
+
   it("keeps quiet rows expanded when adaptive collapse is off", () => {
     const quiet = makeThread({
       id: "quiet",

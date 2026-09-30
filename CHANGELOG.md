@@ -8,9 +8,12 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Added
 
-- `titleLines` setting: at `2`, long thread titles wrap onto a second line
-  before truncating. On narrow sidebars the project chip and time wrap below
-  the title together instead of squeezing it. Defaults to `1` (unchanged).
+- **Two-line titles** (`twoLineTitles`, default `false`): long thread titles,
+  including mentions, wrap before truncating. Project chip and time stay
+  beside short titles when they fit, or wrap below aligned with the text.
+  Applies in both densities. Rows wait for settings before their first paint,
+  use taller offscreen height estimates, and overlay hover actions on metadata
+  without changing title widths or moving adjacent rows.
 
 ## 0.2.1 - 2026-09-29
 

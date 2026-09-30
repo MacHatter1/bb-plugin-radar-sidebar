@@ -145,7 +145,7 @@ named smart view.
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/nav-more.png" alt="Radar navigation with Skills and Automations moved into More" width="440"><br><sub><b>Navigation with More</b></sub></td>
-<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the six settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
+<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the seven settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
 </tr>
 </table>
 </div>
@@ -241,7 +241,14 @@ flowchart LR
 | `loudUnread` | `true` | Wash and accent bar on finished-but-unseen threads. Off keeps the icon and pip only. |
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows down to title, project and time. |
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
-| `titleLines` | `"1"` | `1` or `2`. At `2`, long titles wrap onto a second line before truncating, and the project chip and time drop below the title when the row is too narrow. Applies in both densities. |
+| `twoLineTitles` | `false` | Enable **Two-line titles** to wrap long titles, including mentions, before truncating. Short titles keep their project chip and time beside them when they fit; otherwise metadata wraps below, aligned with the title text. Applies in both densities. |
+
+Rows wait for the initial settings load so their first paint uses the selected
+density and title layout. In two-line mode, hover actions overlay the metadata
+at the bottom of the row without changing its layout. Rows without a project
+chip show only the ellipsis menu; pin, rename and archive remain in that menu.
+The same applies at sidebar widths of 194px or less, where the project chip is
+hidden, so hover controls cannot cover title text.
 
 </details>
 
@@ -270,7 +277,7 @@ bb plugin dev                      # rebuild and reload on every save
 ```
 
 ```
-server.ts               the six settings the frontend reads; no storage, no CLI
+server.ts               the seven settings the frontend reads; no storage, no CLI
 app.tsx                 registers the thread-list and navigation slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, nav, menus, peek card and smart views
