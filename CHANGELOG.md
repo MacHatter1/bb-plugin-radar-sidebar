@@ -8,20 +8,31 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Added
 
-- **Swipe actions** (`swipeActions`, default `true`): on touch screens, swipe
-  a thread row left or right to act on it. Each side is configurable
-  (`swipeRight`, default mark read / unread; `swipeLeft`, default archive /
-  unarchive) from: mark read / unread, pin / unpin, archive / unarchive, open
-  in split, rename, more actions, delete (host-confirmed), or nothing. The row
-  tracks the finger, a colored pill grows from the edge with its icon
-  growing alongside, and the icon pops when the swipe arms (with a short
-  haptic tick where supported). On release a spring carries the finger's
-  speed home, so a flick flows straight into the settle; the pill keeps the
-  label of what was done while it closes. Archiving (or unarchiving from the
-  Archived tab) slides the row away and folds its space before the host acts;
-  on the All tab the row stays and springs back. A quick flick commits too. Vertical movement stays a
-  scroll, the host drawer does not react to a row swipe, and mouse and
-  trackpad are unaffected.
+- **Swipe actions** (`swipeActions`, default `true`): swipe a thread row left
+  or right to act on it, with one finger on a touch screen or two fingers on
+  a trackpad (a Mac, or an iPad with a Magic Keyboard). Each side is
+  configurable (`swipeRight`, default mark read / unread; `swipeLeft`,
+  default archive / unarchive) from: mark read / unread, pin / unpin,
+  archive / unarchive, open in split, rename, more actions, delete
+  (host-confirmed), or nothing.
+  - The row tracks the input, a colored pill grows from the edge with its
+    icon growing alongside, and the icon pops when the swipe arms (a third
+    of the row by touch, over half by trackpad), with a short haptic tick
+    where supported. On release a spring carries the input's speed home, so
+    a flick flows into the settle; a swipe that rests before release carries
+    no speed. The pill keeps the label of what was done while it closes.
+  - Archiving (or unarchiving from the Archived tab) slides the row away and
+    folds its space before the host acts; on the All tab the row stays and
+    springs back.
+  - Trackpads report no lift-off, so a trackpad swipe stopped short of
+    arming rests open with its action as a button, as in Mail on a Mac:
+    click it to act; press elsewhere, scroll or press Escape to close; move
+    again to carry on. One row stays open at a time. A swipe keeps following
+    after the row slides out from under the cursor, and the momentum tail
+    after a release is swallowed.
+  - Vertical movement stays a scroll, the host drawer does not react to a
+    row swipe, releasing a swipe never opens the thread, and mouse clicks
+    and drags are unaffected.
 
 ## 0.3.0 - 2026-09-30
 

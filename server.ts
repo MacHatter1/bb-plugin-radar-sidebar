@@ -70,7 +70,7 @@ export default async function plugin(bb: BbPluginApi) {
       type: "boolean",
       label: "Swipe actions",
       description:
-        "On touch screens, swipe a thread left or right to act on it. Mouse and trackpad are unaffected.",
+        "Swipe a thread left or right to act on it: one finger on a touch screen, two fingers on a trackpad. Mouse clicks and drags are unaffected.",
       default: true,
     },
     swipeRight: {

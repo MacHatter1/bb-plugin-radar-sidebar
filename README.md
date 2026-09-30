@@ -119,8 +119,8 @@ Arrow keys walk the list, <kbd>Enter</kbd> opens, <kbd>Space</kbd> folds,
 stay out of text fields, open dialogs and menus, and buttons or links outside the
 list, so they never steal keys from the rest of BB. <kbd>⌘</kbd>-click or <kbd>⇧</kbd>-click also selects several,
 to act on them together from a floating dock. Save a query plus filters as a
-named smart view. On touch screens, swipe a row to mark it read or archive
-it; each direction's action is a setting.
+named smart view. Swipe a row, by touch or with two fingers on a trackpad,
+to mark it read or archive it; each direction's action is a setting.
 
 </td>
 </tr>
@@ -243,7 +243,7 @@ flowchart LR
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows down to title, project and time. |
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
 | `twoLineTitles` | `false` | Enable **Two-line titles** to wrap long titles, including mentions, before truncating. Short titles keep their project chip and time beside them when they fit; otherwise metadata wraps below, aligned with the title text. Applies in both densities. |
-| `swipeActions` | `true` | On touch screens, swipe a row left or right to act on it. Mouse and trackpad are unaffected. |
+| `swipeActions` | `true` | Swipe a row left or right to act on it: one finger on a touch screen, two fingers on a trackpad. A trackpad swipe stopped short rests open with its action as a button. Mouse clicks and drags are unaffected. |
 | `swipeRight` | `"Mark read / unread"` | Action for a rightward swipe: `Mark read / unread`, `Pin / unpin`, `Archive / unarchive`, `Open in split`, `Rename`, `More actions`, `Delete…` (BB confirms) or `Nothing`. |
 | `swipeLeft` | `"Archive / unarchive"` | Action for a leftward swipe, from the same list. |
 

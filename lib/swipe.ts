@@ -90,8 +90,16 @@ export function swipeActionView(
 /** Movement before a touch is read as a swipe or a scroll. */
 export const SWIPE_SLOP_PX = 10;
 
-/** Distance that arms the action: a third of the row, within finger reach. */
-export function swipeThreshold(rowWidth: number): number {
+/**
+ * Distance that arms the action. A finger gets a third of the row, within
+ * reach. A trackpad needs over half: its momentum adds travel after the lift
+ * and a short push is easy to make by accident, so arming takes intent.
+ */
+export function swipeThreshold(
+  rowWidth: number,
+  input: "touch" | "trackpad" = "touch",
+): number {
+  if (input === "trackpad") return Math.min(240, Math.max(120, rowWidth * 0.55));
   return Math.min(128, Math.max(64, rowWidth * 0.3));
 }
 

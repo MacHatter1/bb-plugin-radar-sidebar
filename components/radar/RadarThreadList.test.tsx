@@ -407,6 +407,303 @@ describe("swipe actions", () => {
     expect(row(slot.container).dataset.swipePhase).toBeUndefined();
   });
 
+  /** A two-finger trackpad stream: pixel wheel events, ~16ms apart. */
+  function wheelSwipe(container: HTMLElement, dx: number, dy = 0, steps = 10) {
+    const target = row(container);
+    for (let i = 0; i < steps; i += 1) {
+      // Content-style deltas: fingers moving left scroll content right (+x).
+      fireEvent.wheel(target, { deltaX: -dx / steps, deltaY: dy / steps, deltaMode: 0 });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+  }
+
+  /** The fade-out a trackpad sends after the fingers lift mid-flick. */
+  function momentumTail(container: HTMLElement, direction: number) {
+    const target = row(container);
+    for (let d = 8; d >= 0.8; d *= 0.7) {
+      fireEvent.wheel(target, { deltaX: -direction * d, deltaMode: 0 });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+  }
+
+  it("rests a stopped trackpad swipe open, then follows on", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -60);
+      // Resting fingers: no decision, the row just settles open.
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBe("open");
+      expect(row(slot.container).style.transform).toContain("-96px");
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      // Moving again carries on from there.
+      wheelSwipe(slot.container, -100);
+      momentumTail(slot.container, -1);
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  function openWithTrackpad(container: HTMLElement) {
+    wheelSwipe(container, -60);
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+  }
+
+  it("runs the action from an open row's button", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      openWithTrackpad(slot.container);
+      const button = slot.container.querySelector(".radar-swipe-underlay") as HTMLElement;
+      fireEvent.pointerDown(button);
+      fireEvent.click(button);
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["press elsewhere", "press on the row", "Escape", "scroll"])(
+    "closes an open row on %s without acting",
+    (how) => {
+      vi.useFakeTimers();
+      try {
+        const slot = renderThreads([makeThread({ id: "t" })], {
+          settings: { swipeLeft: "Pin / unpin" },
+        });
+        openWithTrackpad(slot.container);
+        const anchor = slot.container.querySelector("[data-sidebar-thread-id]") as HTMLElement;
+        if (how === "press elsewhere") fireEvent.pointerDown(document.body);
+        if (how === "press on the row") {
+          fireEvent.pointerDown(anchor);
+          fireEvent.click(anchor);
+        }
+        if (how === "Escape") fireEvent.keyDown(document, { key: "Escape" });
+        if (how === "scroll") {
+          fireEvent.scroll(slot.container.querySelector(".radar-list-body") as HTMLElement);
+        }
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+        expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+        // The harness's split-drag stand-in logs any press on a row link as
+        // "open"; the real host only drags once the pointer leaves the list.
+        expect(
+          slot.inspection.sidebarActionCalls.filter((call) => call.method !== "open"),
+        ).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("keeps only one row open", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads(
+        [makeThread({ id: "a" }), makeThread({ id: "b" })],
+        { settings: { swipeLeft: "Pin / unpin" } },
+      );
+      const rows = () =>
+        Array.from(slot.container.querySelectorAll(".radar-row")) as HTMLElement[];
+      const open = (target: HTMLElement) => {
+        for (let i = 0; i < 10; i += 1) {
+          fireEvent.wheel(target, { deltaX: 6, deltaMode: 0 });
+          act(() => {
+            vi.advanceTimersByTime(16);
+          });
+        }
+        act(() => {
+          vi.advanceTimersByTime(1500);
+        });
+      };
+      open(rows()[0]);
+      expect(rows()[0].dataset.swipePhase).toBe("open");
+      open(rows()[1]);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(rows()[1].dataset.swipePhase).toBe("open");
+      expect(rows()[0].dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases a trackpad flick as soon as its momentum fades", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -160);
+      momentumTail(slot.container, -1);
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      act(() => {
+        vi.advanceTimersByTime(120);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+
+      // Stragglers from the tail must not start a second swipe.
+      for (let i = 0; i < 20; i += 1) {
+        fireEvent.wheel(row(slot.container), { deltaX: 6, deltaMode: 0 });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a trackpad swipe going after the row slides out from under the cursor", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      // Starts over the row...
+      wheelSwipe(slot.container, -40, 0, 4);
+      expect(row(slot.container).dataset.swipePhase).toBe("drag");
+      // ...then the cursor is over the list body instead.
+      const elsewhere = slot.container.querySelector(".radar-list-body") as HTMLElement;
+      for (let i = 0; i < 10; i += 1) {
+        fireEvent.wheel(elsewhere, { deltaX: 16, deltaMode: 0 });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      expect(row(slot.container).style.transform).toContain("-200px");
+      momentumTail(slot.container, -1);
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("springs back from a third of the row on a trackpad", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -100);
+      expect("swipeArmed" in row(slot.container).dataset).toBe(false);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("decides an abrupt stop only after a longer pause", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -200);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves vertical trackpad scrolling to the list", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })]);
+      wheelSwipe(slot.container, -20, 200);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores pinch-zoom and line-stepped mouse wheels", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })]);
+      const target = row(slot.container);
+      for (let i = 0; i < 10; i += 1) {
+        fireEvent.wheel(target, { deltaX: 30, ctrlKey: true, deltaMode: 0 });
+        fireEvent.wheel(target, { deltaX: 3, deltaMode: 1 });
+      }
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(target.dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turning swipe actions off stops trackpad swipes too", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })], {
+        settings: { swipeActions: false },
+      });
+      wheelSwipe(slot.container, -160);
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does nothing when turned off", () => {
     const slot = renderThreads([makeThread({ id: "t" })], {
       settings: { swipeActions: false },

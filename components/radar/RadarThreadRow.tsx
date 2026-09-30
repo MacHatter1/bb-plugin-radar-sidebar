@@ -553,6 +553,7 @@ function RadarThreadRowImpl({
     right: rightSwipe,
     left: leftSwipe,
     restoreKey: `${thread.isArchived}`,
+    onStart: () => closeHoverCard(true),
     onCommit: runSwipeAction,
   });
 

@@ -13,6 +13,7 @@ import {
   springAtRest,
   stepSpring,
 } from "./swipe";
+import { looksLikeMomentumEnd } from "@/components/radar/useRowSwipe";
 
 const idle = { isUnread: false, isPinned: false, isArchived: false };
 
@@ -58,6 +59,12 @@ describe("gesture math", () => {
     expect(swipeThreshold(300)).toBe(90);
     expect(swipeThreshold(100)).toBe(64);
     expect(swipeThreshold(1000)).toBe(128);
+  });
+
+  it("asks a trackpad for over half the row", () => {
+    expect(swipeThreshold(300, "trackpad")).toBe(165);
+    expect(swipeThreshold(150, "trackpad")).toBe(120);
+    expect(swipeThreshold(1000, "trackpad")).toBe(240);
   });
 
   it("tracks the finger 1:1, then resists", () => {
@@ -126,5 +133,18 @@ describe("springs", () => {
     const step = stepSpring(120, 0, 0, 1000, SPRING_BACK);
     expect(Number.isFinite(step.x)).toBe(true);
     expect(Math.abs(step.x)).toBeLessThan(120);
+  });
+});
+
+describe("looksLikeMomentumEnd", () => {
+  it("spots a flick fading out", () => {
+    expect(looksLikeMomentumEnd([12, 9, 6, 4, 2.5, 1.6, 1.1])).toBe(true);
+  });
+
+  it("does not mistake an abrupt stop or a slow drag for a lift", () => {
+    expect(looksLikeMomentumEnd([9, 9, 9, 9, 9])).toBe(false);
+    expect(looksLikeMomentumEnd([1, 1, 0.8, 0.6, 0.5])).toBe(false);
+    expect(looksLikeMomentumEnd([8, 6, 7, 3, 1])).toBe(false);
+    expect(looksLikeMomentumEnd([4, 2, 1])).toBe(false);
   });
 });
