@@ -122,6 +122,7 @@ function useSidebarSettings() {
       values?.defaultDensity === "compact"
         ? ("compact" as const)
         : ("comfortable" as const),
+    titleLines: values?.titleLines === "2" ? 2 : 1,
   };
 }
 
@@ -1377,6 +1378,7 @@ export function RadarThreadList({
         "radar-list",
         (density === "compact" || isCompactViewport) && "radar-density-compact",
         isCompactViewport && "radar-list-compact",
+        settings.titleLines === 2 && "radar-title-wrap",
       )}
       data-radar-motion={settings.motion ? "on" : "off"}
       data-radar-loud-unread={settings.loudUnread ? "on" : "off"}

@@ -4,6 +4,14 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- `titleLines` setting: at `2`, long thread titles wrap onto a second line
+  before truncating. On narrow sidebars the project chip and time wrap below
+  the title together instead of squeezing it. Defaults to `1` (unchanged).
+
 ## 0.2.1 - 2026-09-29
 
 ### Fixed

@@ -241,6 +241,7 @@ flowchart LR
 | `loudUnread` | `true` | Wash and accent bar on finished-but-unseen threads. Off keeps the icon and pip only. |
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows down to title, project and time. |
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
+| `titleLines` | `"1"` | `1` or `2`. At `2`, long titles wrap onto a second line before truncating, and the project chip and time drop below the title when the row is too narrow. Applies in both densities. |
 
 </details>
 

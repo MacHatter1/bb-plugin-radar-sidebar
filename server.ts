@@ -54,6 +54,14 @@ export default async function plugin(bb: BbPluginApi) {
       options: ["comfortable", "compact"],
       default: "comfortable",
     },
+    titleLines: {
+      type: "select",
+      label: "Title lines",
+      description:
+        "Let long thread titles wrap onto a second line before truncating. Applies in both densities.",
+      options: ["1", "2"],
+      default: "1",
+    },
   });
 
   bb.onDispose(() => {

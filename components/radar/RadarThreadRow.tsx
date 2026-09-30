@@ -1014,19 +1014,21 @@ function RadarThreadRowImpl({
                 </span>
               );
             })()}
-            {projectTag ? (
-              <span
-                className="radar-row-project"
-                title={projectTag}
-                style={{
-                  "--radar-project-hue":
-                    projectColorHue ?? projectHue(thread.projectId),
-                } as CSSProperties}
-              >
-                {projectTag}
-              </span>
-            ) : null}
-            {timeNode}
+            <span className="radar-row-meta">
+              {projectTag ? (
+                <span
+                  className="radar-row-project"
+                  title={projectTag}
+                  style={{
+                    "--radar-project-hue":
+                      projectColorHue ?? projectHue(thread.projectId),
+                  } as CSSProperties}
+                >
+                  {projectTag}
+                </span>
+              ) : null}
+              {timeNode}
+            </span>
           </span>
           <span
             className={cn(

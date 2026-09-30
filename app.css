@@ -1575,6 +1575,58 @@ a.radar-row-main:hover {
   text-overflow: ellipsis;
 }
 
+/* Two-line titles (titleLines = "2"). The title clamps at two lines; the
+   icons, chip and time pin to the first line instead of centering on the
+   wrapped block. When the row is too narrow to give the title ~12em beside
+   them (phones), the chip and time wrap below it instead. */
+.radar-title-wrap .radar-row-title {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  row-gap: 1px;
+}
+
+.radar-title-wrap .radar-row-title-text {
+  flex: 1 1 12em;
+  align-items: flex-start;
+  white-space: normal;
+}
+
+.radar-title-wrap .radar-row-title-text > :last-child {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.radar-title-wrap .radar-row-title-text > :last-child * {
+  white-space: normal;
+}
+
+.radar-title-wrap .radar-child-glyph,
+.radar-title-wrap .radar-pin-marker {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+
+.radar-title-wrap .radar-kids-pill,
+.radar-title-wrap .radar-row-meta {
+  align-self: flex-start;
+  margin-top: 1px;
+}
+
+/* Chip and time wrap as one unit in two-line mode. */
+.radar-row-meta {
+  display: contents;
+}
+
+.radar-title-wrap .radar-row-meta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
 .radar-row-project {
   --radar-project-hue: 220;
   flex: none;
