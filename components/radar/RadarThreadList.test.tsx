@@ -367,6 +367,32 @@ describe("swipe actions", () => {
     });
   });
 
+  it("does not treat a quick drag that then rests as a flick", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderThreads([makeThread({ id: "t" })]);
+      const target = row(slot.container);
+      fireEvent.touchStart(target, { touches: [{ clientX: 150, clientY: 20 }] });
+      for (let x = 138; x >= 90; x -= 12) {
+        fireEvent.touchMove(target, { touches: [{ clientX: x, clientY: 20 }] });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      // Rest, then lift: short of the threshold, so nothing happens.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      fireEvent.touchEnd(target, { touches: [] });
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("springs back without acting on a short drag", () => {
     const slot = renderThreads([makeThread({ id: "t" })]);
     swipe(slot.container, -30);

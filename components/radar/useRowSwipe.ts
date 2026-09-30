@@ -279,8 +279,11 @@ export function useRowSwipe({
       suppressClickUntil = performance.now() + 400;
       const first = samples[0];
       const last = samples[samples.length - 1];
+      // Movement that ended before a pause is not a flick: a finger resting
+      // before the lift carries no speed into the release.
+      const moving = !!last && performance.now() - last.t <= VELOCITY_WINDOW_MS;
       const velocity =
-        first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+        moving && first && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
       if (action && shouldCommitSwipe(x, velocity, threshold)) {
         setArmed(true);
         if (action.removes) {
