@@ -319,6 +319,7 @@ function RadarThreadRowImpl({
   dragHandle,
   swipeRight = "none",
   swipeLeft = "none",
+  listFiltersArchived = true,
 }: {
   thread: PluginSidebarThread;
   depth: number;
@@ -361,6 +362,8 @@ function RadarThreadRowImpl({
   /** Touch swipe actions per direction; "none" leaves that side inert. */
   swipeRight?: SwipeActionId;
   swipeLeft?: SwipeActionId;
+  /** False on the All tab, where archiving leaves the row in place. */
+  listFiltersArchived?: boolean;
 }) {
   const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
   const rowStatus = useSidebarThreadRowStatus(thread.id);
@@ -508,8 +511,8 @@ function RadarThreadRowImpl({
     isPinned: thread.isPinned,
     isArchived: thread.isArchived,
   };
-  const rightSwipe = swipeActionView(swipeRight, swipeState);
-  const leftSwipe = swipeActionView(swipeLeft, swipeState);
+  const rightSwipe = swipeActionView(swipeRight, swipeState, listFiltersArchived);
+  const leftSwipe = swipeActionView(swipeLeft, swipeState, listFiltersArchived);
   const runSwipeAction = (action: SwipeActionView) => {
     closeHoverCard(true);
     switch (action.id) {
@@ -544,7 +547,7 @@ function RadarThreadRowImpl({
         break;
     }
   };
-  const swipeSide = useRowSwipe({
+  const swipeReveal = useRowSwipe({
     rowRef,
     enabled: !isEditing && !selectionActive && !!(rightSwipe || leftSwipe),
     right: rightSwipe,
@@ -552,8 +555,6 @@ function RadarThreadRowImpl({
     restoreKey: `${thread.isArchived}`,
     onCommit: runSwipeAction,
   });
-  const swipeView =
-    swipeSide === "right" ? rightSwipe : swipeSide === "left" ? leftSwipe : null;
 
   const visual: StatusVisual = statusVisualFor(thread.indicator);
   // Action states get the full wash+bar+pulse treatment whether read or not:
@@ -993,15 +994,18 @@ function RadarThreadRowImpl({
       onMouseEnter={scheduleHoverCard}
       onMouseLeave={() => closeHoverCard(false)}
     >
-      {swipeSide && swipeView ? (
+      {swipeReveal?.action ? (
         <span
-          className={cn("radar-swipe-underlay", `radar-swipe-${swipeView.id}`)}
-          data-side={swipeSide}
+          className={cn(
+            "radar-swipe-underlay",
+            `radar-swipe-${swipeReveal.action.id}`,
+          )}
+          data-side={swipeReveal.side}
           aria-hidden="true"
         >
           <span className="radar-swipe-content">
-            <Icon name={swipeView.icon} aria-hidden="true" />
-            <span className="radar-swipe-label">{swipeView.label}</span>
+            <Icon name={swipeReveal.action.icon} aria-hidden="true" />
+            <span className="radar-swipe-label">{swipeReveal.action.label}</span>
           </span>
         </span>
       ) : null}

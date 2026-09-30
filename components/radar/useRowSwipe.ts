@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
+  SPRING_BACK,
+  SPRING_OUT,
   SWIPE_SLOP_PX,
   shouldCommitSwipe,
+  springAtRest,
+  stepSpring,
   swipeOffset,
   swipeThreshold,
   type SwipeActionView,
@@ -10,9 +14,14 @@ import {
 /** Which way the finger travels: "right" reveals the underlay on the left. */
 export type SwipeSide = "left" | "right";
 
-/** Keep in step with the `data-swipe-phase` transitions in app.css. */
-const SETTLE_MS = 420;
-const OUT_MS = 240;
+/** What the underlay shows. Latched when the swipe starts, so a committed
+ *  toggle keeps its label while the row springs home. */
+export interface SwipeReveal {
+  side: SwipeSide;
+  action: SwipeActionView | null;
+}
+
+/** Keep in step with the fold transition in app.css. */
 const FOLD_MS = 220;
 /** A removed row that is still here after this was kept (confirm cancelled). */
 const RESTORE_MS = 1200;
@@ -28,21 +37,12 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-/** The row's on-screen x offset, including partway through a transition. */
-function currentOffset(row: HTMLElement): number {
-  const transform = getComputedStyle(row).transform;
-  if (!transform || transform === "none" || typeof DOMMatrixReadOnly === "undefined") {
-    return 0;
-  }
-  const x = new DOMMatrixReadOnly(transform).m41;
-  return Number.isFinite(x) ? x : 0;
-}
-
 /**
  * Touch swipe on a thread row. Movement is written straight to the row's
- * style so tracking never waits on React; the only state is which side's
- * underlay to show. Mouse and trackpad never start a swipe: they keep drag
- * to section and the hover actions.
+ * style, and release runs a spring on animation frames that starts at the
+ * finger's speed, so nothing waits on React and a flick flows into the
+ * settle. Mouse and trackpad never start a swipe: they keep drag to section
+ * and the hover actions.
  */
 export function useRowSwipe({
   rowRef,
@@ -61,17 +61,12 @@ export function useRowSwipe({
    *  swiped away but stayed listed (for example, archived while shown). */
   restoreKey: string;
   onCommit: (action: SwipeActionView) => void;
-}): SwipeSide | null {
-  const [side, setSide] = useState<SwipeSide | null>(null);
+}): SwipeReveal | null {
+  const [reveal, setReveal] = useState<SwipeReveal | null>(null);
   const latest = useRef({ right, left, onCommit });
   latest.current = { right, left, onCommit };
   const phaseRef = useRef<Phase | null>(null);
   const restoreRef = useRef<(() => void) | null>(null);
-  const timers = useRef<number[]>([]);
-
-  const later = (ms: number, run: () => void) => {
-    timers.current.push(window.setTimeout(run, ms));
-  };
 
   useEffect(() => {
     const row = rowRef.current;
@@ -83,11 +78,16 @@ export function useRowSwipe({
     let startY = 0;
     let originX = 0;
     let width = 0;
-    let offset = 0;
+    let threshold = 64;
+    /** Where the row is drawn now, and which side's pill is showing. */
+    let x = 0;
+    let side: SwipeSide | null = null;
+    let action: SwipeActionView | null = null;
     let armed = false;
-    let current: SwipeSide | null = null;
     let samples: { x: number; t: number }[] = [];
     let suppressClickUntil = 0;
+    let frame: number | null = null;
+    let timer: number | null = null;
 
     const setPhase = (phase: Phase | null) => {
       phaseRef.current = phase;
@@ -95,49 +95,116 @@ export function useRowSwipe({
       else delete row.dataset.swipePhase;
     };
 
-    const paint = (x: number, underlay: number) => {
+    const setArmed = (next: boolean) => {
+      if (next === armed) return;
+      armed = next;
+      if (armed) row.dataset.swipeArmed = "";
+      else delete row.dataset.swipeArmed;
+    };
+
+    /** The pill fills exactly the gap the row leaves on the revealed side. */
+    const paint = (next: number) => {
+      x = next;
       row.style.transform = x === 0 ? "" : `translate3d(${x}px, 0, 0)`;
-      row.style.setProperty("--radar-swipe-w", `${Math.max(0, underlay)}px`);
+      const sign = side === "right" ? 1 : side === "left" ? -1 : 0;
+      const gap = action ? Math.max(0, x * sign) : 0;
+      row.style.setProperty("--radar-swipe-w", `${gap}px`);
+      row.style.setProperty(
+        "--radar-swipe-p",
+        `${Math.min(1, gap / threshold).toFixed(3)}`,
+      );
+    };
+
+    const stopMotion = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      if (timer !== null) clearTimeout(timer);
+      frame = null;
+      timer = null;
     };
 
     const reset = () => {
+      stopMotion();
       setPhase(null);
-      paint(0, 0);
+      side = null;
+      action = null;
+      paint(0);
       row.style.removeProperty("--radar-swipe-w");
-      delete row.dataset.swipeArmed;
-      current = null;
-      setSide(null);
+      row.style.removeProperty("--radar-swipe-p");
+      row.style.height = "";
+      setArmed(false);
+      setReveal(null);
     };
 
-    const settle = () => {
+    /** Spring from here toward `target`, starting at `velocity` px/ms. */
+    const springTo = (
+      target: number,
+      velocity: number,
+      spring: { stiffness: number; damping: number },
+      done: () => void,
+      clamp = false,
+    ) => {
+      stopMotion();
       if (prefersReducedMotion()) {
-        reset();
+        paint(target);
+        done();
         return;
       }
-      setPhase("settle");
-      paint(0, 0);
-      later(SETTLE_MS, () => {
-        if (phaseRef.current === "settle") reset();
-      });
+      let v = velocity;
+      // Frame timestamps mark the frame's start, which can predate a
+      // performance.now() read taken just before: time from the first frame.
+      let last: number | null = null;
+      const tick = (now: number) => {
+        const dt = last === null ? 1000 / 60 : Math.max(0, now - last);
+        const next = stepSpring(x, v, target, dt, spring);
+        last = now;
+        v = next.velocity;
+        // A slide-out stops at the edge rather than bouncing back into view.
+        const pos = clamp && Math.sign(next.x - target) === Math.sign(target)
+          ? target
+          : next.x;
+        paint(pos);
+        if (pos === target || springAtRest(pos, v, target)) {
+          paint(target);
+          frame = null;
+          done();
+          return;
+        }
+        frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
     };
 
-    const remove = (action: SwipeActionView, direction: number) => {
-      const reduced = prefersReducedMotion();
+    const settle = (velocity: number) => {
+      setPhase("settle");
+      springTo(0, velocity, SPRING_BACK, reset);
+    };
+
+    const remove = (committed: SwipeActionView, velocity: number) => {
       row.style.height = `${row.offsetHeight}px`;
       setPhase("out");
-      paint(direction * (width + 16), width + 16);
-      later(reduced ? 0 : OUT_MS, () => {
+      const target = Math.sign(x) * (width + 16);
+      // At least a brisk push outward, so a slow drag past the line still
+      // leaves decisively.
+      const push = Math.sign(x) * Math.max(Math.abs(velocity), 1.2);
+      springTo(target, push, SPRING_OUT, () => {
         setPhase("fold");
         row.style.height = "0px";
-        later(reduced ? 0 : FOLD_MS, () => {
+        timer = window.setTimeout(() => {
           setPhase("gone");
-          latest.current.onCommit(action);
-          later(RESTORE_MS, () => {
+          latest.current.onCommit(committed);
+          timer = window.setTimeout(() => {
             if (phaseRef.current === "gone") restore();
-          });
-        });
-      });
+          }, RESTORE_MS);
+        }, prefersReducedMotion() ? 0 : FOLD_MS);
+      }, true);
     };
+
+    const restore = () => {
+      row.style.height = "";
+      setPhase("settle");
+      springTo(0, 0, SPRING_BACK, reset);
+    };
+    restoreRef.current = restore;
 
     const onTouchStart = (event: TouchEvent) => {
       const phase = phaseRef.current;
@@ -150,8 +217,6 @@ export function useRowSwipe({
       locked = false;
       startX = touch.clientX;
       startY = touch.clientY;
-      offset = 0;
-      samples = [];
     };
 
     const onTouchMove = (event: TouchEvent) => {
@@ -168,11 +233,12 @@ export function useRowSwipe({
           return;
         }
         locked = true;
-        originX = touch.clientX;
+        // Catch a settling row wherever it is, without a jump.
+        stopMotion();
+        originX = touch.clientX - x;
         width = row.offsetWidth;
-        armed = false;
-        // Grab mid-settle from wherever the row is now.
-        originX -= currentOffset(row);
+        threshold = swipeThreshold(width);
+        samples = [];
         setPhase("drag");
       }
       if (event.cancelable) event.preventDefault();
@@ -181,29 +247,22 @@ export function useRowSwipe({
 
       const travel = touch.clientX - originX;
       const nextSide: SwipeSide | null =
-        travel > 0 ? "right" : travel < 0 ? "left" : current;
-      if (nextSide !== current) {
-        current = nextSide;
-        setSide(nextSide);
+        travel > 0 ? "right" : travel < 0 ? "left" : side;
+      if (nextSide !== side) {
+        side = nextSide;
+        action = side === "right"
+          ? latest.current.right
+          : side === "left"
+            ? latest.current.left
+            : null;
+        setArmed(false);
+        setReveal(side ? { side, action } : null);
       }
-      const action = current === "right"
-        ? latest.current.right
-        : current === "left"
-          ? latest.current.left
-          : null;
-      offset = swipeOffset(travel, width, !!action);
-      paint(offset, action ? Math.abs(offset) : 0);
+      paint(swipeOffset(travel, width, !!action));
 
-      const nextArmed = !!action && Math.abs(offset) >= swipeThreshold(width);
-      if (nextArmed !== armed) {
-        armed = nextArmed;
-        if (armed) {
-          row.dataset.swipeArmed = "";
-          navigator.vibrate?.(8);
-        } else {
-          delete row.dataset.swipeArmed;
-        }
-      }
+      const nextArmed = !!action && Math.abs(x) >= threshold;
+      if (nextArmed && !armed) navigator.vibrate?.(8);
+      setArmed(nextArmed);
 
       const now = performance.now();
       samples.push({ x: touch.clientX, t: now });
@@ -222,20 +281,15 @@ export function useRowSwipe({
       const last = samples[samples.length - 1];
       const velocity =
         first && last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
-      const action = offset > 0
-        ? latest.current.right
-        : offset < 0
-          ? latest.current.left
-          : null;
-      if (action && shouldCommitSwipe(offset, velocity, swipeThreshold(width))) {
-        row.dataset.swipeArmed = "";
+      if (action && shouldCommitSwipe(x, velocity, threshold)) {
+        setArmed(true);
         if (action.removes) {
-          remove(action, Math.sign(offset));
+          remove(action, velocity);
           return;
         }
         latest.current.onCommit(action);
       }
-      settle();
+      settle(velocity);
     };
 
     const onTouchCancel = () => {
@@ -243,7 +297,7 @@ export function useRowSwipe({
       tracking = false;
       if (!locked) return;
       locked = false;
-      settle();
+      settle(0);
     };
 
     // The finger lifting off a swiped row must not also open the thread.
@@ -253,16 +307,6 @@ export function useRowSwipe({
         event.stopPropagation();
       }
     };
-
-    const restore = () => {
-      row.style.height = "";
-      if (prefersReducedMotion()) {
-        reset();
-        return;
-      }
-      settle();
-    };
-    restoreRef.current = restore;
 
     row.addEventListener("touchstart", onTouchStart, { passive: true });
     row.addEventListener("touchmove", onTouchMove, { passive: false });
@@ -276,18 +320,13 @@ export function useRowSwipe({
       row.removeEventListener("touchcancel", onTouchCancel);
       row.removeEventListener("click", onClickCapture, true);
       restoreRef.current = null;
-      for (const timer of timers.current) clearTimeout(timer);
-      timers.current = [];
-      row.style.height = "";
       reset();
     };
-    // `later` only touches refs; the row element is stable for the row's life.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, rowRef]);
 
   useEffect(() => {
     if (phaseRef.current === "gone") restoreRef.current?.();
   }, [restoreKey]);
 
-  return side;
+  return reveal;
 }

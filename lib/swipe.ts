@@ -55,6 +55,9 @@ export interface SwipeActionView {
 export function swipeActionView(
   id: SwipeActionId,
   thread: { isUnread: boolean; isPinned: boolean; isArchived: boolean },
+  /** Whether the list shows only one of active or archived threads, so
+   *  archiving or unarchiving takes the row out of it. */
+  filtersArchived = true,
 ): SwipeActionView | null {
   switch (id) {
     case "read":
@@ -67,8 +70,8 @@ export function swipeActionView(
         : { id, label: "Pin", icon: "Pin", removes: false };
     case "archive":
       return thread.isArchived
-        ? { id, label: "Unarchive", icon: "ArchiveRestore", removes: false }
-        : { id, label: "Archive", icon: "Archive", removes: true };
+        ? { id, label: "Unarchive", icon: "ArchiveRestore", removes: filtersArchived }
+        : { id, label: "Archive", icon: "Archive", removes: filtersArchived };
     case "split":
       return { id, label: "Split", icon: "Columns2", removes: false };
     case "rename":
@@ -128,4 +131,40 @@ export function shouldCommitSwipe(
   const along = velocity * sign;
   if (Math.abs(offset) >= threshold) return along > -FLING_PX_PER_MS;
   return Math.abs(offset) >= FLING_MIN_PX && along >= FLING_PX_PER_MS;
+}
+
+/** Spring tuning. `back` has a whisper of overshoot; `out` never bounces. */
+export const SPRING_BACK = { stiffness: 420, damping: 34 } as const;
+export const SPRING_OUT = { stiffness: 520, damping: 46 } as const;
+
+/**
+ * Advance a damped spring (unit mass) by `dtMs`, in fixed substeps so a
+ * dropped frame cannot blow it up. Position in px, velocity in px/ms.
+ */
+export function stepSpring(
+  x: number,
+  velocity: number,
+  target: number,
+  dtMs: number,
+  spring: { stiffness: number; damping: number },
+): { x: number; velocity: number } {
+  let pos = x;
+  // The integration runs in seconds so the constants read like the usual
+  // stiffness/damping pairs.
+  let vel = velocity * 1000;
+  let remaining = Math.min(dtMs, 64) / 1000;
+  const step = 1 / 240;
+  while (remaining > 0) {
+    const dt = Math.min(step, remaining);
+    const force = -spring.stiffness * (pos - target) - spring.damping * vel;
+    vel += force * dt;
+    pos += vel * dt;
+    remaining -= dt;
+  }
+  return { x: pos, velocity: vel / 1000 };
+}
+
+/** Close enough to rest that another frame would not move a pixel. */
+export function springAtRest(x: number, velocity: number, target: number): boolean {
+  return Math.abs(x - target) < 0.5 && Math.abs(velocity) < 0.02;
 }

@@ -8,6 +8,10 @@ import {
   swipeActionView,
   swipeOffset,
   swipeThreshold,
+  SPRING_BACK,
+  SPRING_OUT,
+  springAtRest,
+  stepSpring,
 } from "./swipe";
 
 const idle = { isUnread: false, isPinned: false, isArchived: false };
@@ -34,7 +38,12 @@ describe("swipeActionView", () => {
 
   it("slides the row away only when it will leave the list", () => {
     expect(swipeActionView("archive", idle)?.removes).toBe(true);
-    expect(swipeActionView("archive", { ...idle, isArchived: true })?.removes).toBe(false);
+    // The Archived tab loses a row on unarchive, just as Active does on archive.
+    expect(swipeActionView("archive", { ...idle, isArchived: true })?.removes).toBe(true);
+    // The All tab keeps it either way.
+    expect(swipeActionView("archive", idle, false)?.removes).toBe(false);
+    expect(swipeActionView("archive", { ...idle, isArchived: true }, false)?.removes)
+      .toBe(false);
     // Delete waits on the host's confirmation.
     expect(swipeActionView("delete", idle)?.removes).toBe(false);
   });
@@ -74,5 +83,48 @@ describe("gesture math", () => {
     expect(shouldCommitSwipe(40, 0.1, 90)).toBe(false);
     expect(shouldCommitSwipe(20, 2, 90)).toBe(false);
     expect(shouldCommitSwipe(0, 2, 90)).toBe(false);
+  });
+});
+
+describe("springs", () => {
+  const run = (
+    x: number,
+    velocity: number,
+    target: number,
+    spring: { stiffness: number; damping: number },
+  ) => {
+    let state = { x, velocity };
+    let frames = 0;
+    let peak = x;
+    while (!springAtRest(state.x, state.velocity, target) && frames < 600) {
+      state = stepSpring(state.x, state.velocity, target, 16.7, spring);
+      peak = target === 0 ? Math.min(peak, state.x) : Math.max(peak, state.x);
+      frames += 1;
+    }
+    return { frames, peak, x: state.x };
+  };
+
+  it("settles home in well under half a second with barely any overshoot", () => {
+    const back = run(120, 0, 0, SPRING_BACK);
+    expect(back.frames * 16.7).toBeLessThan(450);
+    expect(back.peak).toBeGreaterThan(-6);
+    expect(Math.abs(back.x)).toBeLessThan(0.5);
+  });
+
+  it("carries the finger's speed into the settle", () => {
+    // Flung outward: it keeps going briefly before turning home.
+    const step = stepSpring(100, 1.5, 0, 16.7, SPRING_BACK);
+    expect(step.x).toBeGreaterThan(100);
+  });
+
+  it("slides out without bouncing", () => {
+    const out = run(120, 1.2, 316, SPRING_OUT);
+    expect(out.peak).toBeLessThan(316 + 1);
+  });
+
+  it("survives a long dropped frame", () => {
+    const step = stepSpring(120, 0, 0, 1000, SPRING_BACK);
+    expect(Number.isFinite(step.x)).toBe(true);
+    expect(Math.abs(step.x)).toBeLessThan(120);
   });
 });

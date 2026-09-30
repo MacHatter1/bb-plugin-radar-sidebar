@@ -1244,6 +1244,7 @@ export function RadarThreadList({
           dragHandle={dragHandle}
           swipeRight={settings.swipeRight}
           swipeLeft={settings.swipeLeft}
+          listFiltersArchived={lifecycle !== "all"}
         />
       );
     },
@@ -1256,6 +1257,7 @@ export function RadarThreadList({
       settings.adaptiveCollapse,
       settings.swipeRight,
       settings.swipeLeft,
+      lifecycle,
       activeThreadId,
       editingId,
       actions,

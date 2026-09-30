@@ -13,10 +13,13 @@ All notable changes to Radar Sidebar are documented here. The format follows
   (`swipeRight`, default mark read / unread; `swipeLeft`, default archive /
   unarchive) from: mark read / unread, pin / unpin, archive / unarchive, open
   in split, rename, more actions, delete (host-confirmed), or nothing. The row
-  tracks the finger, a colored pill grows from the edge and pops when the
-  swipe arms (with a short haptic tick where supported), and releasing short
-  springs back. Archiving slides the row away and folds its space before the
-  host archives it. A quick flick commits too. Vertical movement stays a
+  tracks the finger, a colored pill grows from the edge with its icon
+  growing alongside, and the icon pops when the swipe arms (with a short
+  haptic tick where supported). On release a spring carries the finger's
+  speed home, so a flick flows straight into the settle; the pill keeps the
+  label of what was done while it closes. Archiving (or unarchiving from the
+  Archived tab) slides the row away and folds its space before the host acts;
+  on the All tab the row stays and springs back. A quick flick commits too. Vertical movement stays a
   scroll, the host drawer does not react to a row swipe, and mouse and
   trackpad are unaffected.
 

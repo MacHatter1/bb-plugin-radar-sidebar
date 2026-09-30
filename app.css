@@ -1219,8 +1219,10 @@
 
 /* Swipe actions. The row itself slides; the underlay sits in the gap it
    leaves (outside the row box, sized to the offset), so the colored pill
-   grows from the edge instead of showing through the row. Row and underlay
-   share each phase's curve so they never drift apart. */
+   grows from the edge instead of showing through the row. Script drives the
+   position every frame (finger, then a spring), so neither has a transform
+   or width transition: they are painted together and cannot drift apart.
+   --radar-swipe-p is 0..1 progress toward the arming distance. */
 .radar-list[data-radar-swipe="on"] .radar-row {
   touch-action: pan-y pinch-zoom;
 }
@@ -1234,19 +1236,10 @@
   user-select: none;
 }
 
-.radar-row[data-swipe-phase="drag"] {
-  will-change: transform;
-}
-
-.radar-row[data-swipe-phase="settle"] {
-  transition:
-    transform 420ms cubic-bezier(0.2, 1.25, 0.4, 1),
-    background-color 250ms ease,
-    box-shadow 250ms ease;
-}
-
+.radar-row[data-swipe-phase="drag"],
+.radar-row[data-swipe-phase="settle"],
 .radar-row[data-swipe-phase="out"] {
-  transition: transform 240ms cubic-bezier(0.25, 0.8, 0.4, 1);
+  will-change: transform;
 }
 
 .radar-row[data-swipe-phase="fold"],
@@ -1289,24 +1282,14 @@
   justify-content: flex-start;
 }
 
-.radar-row[data-swipe-phase="settle"] .radar-swipe-underlay {
-  transition:
-    width 420ms cubic-bezier(0.2, 1.25, 0.4, 1),
-    background-color 180ms ease,
-    color 180ms ease;
-}
-
-.radar-row[data-swipe-phase="out"] .radar-swipe-underlay {
-  transition: width 240ms cubic-bezier(0.25, 0.8, 0.4, 1);
-}
-
 .radar-row[data-swipe-armed] .radar-swipe-underlay {
   background: var(--radar-swipe-color);
   color: var(--radar-swipe-fg);
 }
 
-/* The icon stays beside the row's edge, small and quiet until the swipe
-   arms, then pops to full size. */
+/* The icon rides beside the row's edge and grows with the pull (`scale`,
+   untransitioned, so it tracks the finger), then pops once as the swipe arms
+   (`transform`, a separate property, so the two never fight). */
 .radar-swipe-content {
   display: inline-flex;
   flex: none;
@@ -1316,11 +1299,29 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  opacity: 0.75;
-  transform: scale(0.82);
-  transition:
-    transform 280ms cubic-bezier(0.3, 1.8, 0.5, 1),
-    opacity 160ms ease;
+  opacity: calc(0.35 + 0.65 * var(--radar-swipe-p, 0));
+  scale: calc(0.7 + 0.2 * var(--radar-swipe-p, 0));
+  transform-origin: center;
+}
+
+.radar-swipe-underlay[data-side="right"] .radar-swipe-content {
+  transform-origin: right center;
+}
+
+.radar-swipe-underlay[data-side="left"] .radar-swipe-content {
+  transform-origin: left center;
+}
+
+@keyframes radar-swipe-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1.1);
+  }
 }
 
 .radar-swipe-content [data-icon-root] {
@@ -1330,7 +1331,13 @@
 
 .radar-row[data-swipe-armed] .radar-swipe-content {
   opacity: 1;
-  transform: scale(1);
+  transform: scale(1.1);
+  animation: radar-swipe-pop 320ms cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+
+/* Un-arming eases back instead of snapping. */
+.radar-row[data-swipe-phase="drag"]:not([data-swipe-armed]) .radar-swipe-content {
+  transition: transform 160ms ease-out;
 }
 
 .radar-swipe-read {
@@ -1361,7 +1368,9 @@
 @media (prefers-reduced-motion: reduce) {
   .radar-row[data-swipe-phase],
   .radar-row[data-swipe-phase] .radar-swipe-underlay,
-  .radar-swipe-content {
+  .radar-swipe-content,
+  .radar-row[data-swipe-phase="drag"]:not([data-swipe-armed]) .radar-swipe-content {
+    animation: none;
     transition: none;
   }
 }
