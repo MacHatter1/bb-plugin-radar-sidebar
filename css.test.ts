@@ -48,24 +48,33 @@ describe("app.css", () => {
       .toHaveLength(1);
   });
 
-  it("keeps desktop hover actions out of row layout and off title lines", () => {
-    const actions = rules().find((rule) =>
-      rule.selector === ".radar-title-wrap:not(.radar-list-compact) .radar-row-actions",
-    );
-    expect(actions?.body).toMatch(/top:\s*auto/);
-    expect(actions?.body).toMatch(/bottom:\s*2px/);
-    expect(actions?.body).not.toMatch(/position:\s*static/);
+  it("lifts two-line hover actions clear of the branch line and never hides them", () => {
+    // The bar sits at the row's bottom in two-line mode. Unlifted, it lands
+    // on the branch line and takes clicks meant for the PR badge. Hiding
+    // actions per row is out too: under project grouping no row has a chip,
+    // so that emptied the bar list-wide.
+    const wrap = rules().filter((rule) => /radar-title-wrap/.test(rule.selector));
+    expect(wrap.find((rule) => /:has\(\.radar-branch-line\)/.test(rule.selector))?.body)
+      .toMatch(/--radar-actions-lift:\s*[1-9]\d*px/);
+    expect(wrap.find((rule) => /\.radar-row-actions$/.test(rule.selector) && /bottom:/.test(rule.body))?.body)
+      .toMatch(/var\(--radar-actions-lift\)/);
+    expect(wrap
+      .filter((rule) => /\.radar-action\b/.test(rule.selector) && /display:\s*none/.test(rule.body))
+      .map((rule) => rule.selector)).toEqual([]);
     expect(rules().filter((rule) => /radar-title-wrap.*:hover/.test(rule.selector)))
       .toEqual([]);
   });
 
-  it("gives unrendered two-line rows taller estimates in both densities", () => {
-    const estimates = rules().filter((rule) =>
-      /radar-title-wrap/.test(rule.selector) && /contain-intrinsic-size/.test(rule.body),
+  it("estimates unrendered two-line rows taller than one-line rows", () => {
+    const estimate = (selector: RegExp) => Number(
+      rules()
+        .find((rule) => selector.test(rule.selector) && /contain-intrinsic-size/.test(rule.body))
+        ?.body.match(/contain-intrinsic-size:\s*auto\s+(\d+)px/)?.[1],
     );
-    expect(estimates).toHaveLength(2);
-    expect(estimates[0]?.body).toMatch(/auto\s+76px/);
-    expect(estimates[1]?.body).toMatch(/auto\s+52px/);
+    expect(estimate(/^\.radar-title-wrap \.radar-row$/))
+      .toBeGreaterThan(estimate(/^\.radar-row$/));
+    expect(estimate(/^\.radar-title-wrap\.radar-density-compact \.radar-row,/))
+      .toBeGreaterThan(estimate(/^\.radar-density-compact \.radar-row,/));
   });
 
   it("never resets the row margin with the shorthand", () => {

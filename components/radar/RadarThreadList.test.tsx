@@ -342,27 +342,45 @@ describe("density", () => {
 });
 
 describe("settings gates", () => {
-  it("waits for settings before painting rows in their final density and title mode", () => {
-    const settings = vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
+  it("shows rows on the shipped defaults while settings load", () => {
+    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
       values: undefined, isLoading: true,
     });
     const slot = renderThreads([makeThread({ id: "t" })]);
-    expect(visibleRowIds(slot.container)).toEqual([]);
-    expect(screen.getByRole("status", { name: "Loading threads" })).toBeTruthy();
-    expect(slot.container.querySelector(".radar-list-body")?.getAttribute("aria-busy"))
-      .toBe("true");
+    expect(visibleRowIds(slot.container)).toEqual(["t"]);
+    expect(screen.queryByRole("status", { name: "Loading threads" })).toBeNull();
+    expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
+      .toBeNull();
+  });
 
-    settings.mockReturnValue({
-      values: { twoLineTitles: true, defaultDensity: "compact" }, isLoading: false,
+  it("paints the last-seen density and title mode while settings load", () => {
+    // A first render on settings remembers them for this client...
+    renderThreads([makeThread({ id: "t" })], {
+      settings: { twoLineTitles: true, defaultDensity: "compact" },
     });
-    slot.rerender(createElement(threadList.component, {
-      activeThreadId: null, activeProjectId: "proj_a", isCompactViewport: false,
-      onNavigate: () => {}, searchQuery: "",
-    }));
+    cleanup();
+
+    // ...so the next load sizes rows correctly before settings resolve.
+    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
+      values: undefined, isLoading: true,
+    });
+    const slot = renderThreads([makeThread({ id: "t" })]);
     expect(visibleRowIds(slot.container)).toEqual(["t"]);
     expect(slot.container.querySelector(".radar-title-wrap.radar-density-compact"))
       .not.toBeNull();
-    expect(screen.queryByRole("status", { name: "Loading threads" })).toBeNull();
+  });
+
+  it("follows the loaded settings over the last-seen ones", () => {
+    renderThreads([makeThread({ id: "t" })], {
+      settings: { twoLineTitles: true, defaultDensity: "compact" },
+    });
+    cleanup();
+
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      settings: { twoLineTitles: false },
+    });
+    expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
+      .toBeNull();
   });
 
   it.each([false, true])("owns all title segments when a mention is last: %s", (mentionLast) => {

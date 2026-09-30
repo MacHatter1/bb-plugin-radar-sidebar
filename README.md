@@ -243,12 +243,13 @@ flowchart LR
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
 | `twoLineTitles` | `false` | Enable **Two-line titles** to wrap long titles, including mentions, before truncating. Short titles keep their project chip and time beside them when they fit; otherwise metadata wraps below, aligned with the title text. Applies in both densities. |
 
-Rows wait for the initial settings load so their first paint uses the selected
-density and title layout. In two-line mode, hover actions overlay the metadata
-at the bottom of the row without changing its layout. Rows without a project
-chip show only the ellipsis menu; pin, rename and archive remain in that menu.
-The same applies at sidebar widths of 194px or less, where the project chip is
-hidden, so hover controls cannot cover title text.
+The list never waits on settings: until they load it uses the defaults above,
+except that `defaultDensity` and `twoLineTitles` use the value this client last
+saw, so rows paint at their final height. In two-line mode, hover actions sit
+on the row's last line of plain text (the subtitle, or the project chip and
+time where the subtitle is folded away), so they stay off a wrapped title and
+off the PR badge. A row that is only one line tall still has them over the end
+of its title, as in one-line mode. They never change the row's layout.
 
 </details>
 

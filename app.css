@@ -1653,43 +1653,68 @@ a.radar-row-main:hover {
   max-width: 100%;
 }
 
-/* Estimate two title lines plus metadata for rows not yet rendered. The auto
-   form remembers each row's measured size after it has entered the viewport. */
+/* Height estimates for rows not yet rendered. Rows now range from one title
+   line (about 47px, 28px compact) to two lines with metadata below (about
+   84px, 60px compact), so estimate between the two rather than at either
+   end. The auto form remembers each row's real size once it has rendered. */
 .radar-title-wrap .radar-row {
-  contain-intrinsic-size: auto 76px;
+  contain-intrinsic-size: auto 64px;
 }
 
 .radar-title-wrap.radar-density-compact .radar-row,
 .radar-title-wrap .radar-row-compact {
-  contain-intrinsic-size: auto 52px;
+  contain-intrinsic-size: auto 40px;
 }
 
-/* Keep hover actions out of flex sizing: revealing them must not resize
-   titles or move neighboring rows. Overlay the metadata at the row's bottom.
-   Without a project chip, use the menu so a full bar cannot cover title text. */
-.radar-title-wrap.radar-list-compact .radar-row-actions {
-  transform: none;
+/* Desktop hover actions sit on the row's last line of plain text: the
+   subtitle, or the chip and time where the subtitle is folded away. That
+   keeps them off a wrapped title and off the branch line, whose PR badge has
+   to stay clickable. Only a row one line tall still has them over the end of
+   its title, as in one-line mode. They stay out of flex sizing, so revealing
+   them never resizes a title or moves a row. Offsets are from the row's
+   bottom edge to that line; the lift clears the 18px branch line and its gap. */
+.radar-title-wrap:not(.radar-list-compact) .radar-row {
+  --radar-actions-bottom: 4px;
+  --radar-actions-lift: 0px;
+}
+
+.radar-title-wrap:not(.radar-list-compact) .radar-row-collapsed {
+  --radar-actions-bottom: 7px;
+}
+
+.radar-title-wrap:not(.radar-list-compact) .radar-row:has(.radar-branch-line) {
+  --radar-actions-lift: 20px;
+}
+
+/* Compact density hides the branch line, so nothing needs clearing. A row one
+   line tall is held at 28px with its text at the top, leaving that line 7px
+   above the bottom edge; taller rows end 3px below their last line. */
+.radar-title-wrap.radar-density-compact:not(.radar-list-compact) .radar-row,
+.radar-title-wrap:not(.radar-list-compact) .radar-row.radar-row-compact {
+  --radar-actions-bottom: clamp(3px, calc(35px - 100%), 7px);
+  --radar-actions-lift: 0px;
 }
 
 .radar-title-wrap:not(.radar-list-compact) .radar-row-actions {
   top: auto;
-  bottom: 2px;
+  bottom: calc(var(--radar-actions-bottom) + var(--radar-actions-lift));
   padding: 0;
 }
 
 .radar-title-wrap:not(.radar-list-compact) .radar-action {
   width: 20px;
-  height: 20px;
+  height: 18px;
 }
 
-.radar-title-wrap:not(.radar-list-compact) .radar-row:not(:has(.radar-row-project)) .radar-action:not(.radar-action-more) {
-  display: none;
+/* Should the offsets above ever drift, the PR badge still wins the click. */
+.radar-title-wrap .radar-branch-line {
+  position: relative;
+  z-index: 1;
 }
 
-@container radar-thread-list (max-width: 194px) {
-  .radar-title-wrap .radar-action:not(.radar-action-more) {
-    display: none;
-  }
+/* The inline ⋯ on touch layouts holds still instead of sliding. */
+.radar-title-wrap.radar-list-compact .radar-row-actions {
+  transform: none;
 }
 
 .radar-row-project {

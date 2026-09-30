@@ -171,9 +171,11 @@ back to BB's list automatically.
   requested/blocked, blue for review pending, green for ready/merged).
   Clicking the badge opens the PR. The branch never appears on line two.
 - Hover actions: pin, rename (pencil), archive/unarchive, and a menu (⋯).
-  In two-line mode they overlay metadata at the bottom without resizing the
-  row. Rows without a project chip, or at container widths of 194px or less,
-  show only the ellipsis menu; pin, rename and archive remain in that menu.
+  They never resize the row. In one-line mode they sit at its top right. In
+  two-line mode they sit on its last line of plain text (the subtitle, or
+  the chip and time where the subtitle is folded away), lifted clear of the
+  branch line so the PR badge stays clickable; only a row one line tall
+  still has them over the end of its title.
   Right-click opens the fuller menu: open in split, pin, mark read/unread,
   mark family read (whole tree, for threads with parents or children —
   a child's completion lands as the parent's own notification turn, so
@@ -222,7 +224,9 @@ back to BB's list automatically.
 
 `bb plugin config radar-sidebar`, or Settings → Installed plugins → Radar
 Sidebar. The frontend reads them through `useSettings()`, and every value
-has a default. Rows wait for the initial settings load before appearing.
+has a default, so the list never waits on them. Until they load,
+`defaultDensity` and `twoLineTitles` use the value this client last saw, so
+rows paint at their final height.
 
 | Key | Default | Effect |
 | --- | --- | --- |

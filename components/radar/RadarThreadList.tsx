@@ -81,6 +81,8 @@ const COLLAPSED_THREADS_KEY = "radar-sidebar:collapsed-threads:v1";
 const PROJECT_ORDER_KEY = "radar-sidebar:project-order:v1";
 const STATUS_FILTER_KEY = "radar-sidebar:status-filter:v1";
 const DENSITY_KEY = "radar-sidebar:density:v1";
+const LAST_DEFAULT_DENSITY_KEY = "radar-sidebar:last-default-density:v1";
+const LAST_TWO_LINE_TITLES_KEY = "radar-sidebar:last-two-line-titles:v1";
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set();
 
@@ -107,23 +109,39 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** Plugin settings; wait for the initial load before laying out rows. */
+/** Plugin settings, with the shipped defaults applied while they load. The two
+ * that set row height fall back to the value this client last saw instead, so
+ * a reload paints rows at their final size without holding the list back. */
 function useSidebarSettings() {
-  const { values, isLoading } = useSettings();
+  const { values } = useSettings();
   const flag = (key: string, fallback: boolean): boolean =>
     typeof values?.[key] === "boolean" ? (values[key] as boolean) : fallback;
+  const [lastSeen] = useState(() => ({
+    defaultDensity: readStored<DensityMode>(
+      LAST_DEFAULT_DENSITY_KEY,
+      "comfortable",
+      ["comfortable", "compact"],
+    ),
+    wrapTitles: readStored(LAST_TWO_LINE_TITLES_KEY, "off", ["off", "on"]) === "on",
+  }));
+  const loaded = values !== undefined;
+  const defaultDensity: DensityMode = loaded
+    ? values.defaultDensity === "compact" ? "compact" : "comfortable"
+    : lastSeen.defaultDensity;
+  const wrapTitles = loaded ? flag("twoLineTitles", false) : lastSeen.wrapTitles;
+  useEffect(() => {
+    if (!loaded) return;
+    writeStored(LAST_DEFAULT_DENSITY_KEY, defaultDensity);
+    writeStored(LAST_TWO_LINE_TITLES_KEY, wrapTitles ? "on" : "off");
+  }, [loaded, defaultDensity, wrapTitles]);
   return {
-    isLoading,
     hoverCard: flag("hoverCard", true),
     celebrate: flag("celebrate", true),
     motion: flag("motion", true),
     loudUnread: flag("loudUnread", true),
     adaptiveCollapse: flag("adaptiveCollapse", true),
-    defaultDensity:
-      values?.defaultDensity === "compact"
-        ? ("compact" as const)
-        : ("comfortable" as const),
-    wrapTitles: flag("twoLineTitles", false),
+    defaultDensity,
+    wrapTitles,
   };
 }
 
@@ -1667,9 +1685,9 @@ export function RadarThreadList({
           "radar-list-body",
           switchPending && "radar-list-switching",
         )}
-        aria-busy={switchPending || settings.isLoading || undefined}
+        aria-busy={switchPending || undefined}
       >
-        {status === "loading" || settings.isLoading ? (
+        {status === "loading" ? (
           <div className="radar-state" role="status" aria-label="Loading threads">
             {Array.from({ length: 8 }, (_, index) => (
               // eslint-disable-next-line react/no-array-index-key
