@@ -39,6 +39,12 @@ All notable changes to Radar Sidebar are documented here. The format follows
   - Opening a row by trackpad closes any other row left open, and Escape
     closes an open row without also clearing the search behind it.
 
+### Fixed
+
+- Jump shortcuts (⌘/Ctrl+1–9) skip rows hidden in a folded family or
+  collapsed group, so the numbers follow the rows on screen. A search or
+  status filter that forces a fold open numbers its rows again.
+
 ## 0.3.0 - 2026-09-30
 
 ### Added

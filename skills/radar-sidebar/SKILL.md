@@ -106,7 +106,8 @@ back to BB's list automatically.
 - Right-side badges, in order: status visual (spinner, dot, or icon) plus
   its explicit word (WORKING, AGENT, COMMAND, WORKFLOW, GOAL, PLAN,
   NEEDS YOU, QUEUED, FAILED, DONE — coloured to match), jump shortcut
-  while the app command modifier is held, another
+  while the app command modifier is held (only rows on screen get one:
+  rows in a folded family or collapsed group are skipped), another
   plugin's row status (takes the draft slot, as BB's list does), amber pip
   for an unsent composer draft, blue pip for unread.
 - State changes animate: washes fade, badges pop in, quiet rows fold

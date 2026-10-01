@@ -81,6 +81,13 @@ function visibleRowIds(container: HTMLElement): string[] {
   ).map((node) => node.getAttribute("data-sidebar-thread-id") ?? "");
 }
 
+/** Rows bb would number for the ⌘/Ctrl jump keys, in DOM order. */
+function shortcutTargetIds(container: HTMLElement): string[] {
+  return Array.from(
+    container.querySelectorAll("[data-sidebar-thread-shortcut-target]"),
+  ).map((node) => node.getAttribute("data-sidebar-thread-id") ?? "");
+}
+
 // jsdom has no layout, so keyboard navigation has nothing to scroll.
 beforeAll(() => {
   Element.prototype.scrollIntoView = () => {};
@@ -162,6 +169,42 @@ describe("thread families", () => {
     expect(
       fold.querySelector('[data-sidebar-thread-id="c"]'),
     ).not.toBeNull();
+  });
+
+  it("keeps folded rows out of the jump shortcut numbering", async () => {
+    const parent = makeThread({ id: "p", title: "Family head" });
+    const child = makeThread({ id: "c", title: "Hidden kid", parentThreadId: "p" });
+    const slot = renderThreads([parent, child]);
+    const targetIds = () => shortcutTargetIds(slot.container);
+
+    expect(targetIds()).toEqual(["p", "c"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse replies" }));
+    await waitFor(() => expect(targetIds()).toEqual(["p"]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand replies" }));
+    await waitFor(() => expect(targetIds()).toEqual(["p", "c"]));
+  });
+
+  it.each([
+    ["search", () => fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "kid" },
+    })],
+    ["status filter", () => fireEvent.click(screen.getByTitle("Filter unread threads"))],
+  ])("numbers a folded family's rows while a %s forces it open", (_, filter) => {
+    const parent = makeThread({ id: "p", title: "Family head kid", isUnread: true });
+    const child = makeThread({
+      id: "c",
+      title: "Hidden kid",
+      parentThreadId: "p",
+      isUnread: true,
+    });
+    const slot = renderThreads([parent, child]);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse replies" }));
+    expect(shortcutTargetIds(slot.container)).toEqual(["p"]);
+
+    filter();
+    expect(shortcutTargetIds(slot.container)).toEqual(["p", "c"]);
   });
 
   it("announces a fold only when it hides something that matters", async () => {
@@ -1461,12 +1504,15 @@ describe("review regressions", () => {
       const stored = localStorage.getItem("radar-sidebar:collapsed:v1");
       const row = () => slot.container.querySelector('[data-sidebar-thread-id="needle"]')!;
       expect(row().closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(shortcutTargetIds(slot.container)).toEqual([]);
       fireEvent.change(screen.getByRole("searchbox"), { target: { value: "needle" } });
       expect(row().closest('[aria-hidden="true"]')).toBeNull();
+      expect(shortcutTargetIds(slot.container)).toEqual(["needle"]);
       fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
       expect(document.activeElement).toBe(row());
       fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
       expect(row().closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(shortcutTargetIds(slot.container)).toEqual([]);
       expect(localStorage.getItem("radar-sidebar:collapsed:v1")).toBe(stored);
     },
   );
@@ -1474,7 +1520,9 @@ describe("review regressions", () => {
   it("reveals matches in collapsed groups for status filters too", () => {
     const slot = renderThreads([makeThread({ id: "unread", isUnread: true })]);
     fireEvent.click(screen.getByRole("button", { name: "Collapse all folders" }));
+    expect(shortcutTargetIds(slot.container)).toEqual([]);
     fireEvent.click(screen.getByTitle("Filter unread threads"));
+    expect(shortcutTargetIds(slot.container)).toEqual(["unread"]);
     expect(
       slot.container.querySelector('[data-sidebar-thread-id="unread"]')!
         .closest('[aria-hidden="true"]'),
