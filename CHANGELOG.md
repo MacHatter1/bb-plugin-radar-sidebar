@@ -32,8 +32,12 @@ All notable changes to Radar Sidebar are documented here. The format follows
     after the row slides out from under the cursor, and the momentum tail
     after a release is swallowed.
   - Vertical movement stays a scroll, the host drawer does not react to a
-    row swipe, releasing a swipe never opens the thread, and mouse clicks
-    and drags are unaffected.
+    row swipe, releasing a swipe never opens the thread, and a mouse's
+    clicks, drags and Shift+wheel are unaffected. A sideways wheel step of a
+    whole notch (a tilt wheel) is left to scroll too: a trackpad eases in
+    with small steps, and only that starts a swipe.
+  - Opening a row by trackpad closes any other row left open, and Escape
+    closes an open row without also clearing the search behind it.
 
 ## 0.3.0 - 2026-09-30
 

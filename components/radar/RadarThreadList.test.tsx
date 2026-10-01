@@ -572,6 +572,117 @@ describe("swipe actions", () => {
     }
   });
 
+  /** Rest a row open with a short trackpad pull, as the open-row tests do. */
+  function restOpen(target: HTMLElement) {
+    for (let i = 0; i < 10; i += 1) {
+      fireEvent.wheel(target, { deltaX: 6, deltaMode: 0 });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+  }
+
+  it("closes an open row as soon as another starts to swipe", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe(
+        [makeThread({ id: "a" }), makeThread({ id: "b" })],
+        { settings: { swipeLeft: "Pin / unpin" } },
+      );
+      const rows = Array.from(
+        slot.container.querySelectorAll(".radar-row"),
+      ) as HTMLElement[];
+      restOpen(rows[0]);
+      expect(rows[0].dataset.swipePhase).toBe("open");
+      // A short pull on the other row: it will settle back, never opening.
+      for (let i = 0; i < 4; i += 1) {
+        fireEvent.wheel(rows[1], { deltaX: 4, deltaMode: 0 });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      expect(rows[1].dataset.swipePhase).toBe("drag");
+      expect(rows[0].dataset.swipePhase).toBe("settle");
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(rows[0].dataset.swipePhase).toBeUndefined();
+      expect(rows[1].dataset.swipePhase).not.toBe("open");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("spends Escape on closing an open row, and no more", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      const target = row(slot.container);
+      const behind = vi.fn();
+      document.body.addEventListener("keydown", behind);
+      try {
+        restOpen(target);
+        expect(target.dataset.swipePhase).toBe("open");
+        fireEvent.keyDown(document.body, { key: "Escape" });
+        expect(target.dataset.swipePhase).toBe("settle");
+        expect(behind).not.toHaveBeenCalled();
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+        // With nothing open, Escape is left for whoever else wants it.
+        fireEvent.keyDown(document.body, { key: "Escape" });
+        expect(behind).toHaveBeenCalledOnce();
+      } finally {
+        document.body.removeEventListener("keydown", behind);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not take a mouse wheel's sideways notches for a swipe", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      const target = row(slot.container);
+      // A tilt wheel steps a whole notch at once, and is left to scroll.
+      for (let i = 0; i < 4; i += 1) {
+        const untouched = fireEvent.wheel(target, { deltaX: 100, deltaMode: 0 });
+        expect(untouched).toBe(true);
+        act(() => {
+          vi.advanceTimersByTime(60);
+        });
+      }
+      // Shift+wheel is a mouse's way of scrolling sideways, in any step size.
+      for (let i = 0; i < 10; i += 1) {
+        const untouched = fireEvent.wheel(target, {
+          deltaX: 12,
+          shiftKey: true,
+          deltaMode: 0,
+        });
+        expect(untouched).toBe(true);
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(target.dataset.swipePhase).toBeUndefined();
+      expect(target.style.transform).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("releases a trackpad flick as soon as its momentum fades", () => {
     vi.useFakeTimers();
     try {
@@ -842,6 +953,28 @@ describe("swipe actions", () => {
         makeThread({ id: "c", parentThreadId: "p" }),
       ]);
       swipe(slot.container, -160);
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "archive", threadId: "p" },
+      ]);
+      expect(row(slot.container).dataset.swipePhase).toBe("settle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a parent in place when a search hides its replies", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([
+        makeThread({ id: "p", title: "Umbrella needle" }),
+        makeThread({ id: "c", title: "Other", parentThreadId: "p" }),
+      ]);
+      fireEvent.change(screen.getByRole("searchbox"), {
+        target: { value: "needle" },
+      });
+      expect(visibleRowIds(slot.container)).toEqual(["p"]);
+      swipe(slot.container, -160);
+      // The host still confirms archiving the replies it cannot see here.
       expect(slot.inspection.sidebarActionCalls).toEqual([
         { method: "archive", threadId: "p" },
       ]);

@@ -320,6 +320,7 @@ function RadarThreadRowImpl({
   swipeRight = "none",
   swipeLeft = "none",
   listFiltersArchived = true,
+  hasChildren = false,
 }: {
   thread: PluginSidebarThread;
   depth: number;
@@ -364,6 +365,9 @@ function RadarThreadRowImpl({
   swipeLeft?: SwipeActionId;
   /** False on the All tab, where archiving leaves the row in place. */
   listFiltersArchived?: boolean;
+  /** Whether the thread has any replies, shown or filtered out: archiving it
+   *  then asks the host to confirm. */
+  hasChildren?: boolean;
 }) {
   const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
   const rowStatus = useSidebarThreadRowStatus(thread.id);
@@ -511,8 +515,6 @@ function RadarThreadRowImpl({
     isPinned: thread.isPinned,
     isArchived: thread.isArchived,
   };
-  // Archiving a thread with children asks the host to confirm first.
-  const hasChildren = collapse !== null;
   const rightSwipe = swipeActionView(
     swipeRight,
     swipeState,

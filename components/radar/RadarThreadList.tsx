@@ -1249,6 +1249,7 @@ export function RadarThreadList({
           swipeRight={settings.swipeRight}
           swipeLeft={settings.swipeLeft}
           listFiltersArchived={lifecycle !== "all"}
+          hasChildren={(childrenOf.get(thread.id)?.length ?? 0) > 0}
         />
       );
     },
@@ -1275,6 +1276,7 @@ export function RadarThreadList({
       providerById,
       primaryHostId,
       shownChildren,
+      childrenOf,
       collapseIds,
       countSubtree,
       toggleThreadCollapse,

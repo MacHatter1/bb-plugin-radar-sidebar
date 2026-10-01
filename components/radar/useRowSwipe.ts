@@ -45,6 +45,12 @@ const WHEEL_COOLDOWN_MS = 140;
  * resting fingers never force a choice. Moving again carries on.
  */
 const WHEEL_REST_MS = 260;
+/**
+ * A trackpad eases into a swipe in small steps; a mouse wheel, tilted or
+ * pushed sideways with Shift, steps a whole notch (about 100px) at once. A
+ * first sideways step this big is a mouse and is left to scroll the list.
+ */
+const WHEEL_NOTCH_PX = 40;
 /** How far an open row sits aside, and the least pull that opens it. */
 const OPEN_PX = 96;
 const OPEN_MIN_PX = 32;
@@ -272,7 +278,11 @@ export function useRowSwipe({
       closeThis();
     };
     const onOpenKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeThis();
+      if (event.key !== "Escape") return;
+      // Closing the row is what this Escape was for: do not also clear the
+      // search or dismiss a dialog behind it.
+      event.stopPropagation();
+      closeThis();
     };
     const onOpenScroll = () => closeThis();
     let openListening = false;
@@ -320,6 +330,9 @@ export function useRowSwipe({
         listenWhileOpen(false);
         if (closeOpenRow === closeThis) closeOpenRow = null;
       }
+      // A trackpad press never reaches the open row's pointerdown listener,
+      // so starting here is what closes another row that was left open.
+      if (closeOpenRow && closeOpenRow !== closeThis) closeOpenRow();
       stopMotion();
       width = row.offsetWidth;
       threshold = swipeThreshold(width, input);
@@ -503,8 +516,9 @@ export function useRowSwipe({
     };
 
     const onWheel = (event: WheelEvent) => {
-      // Pinch-zoom and line-stepped mouse wheels are not swipes.
-      if (event.ctrlKey || event.deltaMode !== 0) return;
+      // Pinch-zoom, line-stepped mouse wheels and Shift+wheel (a mouse's way
+      // of scrolling sideways) are not swipes.
+      if (event.ctrlKey || event.shiftKey || event.deltaMode !== 0) return;
       const sideways = Math.abs(event.deltaX) > Math.abs(event.deltaY);
       if (wheelCooldown) {
         if (sideways) event.preventDefault();
@@ -523,6 +537,13 @@ export function useRowSwipe({
       wheel.recent.push(Math.abs(event.deltaX));
       if (wheel.recent.length > 8) wheel.recent.shift();
       if (!wheel.locked) {
+        if (sideways && Math.abs(event.deltaX) >= WHEEL_NOTCH_PX) {
+          closeThis();
+          wheel = null;
+          wheelIgnored = true;
+          armWheelIdle();
+          return;
+        }
         wheel.dx += event.deltaX;
         wheel.dy += event.deltaY;
         if (Math.abs(wheel.dx) < SWIPE_SLOP_PX && Math.abs(wheel.dy) < SWIPE_SLOP_PX) {
