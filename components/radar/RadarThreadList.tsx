@@ -268,12 +268,15 @@ function renderSubtree(
     groupProjectId: string | null,
     isLastChild: boolean,
     dragHandle: RowDragHandle | null,
+    hidden: boolean,
   ) => ReactNode,
   children: Map<string, PluginSidebarThread[]>,
   groupProjectId: string | null,
   collapsedIds: ReadonlySet<string>,
   isLastChild: boolean,
   draggable: boolean,
+  /** Inside a folded group or family, so the row is mounted but not shown. */
+  hidden: boolean,
 ): ReactNode {
   const kids = depth > 25 ? [] : (children.get(thread.id) ?? []);
   const folded = collapsedIds.has(thread.id);
@@ -282,11 +285,11 @@ function renderSubtree(
       <DraggableThreadRow
         threadId={thread.id}
         renderRow={(handle) =>
-          renderRow(thread, depth, groupProjectId, isLastChild, handle)
+          renderRow(thread, depth, groupProjectId, isLastChild, handle, hidden)
         }
       />
     ) : (
-      renderRow(thread, depth, groupProjectId, isLastChild, null)
+      renderRow(thread, depth, groupProjectId, isLastChild, null, hidden)
     );
   const node = (
     <Fragment key={thread.id}>
@@ -315,6 +318,7 @@ function renderSubtree(
                 collapsedIds,
                 index === kids.length - 1,
                 false,
+                hidden || folded,
               ),
             )}
           </div>
@@ -1178,6 +1182,7 @@ export function RadarThreadList({
       groupProjectId: string | null,
       isLastChild: boolean,
       dragHandle: RowDragHandle | null,
+      hidden: boolean,
     ) => {
       const kidCount = (shownChildren.get(thread.id) ?? []).length;
       const counts = kidCount > 0 ? countSubtree(thread) : null;
@@ -1250,6 +1255,7 @@ export function RadarThreadList({
           swipeLeft={settings.swipeLeft}
           listFiltersArchived={lifecycle !== "all"}
           hasChildren={(childrenOf.get(thread.id)?.length ?? 0) > 0}
+          isShortcutTarget={!hidden}
         />
       );
     },
@@ -1325,6 +1331,7 @@ export function RadarThreadList({
                   collapseIds,
                   index === group.roots.length - 1,
                   draggable,
+                  isCollapsed,
                 ),
               )
             )}

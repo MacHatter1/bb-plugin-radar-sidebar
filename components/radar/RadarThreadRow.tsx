@@ -321,6 +321,7 @@ function RadarThreadRowImpl({
   swipeLeft = "none",
   listFiltersArchived = true,
   hasChildren = false,
+  isShortcutTarget,
 }: {
   thread: PluginSidebarThread;
   depth: number;
@@ -368,6 +369,11 @@ function RadarThreadRowImpl({
   /** Whether the thread has any replies, shown or filtered out: archiving it
    *  then asks the host to confirm. */
   hasChildren?: boolean;
+  /**
+   * False while a folded family or group hides the row. bb numbers jump
+   * shortcuts over every marked row in DOM order, and folds stay mounted.
+   */
+  isShortcutTarget: boolean;
 }) {
   const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
   const rowStatus = useSidebarThreadRowStatus(thread.id);
@@ -1037,7 +1043,7 @@ function RadarThreadRowImpl({
       {gutterNode}
       <a
         href={thread.href}
-        data-sidebar-thread-shortcut-target=""
+        data-sidebar-thread-shortcut-target={isShortcutTarget ? "" : undefined}
         data-sidebar-thread-id={thread.id}
         aria-label={rowLabel}
         aria-current={isActive ? "true" : undefined}
