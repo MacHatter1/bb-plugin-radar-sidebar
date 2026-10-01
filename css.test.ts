@@ -125,6 +125,28 @@ describe("app.css", () => {
     expect(compact?.body).not.toMatch(/align-items:\s*center/);
   });
 
+  it("keeps badge-row titles readable when the row is squeezed", () => {
+    // At phone widths a chip plus time plus badge left no room: the title
+    // was the only shrinkable item, so it went to zero and the time
+    // painted under the badge. Now the chip yields first, the title keeps
+    // a floor, the time ellipsizes instead of overflowing, and the row
+    // clips any pathological residue at the text edge.
+    const project = rules()
+      .filter((rule) => rule.selector === ".radar-row-project")
+      .find((rule) => /flex:/.test(rule.body));
+    expect(project?.body).toMatch(/flex:\s*0 1 auto/);
+    expect(project?.body).toMatch(/min-width:\s*0/);
+    expect(project?.body).toMatch(/text-overflow:\s*ellipsis/);
+    expect(rules().find((rule) => rule.selector === ".radar-row-title-text")?.body)
+      .toMatch(/min-width:\s*40px/);
+    const time = rules().find((rule) => rule.selector === ".radar-row-time");
+    expect(time?.body).toMatch(/flex:\s*0 1 auto/);
+    expect(time?.body).toMatch(/white-space:\s*nowrap/);
+    expect(time?.body).toMatch(/text-overflow:\s*ellipsis/);
+    expect(rules().find((rule) => rule.selector === ".radar-row-title")?.body)
+      .toMatch(/overflow:\s*clip/);
+  });
+
   it("declares each row-affecting selector at most once", () => {
     const seen = new Map<string, number>();
     for (const rule of rules()) {
