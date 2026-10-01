@@ -114,6 +114,16 @@ describe("app.css", () => {
     expect(main?.body).toMatch(/padding:\s*\d+px 8px/);
   });
 
+  it("lays the touch nav out as a row of icons, not a centered column", () => {
+    // Touch viewports keep a sidebar wide enough for a row of icons, so one
+    // icon per line pushed the thread list half a screen down.
+    const compact = rules().find((rule) => rule.selector === ".radar-nav-compact");
+    expect(compact?.body).toMatch(/display:\s*grid/);
+    expect(compact?.body).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(32px,\s*1fr\)\)/);
+    expect(compact?.body).toMatch(/justify-items:\s*center/);
+    expect(compact?.body).not.toMatch(/align-items:\s*center/);
+  });
+
   it("declares each row-affecting selector at most once", () => {
     const seen = new Map<string, number>();
     for (const rule of rules()) {

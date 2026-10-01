@@ -2723,9 +2723,14 @@ a.radar-row-main:hover {
   padding: 8px 8px 4px;
 }
 
+/* Touch viewports keep a sidebar wide enough for a row of icons (a drawer on
+   phones), so the icon-only nav spreads across the top like a toolbar and
+   wraps onto a second row only when more icons than fit. */
 .radar-nav-compact {
-  align-items: center;
-  padding: 8px 4px 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
+  justify-items: center;
+  gap: 4px 0;
 }
 
 .radar-nav-primary {
