@@ -1244,12 +1244,15 @@
 
 .radar-row[data-swipe-phase="fold"],
 .radar-row[data-swipe-phase="gone"] {
-  min-height: 0;
+  /* !important: the compact and two-line density rules are as specific and
+     come later, and a row held at 28px never folds shut. */
+  min-height: 0 !important;
   margin-block: 0;
   opacity: 0;
+  /* The script sets --radar-swipe-fold and waits that long before acting. */
   transition:
-    height 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    margin 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    height var(--radar-swipe-fold, 220ms) cubic-bezier(0.4, 0, 0.2, 1),
+    margin var(--radar-swipe-fold, 220ms) cubic-bezier(0.4, 0, 0.2, 1),
     opacity 180ms ease;
 }
 

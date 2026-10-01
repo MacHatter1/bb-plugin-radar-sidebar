@@ -24,6 +24,17 @@ function rules(): { selector: string; body: string }[] {
 }
 
 describe("app.css", () => {
+  it("lets a swiped-away row fold shut whatever its density", () => {
+    // The compact and two-line rules set a min-height at the same specificity
+    // and come later in the file, so only !important lets the fold win.
+    const fold = rules().find((rule) =>
+      rule.selector.includes('.radar-row[data-swipe-phase="fold"]'),
+    );
+    expect(fold?.body).toMatch(/min-height:\s*0\s*!important/);
+    // The wait in useRowSwipe is the one place the duration is set.
+    expect(fold?.body).toMatch(/height var\(--radar-swipe-fold,/);
+  });
+
   it("keeps metadata and the owned title transparent to one-line layout", () => {
     for (const selector of [".radar-row-meta", ".radar-thread-title"]) {
       expect(rules().find((rule) => rule.selector === selector)?.body)
