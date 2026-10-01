@@ -4,6 +4,15 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- One-line thread titles no longer collapse to zero width on narrow rows
+  with a status badge: the project chip shrinks first behind its ellipsis,
+  the title keeps a 40px floor, and the time shrinks with an ellipsis
+  instead of sliding under the badge.
+
 ## 0.4.0 - 2026-10-01
 
 ### Added

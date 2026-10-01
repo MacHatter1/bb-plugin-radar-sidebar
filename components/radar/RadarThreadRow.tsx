@@ -762,7 +762,7 @@ function RadarThreadRowImpl({
     </span>
   );
   const timeNode = (
-    <span className="radar-row-time">{timeText}</span>
+    <span className="radar-row-time" title={timeText}>{timeText}</span>
   );
   const isWorktree = thread.environment?.isWorktree === true;
   const handleCopyBranch = (event: React.MouseEvent) => {

@@ -1730,22 +1730,30 @@ a.radar-row-main:hover {
   gap: 1px;
 }
 
+/* Backstop for squeezed rows: once the chip and time have shrunk and the
+   title is at its floor, anything left over (a year timestamp plus a
+   rollup pill beside a badge) clips at the text edge instead of painting
+   under the badge. */
 .radar-row-title {
   display: flex;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
+  overflow: clip;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
 }
 
+/* The title keeps a floor instead of shrinking to zero: it used to be the
+   only shrinkable item, so on badge rows at phone widths it vanished
+   entirely and left chip and time alone on the line. */
 .radar-row-title-text {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
-  min-width: 0;
+  min-width: 40px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1901,9 +1909,12 @@ a.radar-row-main:hover {
   transform: none;
 }
 
+/* The chip yields before the title: it shrinks behind its ellipsis instead
+   of holding full width while the title collapses. */
 .radar-row-project {
   --radar-project-hue: 220;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   align-self: center;
   max-width: 110px;
   padding: 0 5px;
@@ -1927,12 +1938,19 @@ a.radar-row-main:hover {
   text-overflow: ellipsis;
 }
 
+/* The time yields last: it shrinks behind an ellipsis (never wraps) rather
+   than overflowing the text box. The full text stays on the title
+   attribute. */
 .radar-row-time {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 11px;
   font-weight: 400;
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .radar-row-active .radar-row-title {
