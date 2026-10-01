@@ -96,7 +96,9 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("grouping", () => {
@@ -1215,6 +1217,111 @@ describe("settings gates", () => {
       subtitle?.closest(".radar-row-extra-collapsed") ??
         folded.container.querySelector(".radar-row-collapsed"),
     ).toBeTruthy();
+  });
+});
+
+describe("folded row work", () => {
+  it.each(["family", "group"])("suspends requests and gestures in a saved %s fold", async (fold) => {
+    const parentId = `${fold}-fold-parent`;
+    const childId = `${fold}-fold-child`;
+    localStorage.setItem(
+      fold === "family" ? "radar-sidebar:collapsed-threads:v1" : "radar-sidebar:collapsed:v1",
+      JSON.stringify([fold === "family" ? parentId : "time:today"]),
+    );
+    const fetch = vi.fn(async () => null);
+    const added = vi.spyOn(HTMLElement.prototype, "addEventListener");
+    const removed = vi.spyOn(HTMLElement.prototype, "removeEventListener");
+    const slot = renderThreads([
+      makeThread({ id: parentId }),
+      makeThread({ id: childId, parentThreadId: parentId, status: "active", indicator: "runtime" }),
+    ], { settings: { swipeActions: true }, sdk: { ...sdkFakes(), threads: { defaultExecutionOptions: fetch } } });
+    const child = slot.container.querySelector(`[data-sidebar-thread-id="${childId}"]`)!
+      .closest<HTMLElement>(".radar-row")!;
+    const childGestures = (spy: typeof added) => spy.mock.calls.filter(([type], index) =>
+      (type === "wheel" || type === "touchmove" || type === "click") && spy.mock.contexts[index] === child,
+    );
+    expect(child.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(childGestures(added)).toHaveLength(0);
+    fireEvent.focus(window);
+    expect(fetch).not.toHaveBeenCalled();
+    const toggle = (expand: boolean) => fireEvent.click(screen.getByRole("button", {
+      name: fold === "family" ? expand ? "Expand replies" : "Collapse replies" : /Today,/,
+    }));
+    toggle(true);
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(fetch).toHaveBeenCalledWith({ threadId: childId });
+    expect(childGestures(added)).toHaveLength(3);
+    toggle(false);
+    expect(childGestures(removed)).toHaveLength(3);
+    toggle(true);
+    // A fold is a pause, not a restart: an unchanged run reuses its cache.
+    expect(fetch).toHaveBeenCalledOnce();
+    toggle(false);
+    fireEvent.focus(window);
+    expect(fetch).toHaveBeenCalledOnce();
+    toggle(true);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  });
+
+  it("resumes a folded row when filtering reveals it, without changing saved folds", async () => {
+    const key = "radar-sidebar:collapsed:v1";
+    localStorage.setItem(key, JSON.stringify(["time:today"]));
+    const fetch = vi.fn(async () => null);
+    const slot = renderThreads([makeThread({
+      id: "filter-reveals-live", title: "Needle", status: "active", indicator: "runtime",
+    })], { sdk: { ...sdkFakes(), threads: { defaultExecutionOptions: fetch } } });
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "needle" } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    expect(slot.container.querySelector('[data-sidebar-thread-id="filter-reveals-live"]')!
+      .closest('[aria-hidden="true"]')).toBeNull();
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(["time:today"]));
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    fireEvent.focus(window);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a pending hover preview when its ancestor folds", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const context = vi.fn(async () => ({ usage: null }));
+    const slot = renderThreads([
+      makeThread({ id: "hover-fold-parent" }),
+      makeThread({ id: "hover-fold-child", parentThreadId: "hover-fold-parent" }),
+    ], { sdk: { ...sdkFakes(), threads: { context } } });
+    const child = slot.container.querySelector('[data-sidebar-thread-id="hover-fold-child"]')!
+      .closest(".radar-row")!;
+    fireEvent.mouseEnter(child);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse replies" }));
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(context).not.toHaveBeenCalled();
+  });
+
+  it("keeps family summaries reactive while child rows stay folded", () => {
+    localStorage.setItem("radar-sidebar:collapsed-threads:v1", JSON.stringify(["reactive-parent"]));
+    const parent = makeThread({ id: "reactive-parent", latestAttentionAt: NOW });
+    const child = makeThread({ id: "reactive-child", parentThreadId: parent.id, latestAttentionAt: NOW });
+    const state: PluginSidebarThreadsState = {
+      status: "ready", threads: [parent, child], projects: [makeProject({ id: "proj_a" })],
+      sections: [], experimental_archived: null,
+    };
+    const snapshot = vi.spyOn(pluginSdk, "experimental_useSidebarThreads").mockReturnValue(state);
+    const slot = renderThreads(state.threads as PluginSidebarThread[]);
+    expect(slot.container.querySelector(".radar-kids-pill")).toBeNull();
+    snapshot.mockReturnValue({ ...state, threads: [parent, {
+      ...child, isUnread: true, indicator: "unread-error",
+    }] });
+    slot.rerender(createElement(threadList.component, {
+      activeThreadId: null, activeProjectId: "proj_a", isCompactViewport: false,
+      onNavigate: () => {}, searchQuery: "",
+    }));
+    const pill = slot.container.querySelector(".radar-kids-pill")!;
+    expect(pill.textContent).toBe("1");
+    expect(pill.querySelector(".radar-dot-error")).not.toBeNull();
+    expect(slot.container.querySelector('[data-sidebar-thread-id="reactive-child"]')!
+      .closest('[aria-hidden="true"]')).not.toBeNull();
   });
 });
 

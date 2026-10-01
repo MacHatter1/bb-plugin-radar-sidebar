@@ -578,11 +578,9 @@ export function useRowSwipe({
       onWheel(event);
     }
 
-    // The finger lifting off a swiped row, or a press that closes an open
-    // one, must not also open the thread. Listened for on the window so it
-    // runs before any link handling further down.
+    // Capture on this row before its links handle the click. Listening on
+    // window made every app click visit every mounted row, even outside Radar.
     const onClickCapture = (event: MouseEvent) => {
-      if (!row.contains(event.target as Node)) return;
       if (
         phaseRef.current === "open" &&
         row.querySelector(".radar-swipe-underlay")?.contains(event.target as Node)
@@ -602,7 +600,7 @@ export function useRowSwipe({
     row.addEventListener("touchmove", onTouchMove, { passive: false });
     row.addEventListener("touchend", onTouchEnd);
     row.addEventListener("touchcancel", onTouchCancel);
-    window.addEventListener("click", onClickCapture, true);
+    row.addEventListener("click", onClickCapture, true);
     row.addEventListener("wheel", onRowWheel, { passive: false });
     return () => {
       row.removeEventListener("wheel", onRowWheel);
@@ -612,7 +610,7 @@ export function useRowSwipe({
       row.removeEventListener("touchmove", onTouchMove);
       row.removeEventListener("touchend", onTouchEnd);
       row.removeEventListener("touchcancel", onTouchCancel);
-      window.removeEventListener("click", onClickCapture, true);
+      row.removeEventListener("click", onClickCapture, true);
       restoreRef.current = null;
       // A swipe the user finished must not vanish because the row remounted
       // or swiping was switched off while it slid out.
