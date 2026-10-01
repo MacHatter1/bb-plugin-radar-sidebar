@@ -1231,6 +1231,7 @@ export function RadarThreadList({
           adaptiveCollapse={settings.adaptiveCollapse}
           isActive={thread.id === activeThreadId}
           isEditing={thread.id === editingId}
+          isVisible={visibleThreadIds.has(thread.id)}
           actions={actions}
           now={now}
           onNavigate={onNavigate}
@@ -1292,6 +1293,7 @@ export function RadarThreadList({
       selectedIds,
       keyboardFocusedId,
       handleToggleSelect,
+      visibleThreadIds,
     ],
   );
 

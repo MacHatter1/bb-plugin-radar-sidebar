@@ -294,6 +294,7 @@ function RadarThreadRowImpl({
   adaptiveCollapse = true,
   isActive,
   isEditing,
+  isVisible = true,
   actions,
   now,
   onNavigate,
@@ -335,6 +336,8 @@ function RadarThreadRowImpl({
   adaptiveCollapse?: boolean;
   isActive: boolean;
   isEditing: boolean;
+  /** False inside a folded group or ancestor; suspend requests and gestures. */
+  isVisible?: boolean;
   actions: PluginSidebarThreadActions;
   now: number;
   onNavigate: () => void;
@@ -465,6 +468,10 @@ function RadarThreadRowImpl({
     };
   }, []);
 
+  useEffect(() => {
+    if (!isVisible) closeHoverCard(true);
+  }, [isVisible, closeHoverCard]);
+
   const hoverOpen = hoverCard !== null;
   useEffect(() => {
     if (!hoverOpen) return;
@@ -482,7 +489,7 @@ function RadarThreadRowImpl({
   }, [hoverOpen]);
 
   const scheduleHoverCard = () => {
-    if (!allowHoverCard) return;
+    if (!allowHoverCard || !isVisible) return;
     if (!canHoverPreview()) return;
     if (hoverTimer.current !== null || hoverCard) return;
     hoverTimer.current = window.setTimeout(() => {
@@ -579,7 +586,7 @@ function RadarThreadRowImpl({
   };
   const swipeReveal = useRowSwipe({
     rowRef,
-    enabled: !isEditing && !selectionActive && !!(rightSwipe || leftSwipe),
+    enabled: isVisible && !isEditing && !selectionActive && !!(rightSwipe || leftSwipe),
     right: rightSwipe,
     left: leftSwipe,
     restoreKey: `${thread.isArchived}`,
@@ -641,11 +648,13 @@ function RadarThreadRowImpl({
     modelEpoch,
     showExecution,
     thread.latestAttentionAt,
+    isVisible,
   );
   const modelName = useModelDisplayName(
     thread.providerId,
     execution?.model ?? null,
     sdk,
+    isVisible,
   );
 
   const branch = thread.environment?.branchName ?? null;
@@ -678,6 +687,7 @@ function RadarThreadRowImpl({
         ]
       : [];
   const lastActivity = activityTime(thread, now);
+  const timeText = timeAgo(lastActivity, now);
   // The provider icon identifies the provider, so its name isn't echoed in
   // the subtitle — except when no icon is available, or in the tooltip.
   const needsProviderText = !providerIcon;
@@ -693,7 +703,7 @@ function RadarThreadRowImpl({
     projectName,
     branch,
     hostName,
-    timeAgo(lastActivity, now),
+    timeText,
   ]
     .filter((part): part is string => !!part)
     .join(" • ");
@@ -752,7 +762,7 @@ function RadarThreadRowImpl({
     </span>
   );
   const timeNode = (
-    <span className="radar-row-time">{timeAgo(lastActivity, now)}</span>
+    <span className="radar-row-time">{timeText}</span>
   );
   const isWorktree = thread.environment?.isWorktree === true;
   const handleCopyBranch = (event: React.MouseEvent) => {
@@ -1285,7 +1295,7 @@ function RadarThreadRowImpl({
                 projectName,
                 sectionName,
                 hostName,
-                timeText: timeAgo(lastActivity, now),
+                timeText,
                 statusWord: statusWord?.text ?? null,
                 statusTone: statusWord?.tone ?? null,
                 hiddenKids: collapse?.hiddenKids ?? [],

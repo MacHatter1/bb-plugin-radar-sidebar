@@ -84,6 +84,14 @@ export function timeGroupFor(updatedAt: number, now: number): TimeGroupId {
   return "older";
 }
 
+// Reuse locale formatters: toLocaleDateString constructs one on every call.
+const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric",
+});
+const fullDateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric", year: "numeric",
+});
+
 export function timeAgo(ts: number, now: number): string {
   const diff = Math.max(0, now - ts);
   const minutes = Math.floor(diff / 60_000);
@@ -95,11 +103,8 @@ export function timeAgo(ts: number, now: number): string {
   if (days === 1) return "yesterday";
   if (days < 7) return `${days}d ago`;
   const date = new Date(ts);
+  // Preserve Date#toLocaleDateString's fallback instead of Intl throwing.
+  if (Number.isNaN(date.getTime())) return "Invalid Date";
   const sameYear = new Date(now).getFullYear() === date.getFullYear();
-  return date.toLocaleDateString(
-    undefined,
-    sameYear
-      ? { month: "short", day: "numeric" }
-      : { month: "short", day: "numeric", year: "numeric" },
-  );
+  return (sameYear ? shortDateFormatter : fullDateFormatter).format(date);
 }

@@ -36,6 +36,15 @@ export interface ThreadGroup {
   sectionId: string | null;
 }
 
+interface SubtreeCounts {
+  total: number;
+  unread: number;
+  live: number;
+  needsUser: number;
+  failed: number;
+  kids: { id: string; title: string; dot: string | null }[];
+}
+
 function comparePinned(a: PluginSidebarThread, b: PluginSidebarThread): number {
   if (a.pinSortKey !== null || b.pinSortKey !== null) {
     if (a.pinSortKey === null) return 1;
@@ -233,8 +242,11 @@ export function useThreadGroups(args: {
 
   // Child activity bubbles: a root groups/sorts by the freshest activity
   // in its shown subtree, so an active child floats its parent.
-  const subtreeActivity = useCallback(
-    (root: PluginSidebarThread): number => {
+  const subtreeActivity = useMemo(() => {
+    const cache = new Map<string, number>();
+    return (root: PluginSidebarThread): number => {
+      const cached = cache.get(root.id);
+      if (cached !== undefined) return cached;
       let peak = activityTime(root, now);
       const walk = (id: string, depth: number) => {
         if (depth > 25) return;
@@ -244,20 +256,18 @@ export function useThreadGroups(args: {
         }
       };
       walk(root.id, 0);
+      cache.set(root.id, peak);
       return peak;
-    },
-    [shownChildren, now],
-  );
+    };
+  }, [shownChildren, now]);
 
-  const countSubtree = useCallback(
-    (root: PluginSidebarThread): {
-      total: number;
-      unread: number;
-      live: number;
-      needsUser: number;
-      failed: number;
-      kids: { id: string; title: string; dot: string | null }[];
-    } => {
+  // Cache each family's summary for this derived tree: sorting, headers and
+  // repeated row renders share the same work. A filter/snapshot change resets it.
+  const countSubtree = useMemo(() => {
+    const cache = new Map<string, SubtreeCounts>();
+    return (root: PluginSidebarThread): SubtreeCounts => {
+      const cached = cache.get(root.id);
+      if (cached) return cached;
       let total = 1;
       let unread = root.isUnread ? 1 : 0;
       let live = Number(isRunningThread(root));
@@ -299,10 +309,11 @@ export function useThreadGroups(args: {
         }
       };
       walk(root.id, 0);
-      return { total, unread, live, needsUser, failed, kids };
-    },
-    [shownChildren],
-  );
+      const counts = { total, unread, live, needsUser, failed, kids };
+      cache.set(root.id, counts);
+      return counts;
+    };
+  }, [shownChildren]);
 
   const assembleGroup = useCallback(
     (

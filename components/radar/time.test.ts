@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activityTime,
   isLiveThread,
@@ -113,6 +113,37 @@ describe("timeGroupFor", () => {
 });
 
 describe("timeAgo", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("preserves locale dates with the year only for older years", () => {
+    const now = Number(new Date(2026, 8, 30, 12));
+    for (const [date, options] of [
+      [new Date(2026, 8, 10, 12), { month: "short", day: "numeric" }],
+      [new Date(2025, 8, 10, 12), { month: "short", day: "numeric", year: "numeric" }],
+    ] as const) {
+      expect(timeAgo(Number(date), now)).toBe(date.toLocaleDateString(undefined, options));
+    }
+    expect(timeAgo(now + DAY, now)).toBe("just now");
+  });
+
+  it("reuses two formatters instead of constructing one per old timestamp", () => {
+    // Intl's types declare a method; at runtime this is a bound-function getter.
+    const formatters = vi.spyOn(Intl.DateTimeFormat.prototype as { format: unknown }, "format", "get");
+    const perCallFormatting = vi.spyOn(Date.prototype, "toLocaleDateString");
+    const now = Number(new Date(2026, 8, 30, 12));
+    for (let i = 0; i < 500; i++) {
+      timeAgo(Number(new Date(2026, 8, 10, 12)), now);
+      timeAgo(Number(new Date(2025, 8, 10, 12)), now);
+    }
+    expect(formatters).toHaveBeenCalledTimes(1000);
+    expect(new Set(formatters.mock.contexts).size).toBe(2);
+    expect(perCallFormatting).not.toHaveBeenCalled();
+  });
+
+  it.each([NaN, -Infinity])("preserves the invalid-date fallback for %s", (timestamp) => {
+    expect(timeAgo(timestamp, NOW)).toBe("Invalid Date");
+  });
+
   it("shortens recent spans", () => {
     expect(timeAgo(NOW - 30 * 1000, NOW)).toBe("just now");
     expect(timeAgo(NOW - 5 * MINUTE, NOW)).toBe("5m ago");

@@ -71,6 +71,7 @@ export function useThreadExecution(
   epoch: number,
   enabled = true,
   latestAttentionAt = 0,
+  isVisible = true,
 ): ThreadExecution | null | undefined {
   const version = `${epoch}:${latestAttentionAt}`;
   const [value, setValue] = useState<ThreadExecution | null | undefined>(() =>
@@ -86,6 +87,9 @@ export function useThreadExecution(
       setValue(undefined);
       return;
     }
+    // Folding suspends requests without ending the run's cache lifetime.
+    // Changes while hidden are revalidated when the row is revealed.
+    if (!isVisible) return;
     // Same activity and focus epoch (e.g. regrouping the same live run):
     // paint from cache without refetching.
     if (
@@ -103,7 +107,7 @@ export function useThreadExecution(
     return () => {
       cancelled = true;
     };
-  }, [threadId, sdk, version, enabled]);
+  }, [threadId, sdk, version, enabled, isVisible]);
   return enabled ? value : undefined;
 }
 
@@ -141,12 +145,13 @@ export function useModelDisplayName(
   providerId: string,
   model: string | null,
   sdk: PluginBrowserBbSdk,
+  isVisible = true,
 ): string | null {
   const [names, setNames] = useState<Map<string, string> | null | undefined>(
     () => catalogCache.get(providerId),
   );
   useEffect(() => {
-    if (!model) return;
+    if (!model || !isVisible) return;
     if (catalogCache.has(providerId)) {
       setNames(catalogCache.get(providerId) ?? null);
       return;
@@ -158,7 +163,7 @@ export function useModelDisplayName(
     return () => {
       cancelled = true;
     };
-  }, [providerId, model, sdk]);
+  }, [providerId, model, sdk, isVisible]);
   if (!model) return null;
   const hit = names?.get(model);
   if (hit) return hit;
