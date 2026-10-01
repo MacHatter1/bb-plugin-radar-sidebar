@@ -4,10 +4,19 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.4.1 - 2026-10-01
+
+### Changed
+
+- Large sidebars do less repeated work: date formatting and family
+  traversal are cached, and requests and gesture handlers inside folds
+  pause while hidden. Fold state and summaries stay reactive.
 
 ### Fixed
 
+- The touch nav lays its icons out as a row across the top instead of a
+  tall centered column, so the thread list starts near the top on phones.
+  Icons wrap to a second row only when more arrive than fit.
 - One-line thread titles no longer collapse to zero width on narrow rows
   with a status badge: the project chip shrinks first behind its ellipsis,
   the title keeps a 40px floor, and the time shrinks with an ellipsis
