@@ -116,10 +116,11 @@ describe("app.css", () => {
 
   it("lays the touch nav out as a row of icons, not a centered column", () => {
     // Touch viewports keep a sidebar wide enough for a row of icons, so one
-    // icon per line pushed the thread list half a screen down.
+    // icon per line pushed the thread list half a screen down. The min()
+    // keeps the 32px track from overflowing a rail narrower than 48px.
     const compact = rules().find((rule) => rule.selector === ".radar-nav-compact");
     expect(compact?.body).toMatch(/display:\s*grid/);
-    expect(compact?.body).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(32px,\s*1fr\)\)/);
+    expect(compact?.body).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(32px,\s*100%\),\s*1fr\)\)/);
     expect(compact?.body).toMatch(/justify-items:\s*center/);
     expect(compact?.body).not.toMatch(/align-items:\s*center/);
   });
