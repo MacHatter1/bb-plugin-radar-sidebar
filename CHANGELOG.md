@@ -23,7 +23,8 @@ All notable changes to Radar Sidebar are documented here. The format follows
     no speed. The pill keeps the label of what was done while it closes.
   - Archiving (or unarchiving from the Archived tab) slides the row away and
     folds its space before the host acts; on the All tab the row stays and
-    springs back.
+    springs back, and so does a thread with replies, whose archive the host
+    confirms first.
   - Trackpads report no lift-off, so a trackpad swipe stopped short of
     arming rests open with its action as a button, as in Mail on a Mac:
     click it to act; press elsewhere, scroll or press Escape to close; move

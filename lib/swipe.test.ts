@@ -28,6 +28,28 @@ describe("swipe settings", () => {
   it.each([undefined, 3, "archive", ""])("falls back on an unknown value: %s", (value) => {
     expect(swipeActionFromSetting(value, "Pin / unpin")).toBe("pin");
   });
+
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
+    "does not read %s off the prototype chain",
+    (value) => {
+      expect(swipeActionFromSetting(value, "Pin / unpin")).toBe("pin");
+    },
+  );
+
+  it("keeps the stored labels stable", () => {
+    // Select options are stored as their text, so rewording one orphans every
+    // saved choice. Change these only together with a migration.
+    expect(SWIPE_ACTION_OPTION_LABELS).toEqual([
+      "Mark read / unread",
+      "Pin / unpin",
+      "Archive / unarchive",
+      "Open in split",
+      "Rename",
+      "More actions",
+      "Delete…",
+      "Nothing",
+    ]);
+  });
 });
 
 describe("swipeActionView", () => {
@@ -47,6 +69,15 @@ describe("swipeActionView", () => {
       .toBe(false);
     // Delete waits on the host's confirmation.
     expect(swipeActionView("delete", idle)?.removes).toBe(false);
+  });
+
+  it("keeps a row that the host may ask to confirm archiving", () => {
+    // Archiving a parent archives its children, behind a host dialog: folding
+    // the row first would hide it from the very person being asked.
+    expect(swipeActionView("archive", idle, true, true)?.removes).toBe(false);
+    // Unarchiving asks nothing.
+    expect(swipeActionView("archive", { ...idle, isArchived: true }, true, true)?.removes)
+      .toBe(true);
   });
 
   it("has no view for none", () => {

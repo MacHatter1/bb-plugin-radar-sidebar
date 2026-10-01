@@ -12,7 +12,10 @@ export type SwipeActionId =
   | "delete"
   | "none";
 
-/** Setting option text → action. The text is what the settings UI shows. */
+/** Setting option text → action. The text is what the settings UI shows and
+ *  also what is stored (select options are plain strings), so rewording one
+ *  orphans saved choices: a stored value that no longer matches falls back to
+ *  the side's default. Change a label only with that in mind. */
 export const SWIPE_ACTION_OPTIONS = {
   "Mark read / unread": "read",
   "Pin / unpin": "pin",
@@ -38,7 +41,8 @@ export function swipeActionFromSetting(
   value: unknown,
   fallback: SwipeActionOption,
 ): SwipeActionId {
-  return typeof value === "string" && value in SWIPE_ACTION_OPTIONS
+  // Own keys only: `in` would also accept "constructor" or "toString".
+  return typeof value === "string" && Object.hasOwn(SWIPE_ACTION_OPTIONS, value)
     ? SWIPE_ACTION_OPTIONS[value as SwipeActionOption]
     : SWIPE_ACTION_OPTIONS[fallback];
 }
@@ -58,6 +62,10 @@ export function swipeActionView(
   /** Whether the list shows only one of active or archived threads, so
    *  archiving or unarchiving takes the row out of it. */
   filtersArchived = true,
+  /** Whether the host may ask to confirm before acting: archiving a thread
+   *  with children archives them too. A folded row would sit hidden behind
+   *  the dialog, so it springs back and the host removes it once confirmed. */
+  mayConfirm = false,
 ): SwipeActionView | null {
   switch (id) {
     case "read":
@@ -71,7 +79,12 @@ export function swipeActionView(
     case "archive":
       return thread.isArchived
         ? { id, label: "Unarchive", icon: "ArchiveRestore", removes: filtersArchived }
-        : { id, label: "Archive", icon: "Archive", removes: filtersArchived };
+        : {
+            id,
+            label: "Archive",
+            icon: "Archive",
+            removes: filtersArchived && !mayConfirm,
+          };
     case "split":
       return { id, label: "Split", icon: "Columns2", removes: false };
     case "rename":

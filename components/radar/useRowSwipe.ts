@@ -21,7 +21,9 @@ export interface SwipeReveal {
   action: SwipeActionView | null;
 }
 
-/** Keep in step with the fold transition in app.css. */
+/** How long a removed row takes to fold. Written to the row as
+ *  --radar-swipe-fold, which app.css reads, so the wait and the transition
+ *  cannot drift apart. */
 const FOLD_MS = 220;
 /** A removed row that is still here after this was kept (confirm cancelled). */
 const RESTORE_MS = 1200;
@@ -98,7 +100,9 @@ export function useRowSwipe({
   restoreKey: string;
   /** A swipe began; the row closes anything anchored to it. */
   onStart?: () => void;
-  onCommit: (action: SwipeActionView) => void;
+  /** `offset` is how far the row is drawn from rest (px, signed) when the
+   *  action runs, for anything anchored to where the row sits. */
+  onCommit: (action: SwipeActionView, offset: number) => void;
 }): SwipeReveal | null {
   const [reveal, setReveal] = useState<SwipeReveal | null>(null);
   const latest = useRef({ right, left, onStart, onCommit });
@@ -126,6 +130,15 @@ export function useRowSwipe({
     let suppressClickUntil = 0;
     let frame: number | null = null;
     let timer: number | null = null;
+    /** A removing action the user has committed to but not yet delivered:
+     *  the row is still sliding out and folding. */
+    let pending: SwipeActionView | null = null;
+
+    const deliver = () => {
+      const committed = pending;
+      pending = null;
+      if (committed) latest.current.onCommit(committed, x);
+    };
 
     const setPhase = (phase: Phase | null) => {
       phaseRef.current = phase;
@@ -170,6 +183,7 @@ export function useRowSwipe({
       paint(0);
       row.style.removeProperty("--radar-swipe-w");
       row.style.removeProperty("--radar-swipe-p");
+      row.style.removeProperty("--radar-swipe-fold");
       row.style.height = "";
       setArmed(false);
       setReveal(null);
@@ -245,7 +259,7 @@ export function useRowSwipe({
         remove(action, 0);
         return;
       }
-      latest.current.onCommit(action);
+      latest.current.onCommit(action, x);
       settle(0);
     };
 
@@ -272,6 +286,7 @@ export function useRowSwipe({
     }
 
     const remove = (committed: SwipeActionView, velocity: number) => {
+      pending = committed;
       row.style.height = `${row.offsetHeight}px`;
       setPhase("out");
       const target = Math.sign(x) * (width + 16);
@@ -280,10 +295,11 @@ export function useRowSwipe({
       const push = Math.sign(x) * Math.max(Math.abs(velocity), 1.2);
       springTo(target, push, SPRING_OUT, () => {
         setPhase("fold");
+        row.style.setProperty("--radar-swipe-fold", `${FOLD_MS}ms`);
         row.style.height = "0px";
         timer = window.setTimeout(() => {
           setPhase("gone");
-          latest.current.onCommit(committed);
+          deliver();
           timer = window.setTimeout(() => {
             if (phaseRef.current === "gone") restore();
           }, RESTORE_MS);
@@ -355,7 +371,7 @@ export function useRowSwipe({
           remove(action, velocity);
           return;
         }
-        latest.current.onCommit(action);
+        latest.current.onCommit(action, x);
         settle(velocity);
         return;
       }
@@ -372,6 +388,18 @@ export function useRowSwipe({
         event.touches.length !== 1 ||
         (phase && phase !== "settle" && phase !== "open")
       ) {
+        // A second finger ends a swipe in progress. Letting go of tracking
+        // alone would leave touchend nothing to settle and the row stuck.
+        if (locked) {
+          locked = false;
+          suppressClickUntil = performance.now() + 400;
+          settle(0);
+        }
+        tracking = false;
+        return;
+      }
+      // The drag grip has its own long-press drag to a section.
+      if ((event.target as Element | null)?.closest?.(".radar-row-grip")) {
         tracking = false;
         return;
       }
@@ -565,6 +593,9 @@ export function useRowSwipe({
       row.removeEventListener("touchcancel", onTouchCancel);
       window.removeEventListener("click", onClickCapture, true);
       restoreRef.current = null;
+      // A swipe the user finished must not vanish because the row remounted
+      // or swiping was switched off while it slid out.
+      deliver();
       reset();
     };
   }, [enabled, rowRef]);

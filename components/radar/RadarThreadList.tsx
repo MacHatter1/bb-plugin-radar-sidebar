@@ -116,7 +116,8 @@ function writeStored(key: string, value: string): void {
 
 /** Plugin settings, with the shipped defaults applied while they load. The two
  * that set row height fall back to the value this client last saw instead, so
- * a reload paints rows at their final size without holding the list back. */
+ * a reload paints rows at their final size without holding the list back.
+ * Swipe actions stay off until the settings arrive. */
 function useSidebarSettings() {
   const { values } = useSettings();
   const flag = (key: string, fallback: boolean): boolean =>
@@ -134,6 +135,9 @@ function useSidebarSettings() {
     ? values.defaultDensity === "compact" ? "compact" : "comfortable"
     : lastSeen.defaultDensity;
   const wrapTitles = loaded ? flag("twoLineTitles", false) : lastSeen.wrapTitles;
+  // Swipes act on threads, so they wait for the saved choice rather than
+  // running on the defaults for someone who turned them off.
+  const swipeOn = loaded && flag("swipeActions", true);
   useEffect(() => {
     if (!loaded) return;
     writeStored(LAST_DEFAULT_DENSITY_KEY, defaultDensity);
@@ -147,10 +151,10 @@ function useSidebarSettings() {
     adaptiveCollapse: flag("adaptiveCollapse", true),
     defaultDensity,
     wrapTitles,
-    swipeRight: flag("swipeActions", true)
+    swipeRight: swipeOn
       ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
       : "none",
-    swipeLeft: flag("swipeActions", true)
+    swipeLeft: swipeOn
       ? swipeActionFromSetting(values?.swipeLeft, DEFAULT_SWIPE_LEFT)
       : "none",
   };
