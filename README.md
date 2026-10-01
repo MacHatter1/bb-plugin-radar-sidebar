@@ -154,10 +154,10 @@ to mark it read or archive it; each direction's action is a setting.
 ## Install
 
 ```sh
-bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.3.0' --yes
+bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.4.0' --yes
 ```
 
-The Git semver range tracks compatible `v0.3.x` releases.
+The Git semver range tracks compatible `v0.4.x` releases.
 
 Then pick it in **Settings → Appearance**: choose **Radar** for the sidebar and
 **Radar navigation** for the controls above it.
