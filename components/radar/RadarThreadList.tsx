@@ -44,6 +44,11 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_SWIPE_LEFT,
+  DEFAULT_SWIPE_RIGHT,
+  swipeActionFromSetting,
+} from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
 import { RadarThreadRow } from "./RadarThreadRow";
 import { isRunningThread } from "./time";
@@ -111,7 +116,8 @@ function writeStored(key: string, value: string): void {
 
 /** Plugin settings, with the shipped defaults applied while they load. The two
  * that set row height fall back to the value this client last saw instead, so
- * a reload paints rows at their final size without holding the list back. */
+ * a reload paints rows at their final size without holding the list back.
+ * Swipe actions stay off until the settings arrive. */
 function useSidebarSettings() {
   const { values } = useSettings();
   const flag = (key: string, fallback: boolean): boolean =>
@@ -129,6 +135,9 @@ function useSidebarSettings() {
     ? values.defaultDensity === "compact" ? "compact" : "comfortable"
     : lastSeen.defaultDensity;
   const wrapTitles = loaded ? flag("twoLineTitles", false) : lastSeen.wrapTitles;
+  // Swipes act on threads, so they wait for the saved choice rather than
+  // running on the defaults for someone who turned them off.
+  const swipeOn = loaded && flag("swipeActions", true);
   useEffect(() => {
     if (!loaded) return;
     writeStored(LAST_DEFAULT_DENSITY_KEY, defaultDensity);
@@ -142,6 +151,12 @@ function useSidebarSettings() {
     adaptiveCollapse: flag("adaptiveCollapse", true),
     defaultDensity,
     wrapTitles,
+    swipeRight: swipeOn
+      ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
+      : "none",
+    swipeLeft: swipeOn
+      ? swipeActionFromSetting(values?.swipeLeft, DEFAULT_SWIPE_LEFT)
+      : "none",
   };
 }
 
@@ -1231,6 +1246,10 @@ export function RadarThreadList({
           isKeyboardFocused={keyboardFocusedId === thread.id}
           onToggleSelect={handleToggleSelect}
           dragHandle={dragHandle}
+          swipeRight={settings.swipeRight}
+          swipeLeft={settings.swipeLeft}
+          listFiltersArchived={lifecycle !== "all"}
+          hasChildren={(childrenOf.get(thread.id)?.length ?? 0) > 0}
         />
       );
     },
@@ -1241,6 +1260,9 @@ export function RadarThreadList({
       settings.celebrate,
       settings.hoverCard,
       settings.adaptiveCollapse,
+      settings.swipeRight,
+      settings.swipeLeft,
+      lifecycle,
       activeThreadId,
       editingId,
       actions,
@@ -1254,6 +1276,7 @@ export function RadarThreadList({
       providerById,
       primaryHostId,
       shownChildren,
+      childrenOf,
       collapseIds,
       countSubtree,
       toggleThreadCollapse,
@@ -1401,6 +1424,11 @@ export function RadarThreadList({
       )}
       data-radar-motion={settings.motion ? "on" : "off"}
       data-radar-loud-unread={settings.loudUnread ? "on" : "off"}
+      data-radar-swipe={
+        settings.swipeRight !== "none" || settings.swipeLeft !== "none"
+          ? "on"
+          : "off"
+      }
     >
       <div className="radar-list-header">
         <div className="radar-search">

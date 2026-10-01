@@ -237,6 +237,9 @@ rows paint at their final height.
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows to their title line. |
 | `defaultDensity` | `comfortable` | `comfortable` or `compact`, until the header toggle is used; that choice is remembered per client. |
 | `twoLineTitles` | `false` | Enable to wrap long titles, including mentions, in both densities; metadata wraps below when needed. |
+| `swipeActions` | `true` | Swipe a row left or right to act on it, by touch or with two fingers on a trackpad. |
+| `swipeRight` | `Mark read / unread` | Rightward swipe action: `Mark read / unread`, `Pin / unpin`, `Archive / unarchive`, `Open in split`, `Rename`, `More actions`, `Delete…` or `Nothing`. |
+| `swipeLeft` | `Archive / unarchive` | Leftward swipe action, same options. |
 
 ## Rules
 

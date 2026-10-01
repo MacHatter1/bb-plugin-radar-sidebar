@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
 import { createElement, Fragment, type FunctionComponent } from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
@@ -298,6 +298,735 @@ describe("actions", () => {
       threadId: "t",
       pinned: true,
     });
+  });
+});
+
+describe("swipe actions", () => {
+  const row = (container: HTMLElement) =>
+    container.querySelector(".radar-row") as HTMLElement;
+
+  function swipe(container: HTMLElement, dx: number, dy = 0) {
+    const target = row(container);
+    fireEvent.touchStart(target, { touches: [{ clientX: 150, clientY: 20 }] });
+    // Two steps: the first (just past the slop) decides swipe versus scroll.
+    const step = 12 / Math.max(Math.abs(dx), Math.abs(dy));
+    fireEvent.touchMove(target, {
+      touches: [{ clientX: 150 + dx * step, clientY: 20 + dy * step }],
+    });
+    fireEvent.touchMove(target, {
+      touches: [{ clientX: 150 + dx, clientY: 20 + dy }],
+    });
+    fireEvent.touchEnd(target, { touches: [] });
+  }
+
+  /** Settings loaded (none chosen), so the shipped swipe defaults apply. */
+  const renderSwipe = (
+    threads: PluginSidebarThread[],
+    options: Parameters<typeof renderThreads>[1] = {},
+  ) => renderThreads(threads, { settings: {}, ...options });
+
+  const originalOffsetWidth = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "offsetWidth",
+  );
+  beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get: () => 300,
+    });
+  });
+  afterAll(() => {
+    // Rows have no layout in jsdom: do not leak a width into other suites.
+    if (originalOffsetWidth) {
+      Object.defineProperty(HTMLElement.prototype, "offsetWidth", originalOffsetWidth);
+    } else {
+      delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth;
+    }
+  });
+
+  it("marks read on a right swipe by default", () => {
+    const slot = renderSwipe([
+      makeThread({ id: "t", lastReadAt: null, latestAttentionAt: NOW }),
+    ]);
+    swipe(slot.container, 160);
+    expect(slot.inspection.sidebarActionCalls).toContainEqual(
+      expect.objectContaining({ method: "setRead", threadId: "t" }),
+    );
+  });
+
+  it("slides the row away, then archives on a left swipe by default", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      swipe(slot.container, -160);
+      expect(row(slot.container).dataset.swipePhase).toBe("out");
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(slot.inspection.sidebarActionCalls).toContainEqual({
+        method: "archive",
+        threadId: "t",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the configured action for each side", () => {
+    const slot = renderSwipe([makeThread({ id: "t" })], {
+      settings: { swipeLeft: "Pin / unpin" },
+    });
+    swipe(slot.container, -160);
+    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+      method: "setPinned",
+      threadId: "t",
+      pinned: true,
+    });
+  });
+
+  it("does not treat a quick drag that then rests as a flick", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      const target = row(slot.container);
+      fireEvent.touchStart(target, { touches: [{ clientX: 150, clientY: 20 }] });
+      for (let x = 138; x >= 90; x -= 12) {
+        fireEvent.touchMove(target, { touches: [{ clientX: x, clientY: 20 }] });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      // Rest, then lift: short of the threshold, so nothing happens.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      fireEvent.touchEnd(target, { touches: [] });
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("springs back without acting on a short drag", () => {
+    const slot = renderSwipe([makeThread({ id: "t" })]);
+    swipe(slot.container, -30);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBe("settle");
+  });
+
+  it("leaves vertical movement to the scroller", () => {
+    const slot = renderSwipe([makeThread({ id: "t" })]);
+    swipe(slot.container, -20, 160);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+  });
+
+  /** A two-finger trackpad stream: pixel wheel events, ~16ms apart. */
+  function wheelSwipe(container: HTMLElement, dx: number, dy = 0, steps = 10) {
+    const target = row(container);
+    for (let i = 0; i < steps; i += 1) {
+      // Content-style deltas: fingers moving left scroll content right (+x).
+      fireEvent.wheel(target, { deltaX: -dx / steps, deltaY: dy / steps, deltaMode: 0 });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+  }
+
+  /** The fade-out a trackpad sends after the fingers lift mid-flick. */
+  function momentumTail(container: HTMLElement, direction: number) {
+    const target = row(container);
+    for (let d = 8; d >= 0.8; d *= 0.7) {
+      fireEvent.wheel(target, { deltaX: -direction * d, deltaMode: 0 });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+  }
+
+  it("rests a stopped trackpad swipe open, then follows on", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -60);
+      // Resting fingers: no decision, the row just settles open.
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBe("open");
+      expect(row(slot.container).style.transform).toContain("-96px");
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      // Moving again carries on from there.
+      wheelSwipe(slot.container, -100);
+      momentumTail(slot.container, -1);
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  function openWithTrackpad(container: HTMLElement) {
+    wheelSwipe(container, -60);
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+  }
+
+  it("runs the action from an open row's button", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      openWithTrackpad(slot.container);
+      const button = slot.container.querySelector(".radar-swipe-underlay") as HTMLElement;
+      fireEvent.pointerDown(button);
+      fireEvent.click(button);
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["press elsewhere", "press on the row", "Escape", "scroll"])(
+    "closes an open row on %s without acting",
+    (how) => {
+      vi.useFakeTimers();
+      try {
+        const slot = renderSwipe([makeThread({ id: "t" })], {
+          settings: { swipeLeft: "Pin / unpin" },
+        });
+        openWithTrackpad(slot.container);
+        const anchor = slot.container.querySelector("[data-sidebar-thread-id]") as HTMLElement;
+        if (how === "press elsewhere") fireEvent.pointerDown(document.body);
+        if (how === "press on the row") {
+          fireEvent.pointerDown(anchor);
+          fireEvent.click(anchor);
+        }
+        if (how === "Escape") fireEvent.keyDown(document, { key: "Escape" });
+        if (how === "scroll") {
+          fireEvent.scroll(slot.container.querySelector(".radar-list-body") as HTMLElement);
+        }
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+        expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+        // The harness's split-drag stand-in logs any press on a row link as
+        // "open"; the real host only drags once the pointer leaves the list.
+        expect(
+          slot.inspection.sidebarActionCalls.filter((call) => call.method !== "open"),
+        ).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("keeps only one row open", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe(
+        [makeThread({ id: "a" }), makeThread({ id: "b" })],
+        { settings: { swipeLeft: "Pin / unpin" } },
+      );
+      const rows = () =>
+        Array.from(slot.container.querySelectorAll(".radar-row")) as HTMLElement[];
+      const open = (target: HTMLElement) => {
+        for (let i = 0; i < 10; i += 1) {
+          fireEvent.wheel(target, { deltaX: 6, deltaMode: 0 });
+          act(() => {
+            vi.advanceTimersByTime(16);
+          });
+        }
+        act(() => {
+          vi.advanceTimersByTime(1500);
+        });
+      };
+      open(rows()[0]);
+      expect(rows()[0].dataset.swipePhase).toBe("open");
+      open(rows()[1]);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(rows()[1].dataset.swipePhase).toBe("open");
+      expect(rows()[0].dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** Rest a row open with a short trackpad pull, as the open-row tests do. */
+  function restOpen(target: HTMLElement) {
+    for (let i = 0; i < 10; i += 1) {
+      fireEvent.wheel(target, { deltaX: 6, deltaMode: 0 });
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+  }
+
+  it("closes an open row as soon as another starts to swipe", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe(
+        [makeThread({ id: "a" }), makeThread({ id: "b" })],
+        { settings: { swipeLeft: "Pin / unpin" } },
+      );
+      const rows = Array.from(
+        slot.container.querySelectorAll(".radar-row"),
+      ) as HTMLElement[];
+      restOpen(rows[0]);
+      expect(rows[0].dataset.swipePhase).toBe("open");
+      // A short pull on the other row: it will settle back, never opening.
+      for (let i = 0; i < 4; i += 1) {
+        fireEvent.wheel(rows[1], { deltaX: 4, deltaMode: 0 });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      expect(rows[1].dataset.swipePhase).toBe("drag");
+      expect(rows[0].dataset.swipePhase).toBe("settle");
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(rows[0].dataset.swipePhase).toBeUndefined();
+      expect(rows[1].dataset.swipePhase).not.toBe("open");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("spends Escape on closing an open row, and no more", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      const target = row(slot.container);
+      const behind = vi.fn();
+      document.body.addEventListener("keydown", behind);
+      try {
+        restOpen(target);
+        expect(target.dataset.swipePhase).toBe("open");
+        fireEvent.keyDown(document.body, { key: "Escape" });
+        expect(target.dataset.swipePhase).toBe("settle");
+        expect(behind).not.toHaveBeenCalled();
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+        // With nothing open, Escape is left for whoever else wants it.
+        fireEvent.keyDown(document.body, { key: "Escape" });
+        expect(behind).toHaveBeenCalledOnce();
+      } finally {
+        document.body.removeEventListener("keydown", behind);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not take a mouse wheel's sideways notches for a swipe", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      const target = row(slot.container);
+      // A tilt wheel steps a whole notch at once, and is left to scroll.
+      for (let i = 0; i < 4; i += 1) {
+        const untouched = fireEvent.wheel(target, { deltaX: 100, deltaMode: 0 });
+        expect(untouched).toBe(true);
+        act(() => {
+          vi.advanceTimersByTime(60);
+        });
+      }
+      // Shift+wheel is a mouse's way of scrolling sideways, in any step size.
+      for (let i = 0; i < 10; i += 1) {
+        const untouched = fireEvent.wheel(target, {
+          deltaX: 12,
+          shiftKey: true,
+          deltaMode: 0,
+        });
+        expect(untouched).toBe(true);
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(target.dataset.swipePhase).toBeUndefined();
+      expect(target.style.transform).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases a trackpad flick as soon as its momentum fades", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -160);
+      momentumTail(slot.container, -1);
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      act(() => {
+        vi.advanceTimersByTime(120);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+
+      // Stragglers from the tail must not start a second swipe.
+      for (let i = 0; i < 20; i += 1) {
+        fireEvent.wheel(row(slot.container), { deltaX: 6, deltaMode: 0 });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a trackpad swipe going after the row slides out from under the cursor", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      // Starts over the row...
+      wheelSwipe(slot.container, -40, 0, 4);
+      expect(row(slot.container).dataset.swipePhase).toBe("drag");
+      // ...then the cursor is over the list body instead.
+      const elsewhere = slot.container.querySelector(".radar-list-body") as HTMLElement;
+      for (let i = 0; i < 10; i += 1) {
+        fireEvent.wheel(elsewhere, { deltaX: 16, deltaMode: 0 });
+        act(() => {
+          vi.advanceTimersByTime(16);
+        });
+      }
+      expect(row(slot.container).style.transform).toContain("-200px");
+      momentumTail(slot.container, -1);
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "setPinned", threadId: "t", pinned: true },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("springs back from a third of the row on a trackpad", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -100);
+      expect("swipeArmed" in row(slot.container).dataset).toBe(false);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("decides an abrupt stop only after a longer pause", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeLeft: "Pin / unpin" },
+      });
+      wheelSwipe(slot.container, -200);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves vertical trackpad scrolling to the list", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      wheelSwipe(slot.container, -20, 200);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores pinch-zoom and line-stepped mouse wheels", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      const target = row(slot.container);
+      for (let i = 0; i < 10; i += 1) {
+        fireEvent.wheel(target, { deltaX: 30, ctrlKey: true, deltaMode: 0 });
+        fireEvent.wheel(target, { deltaX: 3, deltaMode: 1 });
+      }
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(target.dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turning swipe actions off stops trackpad swipes too", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeActions: false },
+      });
+      wheelSwipe(slot.container, -160);
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does nothing when turned off", () => {
+    const slot = renderSwipe([makeThread({ id: "t" })], {
+      settings: { swipeActions: false },
+    });
+    swipe(slot.container, -160);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+    expect(slot.container.querySelector("[data-radar-swipe=\"off\"]")).not.toBeNull();
+  });
+  it("waits for the saved settings before a swipe can act", () => {
+    // No `settings`: still loading, so a swipe must not run on the defaults.
+    const slot = renderThreads([makeThread({ id: "t" })]);
+    swipe(slot.container, -160);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+  });
+
+  it("lets a locked drag go home when a second finger lands", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      const target = row(slot.container);
+      fireEvent.touchStart(target, { touches: [{ clientX: 150, clientY: 20 }] });
+      fireEvent.touchMove(target, { touches: [{ clientX: 138, clientY: 20 }] });
+      fireEvent.touchMove(target, { touches: [{ clientX: 118, clientY: 20 }] });
+      expect(target.dataset.swipePhase).toBe("drag");
+      fireEvent.touchStart(target, {
+        touches: [
+          { clientX: 118, clientY: 20 },
+          { clientX: 200, clientY: 20 },
+        ],
+      });
+      fireEvent.touchEnd(target, { touches: [{ clientX: 200, clientY: 20 }] });
+      expect(target.dataset.swipePhase).toBe("settle");
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(target.dataset.swipePhase).toBeUndefined();
+      expect(target.style.transform).toBe("");
+      // The row answers the next swipe as usual.
+      swipe(slot.container, -160);
+      expect(target.dataset.swipePhase).toBe("out");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles without acting when the touch is cancelled", () => {
+    const slot = renderSwipe([makeThread({ id: "t" })]);
+    const target = row(slot.container);
+    fireEvent.touchStart(target, { touches: [{ clientX: 150, clientY: 20 }] });
+    fireEvent.touchMove(target, { touches: [{ clientX: 138, clientY: 20 }] });
+    fireEvent.touchMove(target, { touches: [{ clientX: 0, clientY: 20 }] });
+    fireEvent.touchCancel(target, { touches: [] });
+    expect(target.dataset.swipePhase).toBe("settle");
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+  });
+
+  it("leaves a touch on the drag grip to its section drag", () => {
+    const slot = renderSwipe([makeThread({ id: "t" })]);
+    const target = row(slot.container);
+    const grip = document.createElement("button");
+    grip.className = "radar-row-grip";
+    target.appendChild(grip);
+    fireEvent.touchStart(grip, { touches: [{ clientX: 150, clientY: 20 }] });
+    fireEvent.touchMove(grip, { touches: [{ clientX: 138, clientY: 20 }] });
+    fireEvent.touchMove(grip, { touches: [{ clientX: 0, clientY: 20 }] });
+    fireEvent.touchEnd(grip, { touches: [] });
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(target.dataset.swipePhase).toBeUndefined();
+  });
+
+  it("still archives when the row unmounts while it slides away", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      swipe(slot.container, -160);
+      expect(row(slot.container).dataset.swipePhase).toBe("out");
+      act(() => {
+        slot.unmount();
+      });
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "archive", threadId: "t" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("brings a removed row back if the host kept it", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t" })]);
+      swipe(slot.container, -160);
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBe("gone");
+      act(() => {
+        vi.advanceTimersByTime(1300);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBe("settle");
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(row(slot.container).dataset.swipePhase).toBeUndefined();
+      expect(row(slot.container).style.height).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not fold away a parent whose archive the host may confirm", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([
+        makeThread({ id: "p" }),
+        makeThread({ id: "c", parentThreadId: "p" }),
+      ]);
+      swipe(slot.container, -160);
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "archive", threadId: "p" },
+      ]);
+      expect(row(slot.container).dataset.swipePhase).toBe("settle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a parent in place when a search hides its replies", () => {
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([
+        makeThread({ id: "p", title: "Umbrella needle" }),
+        makeThread({ id: "c", title: "Other", parentThreadId: "p" }),
+      ]);
+      fireEvent.change(screen.getByRole("searchbox"), {
+        target: { value: "needle" },
+      });
+      expect(visibleRowIds(slot.container)).toEqual(["p"]);
+      swipe(slot.container, -160);
+      // The host still confirms archiving the replies it cannot see here.
+      expect(slot.inspection.sidebarActionCalls).toEqual([
+        { method: "archive", threadId: "p" },
+      ]);
+      expect(row(slot.container).dataset.swipePhase).toBe("settle");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores an archived thread from the Archived view", () => {
+    localStorage.setItem("radar-sidebar:lifecycles:v1", "archived");
+    vi.useFakeTimers();
+    try {
+      const slot = renderSwipe([makeThread({ id: "t", isArchived: true })]);
+      swipe(slot.container, -160);
+      act(() => {
+        vi.advanceTimersByTime(600);
+      });
+      expect(slot.inspection.sdkCalls).toContainEqual(
+        expect.objectContaining({ method: "threads.unarchive" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("springs back instead of folding on the All view", () => {
+    localStorage.setItem("radar-sidebar:lifecycles:v1", "all");
+    const slot = renderSwipe([makeThread({ id: "t" })]);
+    swipe(slot.container, -160);
+    expect(slot.inspection.sidebarActionCalls).toEqual([
+      { method: "archive", threadId: "t" },
+    ]);
+    expect(row(slot.container).dataset.swipePhase).toBe("settle");
+  });
+
+  it("anchors the More menu on the row's resting place, whichever way it was swiped", () => {
+    const place = (dx: number) => {
+      const slot = renderSwipe([makeThread({ id: "t" })], {
+        settings: { swipeRight: "More actions", swipeLeft: "More actions" },
+      });
+      // Where the row sits when untouched: its right edge at 600px.
+      const target = row(slot.container);
+      target.getBoundingClientRect = () =>
+        ({ right: 600 + (parseFloat(target.style.transform.split("(")[1] ?? "0") || 0), bottom: 50 }) as DOMRect;
+      swipe(slot.container, dx);
+      const menu = screen.getByRole("menu");
+      const left = menu.style.left;
+      cleanup();
+      return left;
+    };
+    expect(place(160)).toBe(place(-160));
   });
 });
 

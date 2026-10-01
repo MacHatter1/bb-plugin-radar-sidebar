@@ -4,6 +4,41 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Swipe actions** (`swipeActions`, default `true`): swipe a thread row left
+  or right to act on it, with one finger on a touch screen or two fingers on
+  a trackpad (a Mac, or an iPad with a Magic Keyboard). Each side is
+  configurable (`swipeRight`, default mark read / unread; `swipeLeft`,
+  default archive / unarchive) from: mark read / unread, pin / unpin,
+  archive / unarchive, open in split, rename, more actions, delete
+  (host-confirmed), or nothing.
+  - The row tracks the input, a colored pill grows from the edge with its
+    icon growing alongside, and the icon pops when the swipe arms (a third
+    of the row by touch, over half by trackpad), with a short haptic tick
+    where supported. On release a spring carries the input's speed home, so
+    a flick flows into the settle; a swipe that rests before release carries
+    no speed. The pill keeps the label of what was done while it closes.
+  - Archiving (or unarchiving from the Archived tab) slides the row away and
+    folds its space before the host acts; on the All tab the row stays and
+    springs back, and so does a thread with replies, whose archive the host
+    confirms first.
+  - Trackpads report no lift-off, so a trackpad swipe stopped short of
+    arming rests open with its action as a button, as in Mail on a Mac:
+    click it to act; press elsewhere, scroll or press Escape to close; move
+    again to carry on. One row stays open at a time. A swipe keeps following
+    after the row slides out from under the cursor, and the momentum tail
+    after a release is swallowed.
+  - Vertical movement stays a scroll, the host drawer does not react to a
+    row swipe, releasing a swipe never opens the thread, and a mouse's
+    clicks, drags and Shift+wheel are unaffected. A sideways wheel step of a
+    whole notch (a tilt wheel) is left to scroll too: a trackpad eases in
+    with small steps, and only that starts a swipe.
+  - Opening a row by trackpad closes any other row left open, and Escape
+    closes an open row without also clearing the search behind it.
+
 ## 0.3.0 - 2026-09-30
 
 ### Added

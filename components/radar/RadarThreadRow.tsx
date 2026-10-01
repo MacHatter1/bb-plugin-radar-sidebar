@@ -32,6 +32,12 @@ import {
   useThreadExecution,
 } from "./useThreadExecution";
 import { RadarHoverCard, type ContextUsage } from "./RadarHoverCard";
+import { useRowSwipe } from "./useRowSwipe";
+import {
+  swipeActionView,
+  type SwipeActionId,
+  type SwipeActionView,
+} from "@/lib/swipe";
 
 /** Family folding for threads with shown children (null for leaves). */
 export interface RowCollapse {
@@ -311,6 +317,10 @@ function RadarThreadRowImpl({
   isKeyboardFocused = false,
   onToggleSelect,
   dragHandle,
+  swipeRight = "none",
+  swipeLeft = "none",
+  listFiltersArchived = true,
+  hasChildren = false,
 }: {
   thread: PluginSidebarThread;
   depth: number;
@@ -350,6 +360,14 @@ function RadarThreadRowImpl({
   onToggleSelect?: (event: React.MouseEvent, threadId: string) => void;
   /** Grip affordance for drag-to-section (section grouping only). */
   dragHandle?: import("./RadarThreadList").RowDragHandle | null;
+  /** Touch swipe actions per direction; "none" leaves that side inert. */
+  swipeRight?: SwipeActionId;
+  swipeLeft?: SwipeActionId;
+  /** False on the All tab, where archiving leaves the row in place. */
+  listFiltersArchived?: boolean;
+  /** Whether the thread has any replies, shown or filtered out: archiving it
+   *  then asks the host to confirm. */
+  hasChildren?: boolean;
 }) {
   const { hasUnsubmittedDraft } = useSidebarThreadDraft(thread.id);
   const rowStatus = useSidebarThreadRowStatus(thread.id);
@@ -491,6 +509,77 @@ function RadarThreadRowImpl({
       });
     }
   }, [isEditing]);
+
+  const swipeState = {
+    isUnread: thread.isUnread,
+    isPinned: thread.isPinned,
+    isArchived: thread.isArchived,
+  };
+  const rightSwipe = swipeActionView(
+    swipeRight,
+    swipeState,
+    listFiltersArchived,
+    hasChildren,
+  );
+  const leftSwipe = swipeActionView(
+    swipeLeft,
+    swipeState,
+    listFiltersArchived,
+    hasChildren,
+  );
+  const togglePin = () => {
+    actions.setPinned(thread.id, !thread.isPinned).catch(() => {
+      toast.error("Couldn’t update pin");
+    });
+  };
+  const toggleArchive = () => {
+    if (thread.isArchived) onUnarchive(thread);
+    else actions.archive(thread.id);
+  };
+  const openInSplit = () => {
+    actions.open(thread.id, { split: true });
+    onNavigate();
+  };
+  const runSwipeAction = (action: SwipeActionView, offset: number) => {
+    closeHoverCard(true);
+    switch (action.id) {
+      case "read":
+        actions.setRead(thread.id, thread.isUnread).catch(() => {
+          toast.error("Couldn’t update read state");
+        });
+        break;
+      case "pin":
+        togglePin();
+        break;
+      case "archive":
+        toggleArchive();
+        break;
+      case "split":
+        openInSplit();
+        break;
+      case "rename":
+        onStartRename(thread);
+        break;
+      case "menu": {
+        // The row is still drawn aside by the swipe: anchor on where it rests.
+        const rect = rowRef.current?.getBoundingClientRect();
+        if (rect) onOpenMenu(rect.right - offset - 220, rect.bottom + 4, thread);
+        break;
+      }
+      case "delete":
+        actions.requestDelete(thread.id);
+        break;
+    }
+  };
+  const swipeReveal = useRowSwipe({
+    rowRef,
+    enabled: !isEditing && !selectionActive && !!(rightSwipe || leftSwipe),
+    right: rightSwipe,
+    left: leftSwipe,
+    restoreKey: `${thread.isArchived}`,
+    onStart: () => closeHoverCard(true),
+    onCommit: runSwipeAction,
+  });
 
   const visual: StatusVisual = statusVisualFor(thread.indicator);
   // Action states get the full wash+bar+pulse treatment whether read or not:
@@ -930,6 +1019,21 @@ function RadarThreadRowImpl({
       onMouseEnter={scheduleHoverCard}
       onMouseLeave={() => closeHoverCard(false)}
     >
+      {swipeReveal?.action ? (
+        <span
+          className={cn(
+            "radar-swipe-underlay",
+            `radar-swipe-${swipeReveal.action.id}`,
+          )}
+          data-side={swipeReveal.side}
+          aria-hidden="true"
+        >
+          <span className="radar-swipe-content">
+            <Icon name={swipeReveal.action.icon} aria-hidden="true" />
+            <span className="radar-swipe-label">{swipeReveal.action.label}</span>
+          </span>
+        </span>
+      ) : null}
       {gutterNode}
       <a
         href={thread.href}
@@ -1091,9 +1195,7 @@ function RadarThreadRowImpl({
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            actions.setPinned(thread.id, !thread.isPinned).catch(() => {
-              toast.error("Couldn’t update pin");
-            });
+            togglePin();
           }}
         >
           <Icon name={thread.isPinned ? "PinOff" : "Pin"} aria-hidden="true" />
@@ -1122,7 +1224,7 @@ function RadarThreadRowImpl({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onUnarchive(thread);
+              toggleArchive();
             }}
           >
             <Icon name="ArchiveRestore" aria-hidden="true" />
@@ -1137,7 +1239,7 @@ function RadarThreadRowImpl({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              actions.archive(thread.id);
+              toggleArchive();
             }}
           >
             <Icon name="Archive" aria-hidden="true" />
@@ -1189,22 +1291,11 @@ function RadarThreadRowImpl({
                 setHoverCard(null);
               }}
               onOpenSplit={() => {
-                actions.open(thread.id, { split: true });
-                onNavigate();
+                openInSplit();
                 setHoverCard(null);
               }}
-              onTogglePin={() => {
-                actions.setPinned(thread.id, !thread.isPinned).catch(() => {
-                  toast.error("Couldn’t update pin");
-                });
-              }}
-              onArchive={() => {
-                if (thread.isArchived) {
-                  onUnarchive(thread);
-                } else {
-                  actions.archive(thread.id);
-                }
-              }}
+              onTogglePin={togglePin}
+              onArchive={toggleArchive}
               onMouseEnter={() => {
                 isHoveringCard.current = true;
               }}
