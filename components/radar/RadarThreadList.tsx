@@ -58,6 +58,7 @@ import {
 } from "./RadarGroupHeader";
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
+import { setRailScope, useValidatedRailScope } from "./railScope";
 import {
   useThreadGroups,
   type ThreadGroup,
@@ -144,6 +145,7 @@ function useSidebarSettings() {
     writeStored(LAST_TWO_LINE_TITLES_KEY, wrapTitles ? "on" : "off");
   }, [loaded, defaultDensity, wrapTitles]);
   return {
+    railNav: flag("railNav", false),
     hoverCard: flag("hoverCard", true),
     celebrate: flag("celebrate", true),
     motion: flag("motion", true),
@@ -460,8 +462,25 @@ export function RadarThreadList({
     }),
     [lifecycle],
   );
-  const { status, threads, projects, sections, experimental_archived } =
-    experimental_useSidebarThreads(lifecyclesParam);
+  const {
+    status,
+    threads: allThreads,
+    projects,
+    sections,
+    experimental_archived,
+  } = experimental_useSidebarThreads(lifecyclesParam);
+  // The navigation rail can scope the list to one project.
+  const rememberedRailScope = useValidatedRailScope({ projects, status });
+  const railScope = settings.railNav ? rememberedRailScope : null;
+  const scopedProject = railScope ? projects.find((project) => project.id === railScope) : null;
+  const scopeName = scopedProject?.isPersonal ? "Personal" : scopedProject?.name ?? "Project";
+  const threads = useMemo(
+    () =>
+      railScope
+        ? allThreads.filter((thread) => thread.projectId === railScope)
+        : allThreads,
+    [allThreads, railScope],
+  );
   const actions = experimental_useSidebarThreadActions();
   const sdk = useSdk();
   const { providers } = experimental_useProviders();
@@ -1440,6 +1459,19 @@ export function RadarThreadList({
       }
     >
       <div className="radar-list-header">
+        {railScope ? (
+          <button
+            type="button"
+            className="radar-list-scope"
+            aria-label={`Clear project filter: ${scopeName}`}
+            title="Show every project"
+            onClick={() => setRailScope(null)}
+          >
+            <Icon name="Folder" aria-hidden="true" />
+            <span>{scopeName}</span>
+            <Icon name="X" aria-hidden="true" />
+          </button>
+        ) : null}
         <div className="radar-search">
           <Icon
             name="Search"
@@ -1607,8 +1639,10 @@ export function RadarThreadList({
             aria-checked={statusFilter === "live"}
             className={cn(
               "radar-chip",
+              "radar-chip-iconic",
               statusFilter === "live" && "radar-chip-active",
             )}
+            aria-label="Live"
             onClick={() => {
               const next = statusFilter === "live" ? "all" : "live";
               setStatusFilter(next);
@@ -1624,7 +1658,7 @@ export function RadarThreadList({
             >
               <Icon name="Zap" aria-hidden="true" />
             </span>
-            Live
+            <span className="radar-chip-label">Live</span>
             {statusCounts.live > 0 ? (
               <span className="radar-chip-count">{statusCounts.live}</span>
             ) : null}
@@ -1635,8 +1669,10 @@ export function RadarThreadList({
             aria-checked={statusFilter === "waiting"}
             className={cn(
               "radar-chip",
+              "radar-chip-iconic",
               statusFilter === "waiting" && "radar-chip-active",
             )}
+            aria-label="Waiting"
             onClick={() => {
               const next = statusFilter === "waiting" ? "all" : "waiting";
               setStatusFilter(next);
@@ -1650,7 +1686,7 @@ export function RadarThreadList({
                 statusCounts.waiting > 0 && "radar-dot-pulse",
               )}
             />
-            Waiting
+            <span className="radar-chip-label">Waiting</span>
             {statusCounts.waiting > 0 ? (
               <span className="radar-chip-count">{statusCounts.waiting}</span>
             ) : null}
@@ -1661,8 +1697,10 @@ export function RadarThreadList({
             aria-checked={statusFilter === "unread"}
             className={cn(
               "radar-chip",
+              "radar-chip-iconic",
               statusFilter === "unread" && "radar-chip-active",
             )}
+            aria-label="Unread"
             onClick={() => {
               const next = statusFilter === "unread" ? "all" : "unread";
               setStatusFilter(next);
@@ -1671,7 +1709,7 @@ export function RadarThreadList({
             title="Filter unread threads"
           >
             <span className="radar-unread" />
-            Unread
+            <span className="radar-chip-label">Unread</span>
             {statusCounts.unread > 0 ? (
               <span className="radar-chip-count">{statusCounts.unread}</span>
             ) : null}

@@ -12,11 +12,11 @@ Grouping, folding and attention states do the sorting for you, so nothing that
 needs a decision hides at the bottom of the list.
 
 ![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)
-![bb ≥ 0.43](https://img.shields.io/badge/bb-%E2%89%A5%200.43-22d3ee)
-![Plugin SDK ≥ 0.5.9](https://img.shields.io/badge/plugin%20sdk-%E2%89%A5%200.5.9-0369a1)
+![bb ≥ 0.44](https://img.shields.io/badge/bb-%E2%89%A5%200.44-22d3ee)
+![Plugin SDK ≥ 0.5.29](https://img.shields.io/badge/plugin%20sdk-%E2%89%A5%200.5.29-0369a1)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
 
-[Features](#features) · [Install](#install) · [How it works](#how-it-works) · [Settings](#settings) · [Development](#development)
+[Features](#features) · [Install](#install) · [Navigation rail](#navigation-rail) · [How it works](#how-it-works) · [Settings](#settings) · [Development](#development)
 
 <br>
 
@@ -176,7 +176,7 @@ bb plugin install path:$PWD --yes
 
 **Requirements**
 
-- bb **0.43+** (Plugin SDK 0.5.9+)
+- bb **0.44+** (Plugin SDK 0.5.29+)
 
 ## Where to find it
 
@@ -187,6 +187,92 @@ bb plugin install path:$PWD --yes
 | **Navigation above the list** | New thread, your inline destinations, and More for the rest. |
 | **Row hover** | Pin, rename, archive and a fuller menu; a peek card after a short pause. |
 | **Settings → Appearance** | Choose Radar for the thread list and the navigation. |
+
+## Navigation rail
+
+Enable **Navigation rail** (`railNav`) under Settings → Installed plugins →
+Radar Sidebar. It defaults off: navigation remains above the list, including
+the touch toolbar, until you enable it. Under Appearance, choose **Radar** for Sidebar and
+**Radar navigation** for Navigation, both supplied by Radar Sidebar.
+
+On desktop a 60px icon rail sits beside the thread list. It follows BB's
+saved navigation order and visibility: visible destinations inline, hidden
+ones in **More** (with a count on the icon), **Customize sidebar** at the
+foot. BB's own footer controls (Settings, Mobile apps, usage, Report a bug,
+updates, account) stack at the bottom of the same column; their disclosures
+open beside the rail. Below 768px the same rail (56px) runs down the left of
+BB's mobile drawer with the thread list beside it, like a chat app's
+server rail; BB's footer keeps its mobile row layout next to it. Tooltips
+and the labelled rail are desktop-only. Resize the sidebar with BB's normal
+handle to give the thread list more room.
+
+- **Project scope.** Below the destinations, every project with an active
+  thread gets a coloured monogram tile, most recently active first; an
+  amber dot marks a project with a thread waiting on you. Click a tile and
+  the thread list shows only that project, its heading becomes the project
+  name, and the tile fills with its colour. Click it again, the heading, or
+  Home to see every project. Home only clears the filter; **New thread** in
+  the heading remains BB’s create-thread action. Tooltips carry the tally ("4 threads ·
+  1 waiting · 2 live"). Live and waiting counts follow the thread list's
+  rules, including background and queued work. Remembered per client. A
+  project with only archived threads keeps its scope and clear heading;
+  deleted projects clear once the project directory has loaded. If you
+  choose another navigation provider while keeping this thread list, a
+  project filter button above Search lets you return to every project. Turning
+  `railNav` off shows all projects while preserving the choice for next time.
+- **Tooltips.** Pause on a rail icon (or focus it from the keyboard) for
+  the destination's name, its shortcut as a key cap, and the panel's
+  accessory that the icon can't fit; a dot on the icon marks that an
+  accessory exists.
+- **Active pill.** The current destination gets a primary-coloured bar on
+  the rail's edge, so it reads without colour.
+- **Keyboard.** Arrow keys step through the rail and wrap; Home/End jump to
+  the ends. Same inside the More popover.
+- **Right-click to arrange.** *Move to More* / *Keep in sidebar*, *Move up*
+  / *Move down* (saved to BB's own order, so Customize sidebar agrees),
+  *Open in split*, and *Plugin details* for plugin panels.
+- **Customize beside the rail.** BB's arrangement editor opens as a panel
+  next to the rail with the rail still visible, so reordering and hiding
+  items is reflected live where they sit.
+- **Short windows.** The rail reserves the height it needs; BB's footer
+  stack takes what is left and scrolls internally, so destinations and
+  Customize stay visible on small screens. Visible position indicators
+  show when either stack scrolls, without fading the last item.
+- **Status chips fold** to glyph and count when the list is 284px or less,
+  so the filter row stays on one line.
+- **Mobile heading controls** keep 44px touch targets, and the scoped
+  project heading always shows its clear icon.
+
+<p align="center"><img src="docs/screenshots/rail-desktop.webp" width="420" alt="Radar Sidebar with Navigation rail enabled beside its thread list"></p>
+
+### Labelled rail (experimental, off by default)
+
+Settings → Installed plugins → Radar Sidebar → **Labelled rail**
+(`wideRail`) requires Navigation rail and adds a double-chevron toggle at the foot of the rail. On, the rail widens to 168px
+with labels, the sidebar grows by the same amount so the thread list keeps
+its width, and BB's footer actions become labelled rows too. The choice is
+remembered per client.
+
+This restyles BB's sidebar markup (its `data-sidebar` attributes, the
+sidebar width variable, and the screen-reader labels inside footer
+buttons), which is why it ships off: a BB update that changes that markup
+can break it. The plugin checks for the structure it needs and hides the
+toggle when it is missing, so the worst case is a narrow rail, not a broken
+sidebar. This integration was live-checked on BB 0.45.1 nightly, with tests
+and typechecking against SDK 0.5.29. Earlier rail prototypes were checked
+on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration.
+
+<p align="center"><img src="docs/screenshots/rail-wide.webp" width="420" alt="The optional labelled rail with BB’s footer actions"></p>
+<p align="center"><img src="docs/screenshots/rail-mobile.webp" width="240" alt="The project rail beside the thread list in the mobile drawer"></p>
+
+## Compatibility notes
+
+The gutter, footer stacking and updates tile use BB's `data-sidebar` DOM
+attributes via `:has()`, scoped to this provider. If a future BB shell
+changes those, the rail still renders but the footer may need a selector
+update. Nothing here touches BB's data: thread operations go through the
+public SDK, navigation order through `setOrder`/`setVisible`, and client
+state lives under `radar-sidebar:*` localStorage keys.
 
 ## How it works
 
@@ -236,6 +322,8 @@ flowchart LR
 
 | Setting | Default | |
 | --- | --- | --- |
+| `railNav` | `false` | Navigation rail with project filters beside the thread list. |
+| `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed. Also respects `prefers-reduced-motion`. |

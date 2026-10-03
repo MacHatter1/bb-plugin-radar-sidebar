@@ -66,6 +66,20 @@ export default async function plugin(bb: BbPluginApi) {
         "Let long thread titles wrap onto a second line before truncating. Applies in both densities.",
       default: false,
     },
+    railNav: {
+      type: "boolean",
+      label: "Navigation rail",
+      description:
+        "Show a vertical navigation rail with project filters beside the thread list on desktop and mobile. Off keeps navigation above the list.",
+      default: false,
+    },
+    wideRail: {
+      type: "boolean",
+      label: "Labelled rail (experimental)",
+      description:
+        "Requires Navigation rail. Adds a toggle at the foot of the navigation rail that widens it to show labels, including BB's own footer actions. Experimental: uses BB's sidebar layout and falls back to icons when the expected layout is unavailable.",
+      default: false,
+    },
     swipeActions: {
       type: "boolean",
       label: "Swipe actions",

@@ -24,6 +24,42 @@ function rules(): { selector: string; body: string }[] {
 }
 
 describe("app.css", () => {
+  it("anchors every host shell override to the mounted rail so deselection releases it", () => {
+    const hostRules = rules().flatMap(rule => rule.selector.split(/,(?![^()]*\))/).map(selector => ({ selector, body: rule.body })))
+      .filter(rule => /\[data-sidebar=|\.group\.peer/.test(rule.selector));
+    expect(hostRules.length).toBeGreaterThan(40);
+    expect(hostRules.filter(rule => !/:has\(\.radar-double-navigation(?:[-[)]|\s)/.test(rule.selector)).map(rule => rule.selector)).toEqual([]);
+  });
+
+  it("joins BB's hidden preflight layer only for the mounted desktop rail", () => {
+    expect(css).toMatch(/@media \(min-width: 768px\)[\s\S]*@layer base\s*\{\s*\[data-sidebar="sidebar"\]:has\(\.radar-double-navigation\) > nav > \[hidden\]:has\(> \[data-bb-plugin-root\]\)\s*\{\s*display: contents !important/);
+    const hidden = rules().filter(rule => /\[hidden\]/.test(rule.selector));
+    expect(hidden).toHaveLength(1);
+  });
+
+  it("derives wide host growth from the rail widths and leaves collapsed host panels alone", () => {
+    const growth = rules().find(rule => /var\(--sidebar-width\)/.test(rule.body));
+    expect(growth?.body).toMatch(/var\(--radar-rail-wide\) - var\(--radar-rail-narrow\)/);
+    expect(growth?.body).not.toMatch(/108px/);
+    for (const selector of growth!.selector.split(",")) expect(selector).toContain('[data-state="expanded"]');
+  });
+
+  it("separates the touch toolbar grid from the rail's vertical flex layout", () => {
+    expect(rules().find(rule => rule.selector === ".radar-double-navigation .radar-double-rail")?.body).toMatch(/display:\s*flex/);
+    expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*:has\(\.radar-double-navigation-compact\)/);
+    expect(css).toContain("env(safe-area-inset-top");
+    expect(css).toContain("prefers-reduced-motion");
+  });
+
+  it("documents the chip-fold threshold consistently", () => {
+    expect(css).toContain("@container radar-thread-list (max-width: 284px)");
+    for (const file of ["README.md", "CHANGELOG.md"]) {
+      const copy = readFileSync(resolve(import.meta.dirname, file), "utf8");
+      expect(copy).toContain("284px");
+      expect(copy).not.toMatch(/(?:270|285)px/);
+    }
+  });
+
   it("lets a swiped-away row fold shut whatever its density", () => {
     // The compact and two-line rules set a min-height at the same specificity
     // and come later in the file, so only !important lets the fold win.
@@ -118,7 +154,7 @@ describe("app.css", () => {
     // Touch viewports keep a sidebar wide enough for a row of icons, so one
     // icon per line pushed the thread list half a screen down. The min()
     // keeps the 32px track from overflowing a rail narrower than 48px.
-    const compact = rules().find((rule) => rule.selector === ".radar-nav-compact");
+    const compact = rules().find((rule) => rule.selector === ".radar-nav-compact:not(.radar-double-rail)");
     expect(compact?.body).toMatch(/display:\s*grid/);
     expect(compact?.body).toMatch(/grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(32px,\s*100%\),\s*1fr\)\)/);
     expect(compact?.body).toMatch(/justify-items:\s*center/);
