@@ -2,6 +2,12 @@ A thread list you can read at a glance, for BB.
 
 ## What you get
 
+- **Optional navigation rail.** Enable `railNav` to place destinations and
+  project filters beside the thread list on desktop and mobile. Home clears
+  the project filter; New thread keeps BB's own action. The experimental
+  `wideRail` option adds desktop labels. Both settings default off, so
+  existing installs keep navigation above the list.
+
 - A **Radar thread list** in the left sidebar. Threads group by Today,
   Yesterday, Previous 7 days, Previous 30 days or Older, keyed off real
   activity rather than when you last opened them, so merely reading a thread

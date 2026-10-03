@@ -6,6 +6,7 @@ import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
 import { DAY, HOUR, NOW, makeProject, makeSection, makeThread } from "./fixtures";
+import { resetRailScope, setRailScope } from "./railScope";
 
 // Expose configurable test exports while retaining the SDK's slot runtime.
 vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => ({
@@ -95,10 +96,53 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup();
+  resetRailScope();
   localStorage.clear();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("project scope without the navigation rail", () => {
+  it("shows every project when railNav is off and restores the saved filter when enabled", () => {
+    const threads = [makeThread({ id: "a", projectId: "proj_a" }), makeThread({ id: "b", projectId: "proj_b" })];
+    const projects = [makeProject({ id: "proj_a", name: "Alpha" }), makeProject({ id: "proj_b", name: "Beta" })];
+    setRailScope("proj_a");
+    const slot = renderThreads(threads, { settings: { railNav: false }, projects });
+    expect(visibleRowIds(slot.container).sort()).toEqual(["a", "b"]);
+    expect(screen.queryByRole("button", { name: "Clear project filter: Alpha" })).toBeNull();
+    expect(localStorage.getItem("radar-sidebar:rail-scope:v1")).toBe("proj_a");
+    slot.lifecycle.unmount();
+    const enabled = renderThreads(threads, { settings: { railNav: true }, projects });
+    expect(visibleRowIds(enabled.container)).toEqual(["a"]);
+  });
+
+  it("shows the scope and lets another navigation provider's user restore every project", () => {
+    setRailScope("proj_a");
+    const slot = renderThreads([
+      makeThread({ id: "a", projectId: "proj_a" }),
+      makeThread({ id: "b", projectId: "proj_b" }),
+    ], { settings: { railNav: true }, projects: [makeProject({ id: "proj_a", name: "Alpha" }), makeProject({ id: "proj_b", name: "Beta" })] });
+    expect(visibleRowIds(slot.container)).toEqual(["a"]);
+    fireEvent.click(screen.getByRole("button", { name: "Clear project filter: Alpha" }));
+    expect(visibleRowIds(slot.container).sort()).toEqual(["a", "b"]);
+    expect(localStorage.getItem("radar-sidebar:rail-scope:v1")).toBeNull();
+  });
+
+  it("clears a deleted project with the list selected on its own", () => {
+    setRailScope("deleted_project");
+    const slot = renderThreads([makeThread({ id: "a" })]);
+    expect(visibleRowIds(slot.container)).toEqual(["a"]);
+    expect(localStorage.getItem("radar-sidebar:rail-scope:v1")).toBeNull();
+  });
+
+  it("retains a valid scope when only archived threads remain", () => {
+    localStorage.setItem("radar-sidebar:lifecycles:v1", "archived");
+    setRailScope("proj_a");
+    const slot = renderThreads([makeThread({ id: "a", isArchived: true })], { settings: { railNav: true }, projects: [makeProject({ id: "proj_a", name: "Alpha" })] });
+    expect(visibleRowIds(slot.container)).toEqual(["a"]);
+    expect(screen.getByRole("button", { name: "Clear project filter: Alpha" })).toBeTruthy();
+  });
 });
 
 describe("grouping", () => {

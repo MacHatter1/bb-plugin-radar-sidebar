@@ -4,6 +4,31 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0 - 2026-10-03
+
+### Added
+
+- Optional **Navigation rail** (`railNav`, default `false`) beside the Radar
+  thread list on desktop and mobile, retaining the published plugin identity
+  and the existing navigation above the list when off.
+- Project monogram filters, Home to show every project, desktop tooltips with
+  shortcuts and tallies, keyboard traversal, and destination arrangement menus.
+- Experimental **Labelled rail** (`wideRail`, default `false`), requiring
+  Navigation rail and a recognised host shell. Sidebar expansion derives
+  from the rail widths and preserves the thread list's room.
+- Scoped host footer and Customize layouts that release on deselection,
+  setting changes, Settings, and offcanvas collapse; reduced motion and
+  mobile safe-area support.
+- Narrow-list status chips fold at 284px, retaining accessible labels.
+- CSS cascade guards and project-scope persistence/lifecycle regression tests.
+
+### Fixed
+
+- Home clears the project filter without creating a thread; New thread keeps
+  BB's original action and does not clear the selected project.
+- Turning the rail off restores every project while remembering the filter
+  for later; an independently selected list offers its own clear control.
+
 ## 0.4.1 - 2026-10-01
 
 ### Changed
