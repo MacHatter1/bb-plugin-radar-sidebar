@@ -110,7 +110,15 @@ export function useRowSwipe({
    *  action runs, for anything anchored to where the row sits. */
   onCommit: (action: SwipeActionView, offset: number) => void;
 }): SwipeReveal | null {
-  const [reveal, setReveal] = useState<SwipeReveal | null>(null);
+  const [reveal, setRevealState] = useState<SwipeReveal | null>(null);
+  // Teardown runs on every row whenever swiping toggles (selection mode, say).
+  // Skipping the no-op null spares each row a second, wasted render.
+  const revealRef = useRef<SwipeReveal | null>(null);
+  const setReveal = (next: SwipeReveal | null) => {
+    if (next === null && revealRef.current === null) return;
+    revealRef.current = next;
+    setRevealState(next);
+  };
   const latest = useRef({ right, left, onStart, onCommit });
   latest.current = { right, left, onStart, onCommit };
   const phaseRef = useRef<Phase | null>(null);

@@ -2,6 +2,8 @@ import { createElement } from "react";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import * as pluginSdk from "@get-bb/plugin-sdk/app";
+import { railHostCss } from "./railHostStyles";
 import type { ExperimentalSidebarNavigationItem, ExperimentalSidebarNavigationProps, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
 import { DAY, makeProject, makeThread, NOW } from "./fixtures";
 import { resetRailScope, setRailScope, useRailScope } from "./railScope";
@@ -36,6 +38,10 @@ function destination(id: string, label: string, isVisible = true): ExperimentalS
     icon: { kind: "plugin", pluginId: "alpha", icon: "Zap" }, isDisabled: false,
     isVisible, isLoading: false, pluginId: "alpha", shortcut: null, experimental_Accessory: null,
   };
+}
+/** The rail's host <style> elements still in the document (the harness adds its own). */
+function railHostStyles(): HTMLStyleElement[] {
+  return Array.from(document.querySelectorAll("style")).filter((style) => style.textContent?.includes('[data-sidebar="sidebar"]'));
 }
 function mount(items: ExperimentalSidebarNavigationItem[], isCompactViewport = false) {
   return renderSlot(navigation, { ...props, isCompactViewport }, { sidebarNavigation: { items } });
@@ -171,6 +177,9 @@ describe("host navigation arrangement", () => {
   it("tracks scroll position in both stacks and releases cues and listeners on unmount", () => {
     let overflowing = true;
     const callbacks: Array<() => void> = [];
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
     vi.stubGlobal("ResizeObserver", class {
       constructor(callback: () => void) { callbacks.push(callback); }
       observe() {}
@@ -195,27 +204,40 @@ describe("host navigation arrangement", () => {
     };
     const slot = renderSlot(wrapped, props, { sidebarNavigation: { items: [destination("board", "Board")] } });
     const nav = document.querySelector(".radar-double-navigation")!;
+    const sidebar = document.querySelector<HTMLElement>('[data-sidebar="sidebar"]')!;
     const rail = document.querySelector<HTMLElement>(".radar-double-rail")!;
     const footer = document.querySelector<HTMLElement>('[data-sidebar="footer"]')!;
     const stacks = [document.querySelector<HTMLElement>(".radar-double-rail-items")!,
       document.querySelector<HTMLElement>('[data-sidebar="menu"]')!];
-    for (const flag of ["data-rail-overflow", "data-footer-overflow"]) expect(nav.hasAttribute(flag)).toBe(true);
-    for (const owner of [rail, footer]) {
-      expect(owner.style.getPropertyValue("--radar-scroll-height")).toBe("50px");
-      expect(owner.style.getPropertyValue("--radar-scroll-top")).toBe("0px");
-    }
-    stacks.forEach((stack) => { stack.scrollTop = 100; fireEvent.scroll(stack); });
-    for (const owner of [rail, footer]) expect(owner.style.getPropertyValue("--radar-scroll-top")).toBe("50px");
+    // BB's footer thumb and the height reserve are rules in the rail's own
+    // <style>; BB's elements are never written to.
+    const hostValues = nav.querySelectorAll<HTMLStyleElement>(":scope > style")[1]!;
+    const value = (name: string) => hostValues.textContent?.match(new RegExp(`${name}: ([^;]+);`))?.[1] ?? "";
+    const thumbs = (name: string) => [rail.style.getPropertyValue(name), value(name)];
+    expect(nav.hasAttribute("data-rail-overflow")).toBe(true);
+    expect(value("--radar-rail-reserve")).not.toBe("");
+    expect(thumbs("--radar-scroll-height")).toEqual(["50px", "50px"]);
+    expect(thumbs("--radar-scroll-top")).toEqual(["0px", "0px"]);
+    for (const element of [document.documentElement, sidebar, footer]) expect(element.getAttribute("style")).toBeNull();
+    // A burst of scroll events waits for one frame instead of reading
+    // layout per event.
+    stacks.forEach((stack) => { stack.scrollTop = 100; fireEvent.scroll(stack); fireEvent.scroll(stack); });
+    expect(thumbs("--radar-scroll-top")).toEqual(["0px", "0px"]);
+    expect(frames).toHaveLength(1);
+    frames.splice(0).forEach((frame) => frame(0));
+    expect(thumbs("--radar-scroll-top")).toEqual(["50px", "50px"]);
     overflowing = false;
     act(() => callbacks.forEach((callback) => callback()));
-    for (const flag of ["data-rail-overflow", "data-footer-overflow"]) expect(nav.hasAttribute(flag)).toBe(false);
-    for (const owner of [rail, footer]) expect(owner.style.getPropertyValue("--radar-scroll-height")).toBe("");
+    expect(nav.hasAttribute("data-rail-overflow")).toBe(false);
+    expect(thumbs("--radar-scroll-height")).toEqual(["", ""]);
+    expect(hostValues.textContent).not.toContain("::after");
     overflowing = true;
     act(() => callbacks.forEach((callback) => callback()));
     slot.lifecycle.unmount();
     stacks.forEach((stack) => fireEvent.scroll(stack));
-    for (const owner of [rail, footer]) expect(owner.style.getPropertyValue("--radar-scroll-height")).toBe("");
-    expect(document.documentElement.style.getPropertyValue("--radar-rail-reserve")).toBe("");
+    expect(frames).toHaveLength(0);
+    expect(railHostStyles()).toEqual([]);
+    for (const element of [document.documentElement, sidebar, footer]) expect(element.getAttribute("style")).toBeNull();
   });
 
   it.each([false, true])("releases the rail when BB hides the app body for Settings and restores it on return (compact=%s)", async (compact) => {
@@ -235,7 +257,8 @@ describe("host navigation arrangement", () => {
     expect(document.querySelector(".radar-double-navigation")).toBeTruthy();
     body.hidden = true;
     await waitFor(() => expect(document.querySelector(".radar-double-navigation")).toBeNull());
-    expect(document.documentElement.style.getPropertyValue("--radar-rail-reserve")).toBe("");
+    // The rail's host styles go with it.
+    expect(document.querySelector('[data-sidebar="sidebar"] style')).toBeNull();
     body.hidden = false;
     await waitFor(() => expect(screen.getByRole("button", { name: "Board" })).toBeTruthy());
     // The host's inner Customize wrapper is a separate visibility boundary.
@@ -568,9 +591,11 @@ describe("railNav layout setting", () => {
     expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(document.documentElement.style.getPropertyValue("--radar-rail-reserve")).toBe("");
+    expect(railHostStyles()).toEqual([]);
     host.railNav = true;
     slot.rerender(createElement(navigation.component, props));
     expect(screen.getByRole("button", { name: "Home" })).toBeTruthy();
+    expect(railHostStyles().map((style) => style.textContent)).toEqual([railHostCss({ wide: false, compact: false, scoped: false })]);
     expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
   });
 
@@ -580,5 +605,64 @@ describe("railNav layout setting", () => {
     renderSlot(navigation, props, { sidebarNavigation: { items: [destination("notes", "Notes")] }, settings: { wideRail: true } });
     expect(document.querySelector(".radar-double-navigation-wide")).toBeNull();
     expect(screen.queryByRole("button", { name: "Hide labels" })).toBeNull();
+  });
+});
+
+describe("host styles", () => {
+  // The rail restyles BB's sidebar from <style> elements in its own markup.
+  // It never writes to BB's elements: :has() on body or the sidebar made the
+  // browser restyle the page on every DOM change, and attributes on BB's
+  // elements edited host DOM.
+  function shell(p: ExperimentalSidebarNavigationProps) {
+    return createElement(
+      "div", { className: "group peer", "data-state": "expanded" },
+      createElement(
+        "div", { style: { "--sidebar-width": "320px" } as React.CSSProperties },
+        createElement("div", { "data-sidebar": "sidebar" }, createElement(navigation.component, p), createElement("div", { "data-sidebar": "footer" })),
+      ),
+    );
+  }
+  const hostSheet = () => document.querySelector<HTMLStyleElement>(".radar-double-navigation > style")?.textContent ?? null;
+
+  it("follows the rail's state without ever writing to BB's elements, and releases on unmount", () => {
+    host.sidebarThreads = { status: "ready", projects: [makeProject({ id: "proj_a", name: "Alpha" })], threads: [makeThread({ id: "a", projectId: "proj_a" })] };
+    const writes: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => writes.push(...records));
+    observer.observe(document.documentElement, { attributes: true, subtree: true });
+    const slot = renderSlot({ ...navigation, component: shell }, props, { sidebarNavigation: { items: [destination("board", "Board")] }, settings: { wideRail: true } });
+    const peer = document.querySelector<HTMLElement>(".group.peer")!;
+    const bbElements = [document.documentElement, document.body, peer, peer.firstElementChild!, document.querySelector('[data-sidebar="sidebar"]')!, document.querySelector('[data-sidebar="footer"]')!];
+    const state = { wide: false, compact: false, scoped: false };
+    expect(hostSheet()).toBe(railHostCss(state));
+
+    fireEvent.click(screen.getByRole("button", { name: "Show labels" }));
+    expect(hostSheet()).toBe(railHostCss({ ...state, wide: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Alpha: show only this project" }));
+    expect(hostSheet()).toBe(railHostCss({ ...state, wide: true, scoped: true }));
+    slot.rerender(createElement(shell, { ...props, isCompactViewport: true }));
+    expect(hostSheet()).toBe(railHostCss({ ...state, compact: true, scoped: true }));
+
+    slot.lifecycle.unmount();
+    expect(railHostStyles()).toEqual([]);
+    writes.push(...observer.takeRecords());
+    observer.disconnect();
+    expect(writes.filter((record) => bbElements.includes(record.target as Element)).map((record) => record.attributeName)).toEqual([]);
+  });
+
+  it("leaves destinations and tiles alone when a thread update changes nothing they show", () => {
+    const thread = makeThread({ id: "a", projectId: "proj_a" });
+    host.sidebarThreads = { status: "ready", projects: [makeProject({ id: "proj_a", name: "Alpha" })], threads: [thread] };
+    const split = vi.spyOn(pluginSdk, "experimental_useSidebarNavigationSplit");
+    const slot = mount([destination("board", "Board"), destination("notes", "Notes")]);
+    const tile = screen.getByRole("button", { name: "Alpha: show only this project" });
+    split.mockClear();
+    host.sidebarThreads = { ...host.sidebarThreads, threads: [{ ...thread, updatedAt: thread.updatedAt + 1 }] };
+    slot.rerender(createElement(navigation.component, props));
+    expect(split).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Alpha: show only this project" })).toBe(tile);
+    // A change the tiles do show still lands.
+    host.sidebarThreads = { ...host.sidebarThreads, threads: [{ ...thread, indicator: "waiting-for-input" }] };
+    slot.rerender(createElement(navigation.component, props));
+    expect(tile.querySelector(".radar-rail-project-dot")).not.toBeNull();
   });
 });

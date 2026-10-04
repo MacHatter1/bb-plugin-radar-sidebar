@@ -25,7 +25,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { activityTime, isLiveThread, timeAgo } from "./time";
+import { isLiveThread } from "./time";
 import {
   formatReasoningLevel,
   useModelDisplayName,
@@ -296,7 +296,7 @@ function RadarThreadRowImpl({
   isEditing,
   isVisible = true,
   actions,
-  now,
+  timeText,
   onNavigate,
   onOpenMenu,
   onStartRename,
@@ -339,7 +339,9 @@ function RadarThreadRowImpl({
   /** False inside a folded group or ancestor; suspend requests and gestures. */
   isVisible?: boolean;
   actions: PluginSidebarThreadActions;
-  now: number;
+  /** Relative activity time, e.g. "5m ago". A string rather than the clock,
+   * so the minute tick re-renders only rows whose label actually moved. */
+  timeText: string;
   onNavigate: () => void;
   onOpenMenu: (clientX: number, clientY: number, thread: PluginSidebarThread) => void;
   onStartRename: (thread: PluginSidebarThread) => void;
@@ -374,7 +376,8 @@ function RadarThreadRowImpl({
   hasChildren?: boolean;
   /**
    * False while a folded family or group hides the row. bb numbers jump
-   * shortcuts over every marked row in DOM order, and folds stay mounted.
+   * shortcuts over every marked row in DOM order, and a closing fold keeps
+   * its rows mounted until its animation ends.
    */
   isShortcutTarget: boolean;
 }) {
@@ -686,8 +689,6 @@ function RadarThreadRowImpl({
           ...(where ? [<span key="where">{where}</span>] : []),
         ]
       : [];
-  const lastActivity = activityTime(thread, now);
-  const timeText = timeAgo(lastActivity, now);
   // The provider icon identifies the provider, so its name isn't echoed in
   // the subtitle — except when no icon is available, or in the tooltip.
   const needsProviderText = !providerIcon;

@@ -4,6 +4,38 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Keep BB's sidebar toggle and the updates chips inside the navigation rail.
+  The desktop toggle was offset past the rail to clear the traffic lights,
+  and the updates chips wrapped out of the footer column.
+- Give the updates chips a taller cell in the narrow rail. The project
+  tiles keep their size. The destination list scrolls in a shorter stack
+  so the footer can use the height it needs. The same separator that sits
+  above the project icons also sits above Show labels and Customize.
+- Keep the thread list responsive while agents run. Each sidebar update
+  re-rendered every row, even when only one thread had changed. Now only
+  the changed row re-renders. The minute clock now refreshes only rows
+  whose time label moved.
+- Unmount rows in a folded group or family once it finishes closing.
+  Folded threads no longer cost rendering work or pull-request lookups.
+- Stop the sidebar toggle alignment from 0.5.1 slowing down all of BB.
+  Its `body:has()` rules made every DOM change restyle the whole page,
+  even with the rail off. That covered each streamed chunk and each
+  tooltip or menu opening. The rail now renders its overrides for BB's
+  sidebar as `<style>` elements in its own markup, applied only while it
+  is mounted. It no longer uses `:has()` and never writes to BB's
+  elements. Computed styles are unchanged.
+  In a 20,000-element benchmark, a chat update drops from about 6.8ms to
+  0.35ms, and a tooltip from about 5.8ms to 2µs.
+- Lighten the navigation rail. Its height reserve is now a rule scoped to
+  the sidebar rather than a custom property on the page root, which cost
+  a full-page restyle on every resize frame. Thread updates no longer re-render its destinations
+  and project tiles unless something they show changed. Scroll updates
+  for its scroll thumb run once per frame.
+
 ## 0.5.1 - 2026-10-04
 
 ### Fixed

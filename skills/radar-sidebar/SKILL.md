@@ -63,7 +63,12 @@ Show labels / Hide labels control on desktop. The 168px rail expands the
 sidebar by its extra width so the thread list keeps its room. It probes the
 host sidebar/footer/width structure and hides the toggle when unavailable.
 The gutter, footer stacking and Customize layout use host `data-sidebar`
-selectors scoped to the mounted rail; disabling it releases those styles.
+selectors in `components/radar/railHostStyles.ts`. The rail renders them
+as `<style>` elements in its own markup, by state (wide, compact, scoped),
+plus a small `<style>` for the measured footer reserve and scroll thumb.
+Disabling the rail unmounts them and releases those styles. It never
+writes to BB's elements, and it avoids `:has()` on the page or sidebar,
+which restyled the whole page on every DOM change.
 A BB shell update can require selector adjustments. Wide mode and tooltips
 are desktop-only; safe-area padding and reduced motion are respected.
 
@@ -146,8 +151,9 @@ back to BB's list automatically.
   for an unsent composer draft, blue pip for unread.
 - State changes animate: washes fade, badges pop in, quiet rows fold
   smoothly, and groups + families expand/collapse with an animated roll
-  (staying mounted so both directions glide, hidden from keyboard and
-  screen readers while folded; all off under prefers-reduced-motion).
+  (rows stay mounted only while the fold closes, hidden from keyboard and
+  screen readers, then unmount so a folded group or family costs nothing;
+  all off under prefers-reduced-motion).
   Threads flipping from live work to done get a one-time springy
   check-pop on their status badge.
 - Adaptive rows (`adaptiveCollapse`): quiet read-idle rows collapse to the
