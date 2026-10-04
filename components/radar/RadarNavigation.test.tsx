@@ -506,7 +506,30 @@ describe("project scope tiles", () => {
     fireEvent.click(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
     fireEvent.click(screen.getByRole("button", { name: "New thread" }));
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([]);
+  });
+
+  it("starts the new thread in the scoped project", () => {
+    const slot = mountWithThreads();
+    fireEvent.click(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+    expect(slot.inspection.sidebarActionCalls).toEqual([{ method: "openNewThread", options: { projectId: "proj_a", focusPrompt: true } }]);
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([]);
+  });
+
+  it("uses the host's new thread when no project is scoped", () => {
+    const slot = mountWithThreads();
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
     expect(slot.inspection.sidebarNavigationCalls).toEqual([{ method: "activate", itemId: "__bb__/new-thread", openInSplit: false }]);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+  });
+
+  it("keeps the host's split behaviour for a modified click while scoped", () => {
+    const slot = mountWithThreads();
+    fireEvent.click(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }), { altKey: true });
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([{ method: "activate", itemId: "__bb__/new-thread", openInSplit: true }]);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
   });
 
   it("explains the tally in the tile tooltip and marks waiting projects", () => {

@@ -43,7 +43,9 @@ remembered rail project filter. Turning it back on restores that choice.
 The rail sits beside the list on desktop (60px) and in the mobile drawer
 (56px). BB still supplies destination order, visibility and actions. Search
 stays on the rail; **Home** only clears the project filter and never creates
-or opens a thread. **New thread** remains BB's action in the list heading.
+or opens a thread. **New thread** in the list heading starts in the scoped
+project, or BB's own action when no project is scoped (Option-click opens a
+split without the project preset).
 Project tiles show visible, unarchived threads, newest project first; click a
 tile to filter, click it again or Home/the heading to clear. A project with
 only archives keeps its scope. A deleted project clears once the directory

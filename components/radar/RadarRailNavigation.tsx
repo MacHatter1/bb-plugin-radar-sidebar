@@ -14,6 +14,7 @@ import ArrowRightDoubleIcon from "@hugeicons/core-free-icons/ArrowRightDoubleIco
 import {
   experimental_Icon as HostIcon,
   experimental_useSidebarNavigation,
+  experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
   useSettings,
   type ExperimentalSidebarNavigationItem,
@@ -154,6 +155,7 @@ function RailNavigationBody({
 }: ExperimentalSidebarNavigationProps & { footerHeight: number }) {
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
+  const threadActions = experimental_useSidebarThreadActions();
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -242,6 +244,26 @@ function RailNavigationBody({
       actions.activate(item.id, { openInSplit });
     },
     [actions, hideTip],
+  );
+  // With a project scoped, New thread starts in that project. openNewThread
+  // can't open a split, so a split activation keeps the host's behaviour.
+  const scopedProjectId = scopedProject?.id ?? null;
+  const activateNewThread = useCallback(
+    (item: ExperimentalSidebarNavigationItem, openInSplit: boolean) => {
+      if (scopedProjectId === null || openInSplit) {
+        activate(item, openInSplit);
+        return;
+      }
+      if (item.isDisabled || item.isLoading) return;
+      hideTip();
+      setMoreAt(null);
+      setMenu(null);
+      threadActions.openNewThread({
+        projectId: scopedProjectId,
+        focusPrompt: true,
+      });
+    },
+    [activate, hideTip, scopedProjectId, threadActions],
   );
   const closeMore = useCallback(() => setMoreAt(null), []);
 
@@ -677,7 +699,7 @@ function RailNavigationBody({
           <NavigationButton
             item={newThread}
             isActive={false}
-            onActivate={activate}
+            onActivate={activateNewThread}
             className="radar-double-new-thread"
             title={`${hintFor(newThread)} — Option-click opens in a split`}
           >

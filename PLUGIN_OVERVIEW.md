@@ -4,7 +4,7 @@ A thread list you can read at a glance, for BB.
 
 - **Optional navigation rail.** Enable `railNav` to place destinations and
   project filters beside the thread list on desktop and mobile. Home clears
-  the project filter; New thread keeps BB's own action. The experimental
+  the project filter; New thread starts in the scoped project. The experimental
   `wideRail` option adds desktop labels. Both settings default off, so
   existing installs keep navigation above the list.
 

@@ -216,7 +216,8 @@ handle to give the thread list more room.
   the thread list shows only that project, its heading becomes the project
   name, and the tile fills with its colour. Click it again, the heading, or
   Home to see every project. Home only clears the filter; **New thread** in
-  the heading remains BB’s create-thread action. Tooltips carry the tally ("4 threads ·
+  the heading starts the thread in the scoped project (Option-click opens a
+  split instead, without the project preset). Tooltips carry the tally ("4 threads ·
   1 waiting · 2 live"). Live and waiting counts follow the thread list's
   rules, including background and queued work. Remembered per client. A
   project with only archived threads keeps its scope and clear heading;
