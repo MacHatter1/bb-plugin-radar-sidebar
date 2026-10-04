@@ -28,6 +28,11 @@ All notable changes to Radar Sidebar are documented here. The format follows
   BB's original action and does not clear the selected project.
 - Turning the rail off restores every project while remembering the filter
   for later; an independently selected list offers its own clear control.
+- Project tiles sort by real activity rather than read timestamps, with live
+  work ahead of idle projects.
+- More focuses its first enabled destination so keyboard traversal works
+  immediately, in both navigation layouts.
+- Entering a compact viewport clears visible and pending desktop tooltips.
 
 ## 0.4.1 - 2026-10-01
 

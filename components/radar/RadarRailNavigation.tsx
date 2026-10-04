@@ -27,7 +27,7 @@ import {
   setRailScope,
   useValidatedRailScope,
 } from "./railScope";
-import { isLiveThread } from "./time";
+import { activityTime, isLiveThread } from "./time";
 import {
   hintFor,
   RowIcon,
@@ -51,6 +51,7 @@ type RailProject = {
 function useRailProjects() {
   const { threads, projects, status } = experimental_useSidebarThreads();
   const railProjects = useMemo(() => {
+    const now = Date.now();
     const byId = new Map<string, RailProject>();
     for (const thread of threads) {
       if (thread.isHidden || thread.isArchived) continue;
@@ -80,7 +81,7 @@ function useRailProjects() {
         entry.waiting += 1;
       }
       if (thread.isUnread) entry.unread += 1;
-      entry.latest = Math.max(entry.latest, thread.updatedAt);
+      entry.latest = Math.max(entry.latest, activityTime(thread, now));
     }
     return [...byId.values()].sort((a, b) => b.latest - a.latest);
   }, [threads, projects]);
@@ -192,6 +193,9 @@ function RailNavigationBody({
     [],
   );
   useEffect(() => hideTip, [hideTip]);
+  useEffect(() => {
+    if (isCompactViewport) hideTip();
+  }, [isCompactViewport, hideTip]);
 
   const activate = (
     item: ExperimentalSidebarNavigationItem,
@@ -382,7 +386,7 @@ function RailNavigationBody({
           onClose={() => setMenu(null)}
         />
       ) : null}
-      {tip && !moreAt && !menu ? <RailTooltip tip={tip} /> : null}
+      {!isCompactViewport && tip && !moreAt && !menu ? <RailTooltip tip={tip} /> : null}
     </>
   );
 

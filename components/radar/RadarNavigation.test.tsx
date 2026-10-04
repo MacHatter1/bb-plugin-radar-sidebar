@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { ExperimentalSidebarNavigationItem, ExperimentalSidebarNavigationProps, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
-import { makeProject, makeThread, NOW } from "./fixtures";
+import { DAY, makeProject, makeThread, NOW } from "./fixtures";
 import { resetRailScope, setRailScope, useRailScope } from "./railScope";
 
 const host = vi.hoisted(() => ({
@@ -40,7 +40,7 @@ function destination(id: string, label: string, isVisible = true): ExperimentalS
 function mount(items: ExperimentalSidebarNavigationItem[], isCompactViewport = false) {
   return renderSlot(navigation, { ...props, isCompactViewport }, { sidebarNavigation: { items } });
 }
-afterEach(() => { cleanup(); host.items = null; host.railNav = true; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); host.items = null; host.railNav = true; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("host navigation arrangement", () => {
   it.each([false, true])("renders host order and visibility immediately (compact=%s)", (compact) => {
@@ -298,6 +298,52 @@ describe("rail ergonomics", () => {
     expect(screen.getByRole("button", { name: "Notes" }).getAttribute("title")).toBe("Notes");
   });
 
+  it.each([false, true])("focuses the first enabled More item for immediate keyboard traversal (rail=%s)", (rail) => {
+    host.railNav = rail;
+    mount([
+      { ...destination("disabled", "Disabled", false), isDisabled: true },
+      destination("notes", "Notes", false),
+      { ...destination("loading", "Loading", false), isLoading: true },
+      destination("board", "Board", false),
+    ]);
+    const more = screen.getByRole("button", { name: "More navigation, 4 items" });
+    act(() => more.focus());
+    fireEvent.click(more);
+    const notes = screen.getByRole("button", { name: "Notes" });
+    const board = screen.getByRole("button", { name: "Board" });
+    expect(document.activeElement).toBe(notes);
+    fireEvent.keyDown(notes, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(board);
+    fireEvent.keyDown(board, { key: "Home" });
+    expect(document.activeElement).toBe(notes);
+    fireEvent.keyDown(notes, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(board);
+    fireEvent.keyDown(board, { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+    expect(document.activeElement).toBe(more);
+  });
+
+  it("clears an open desktop tooltip when entering compact mode without restoring it later", () => {
+    const slot = mount([destination("notes", "Notes")]);
+    fireEvent.focus(screen.getByRole("button", { name: "Notes" }));
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    slot.rerender(createElement(navigation.component, { ...props, isCompactViewport: true }));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    slot.rerender(createElement(navigation.component, props));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("cancels pending desktop tooltips when entering compact mode", () => {
+    vi.useFakeTimers();
+    const slot = mount([destination("notes", "Notes")]);
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "Notes" }));
+    slot.rerender(createElement(navigation.component, { ...props, isCompactViewport: true }));
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    slot.rerender(createElement(navigation.component, props));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("reorders within the visible bucket through host setOrder", () => {
     const notes = destination("notes", "Notes");
     const hidden = destination("hidden", "Hidden", false);
@@ -379,15 +425,46 @@ describe("project scope tiles", () => {
     return renderSlot(wrapped, { ...props, isCompactViewport }, { sidebarNavigation: { items: [newThread, destination("board", "Board")] }, sidebarThreads: { threads, projects } });
   }
 
+  it("orders project tiles by activity rather than recent reads", () => {
+    host.sidebarThreads = {
+      status: "ready", projects,
+      threads: [
+        makeThread({ id: "quiet", projectId: "proj_a", updatedAt: NOW, lastReadAt: NOW, latestAttentionAt: NOW - 7 * DAY }),
+        makeThread({ id: "recent", projectId: "proj_b", updatedAt: NOW - DAY, latestAttentionAt: NOW - DAY }),
+      ],
+    };
+    mount([]);
+    const tiles = within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button");
+    expect(tiles.map(tile => tile.getAttribute("aria-label"))).toEqual([
+      "ERBareeq: show only this project", "bb-appimage: show only this project",
+    ]);
+  });
+
+  it("sorts live projects ahead of idle projects with newer updated timestamps", () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW);
+    host.sidebarThreads = {
+      status: "ready", projects,
+      threads: [
+        makeThread({ id: "running", projectId: "proj_a", status: "active", updatedAt: NOW - 7 * DAY, latestAttentionAt: NOW - 7 * DAY }),
+        makeThread({ id: "read", projectId: "proj_b", updatedAt: NOW, latestAttentionAt: NOW - DAY }),
+      ],
+    };
+    mount([]);
+    const tiles = within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button");
+    expect(tiles.map(tile => tile.getAttribute("aria-label"))).toEqual([
+      "bb-appimage: show only this project", "ERBareeq: show only this project",
+    ]);
+  });
+
   it("lists projects with visible threads, most recent first, and scopes on click", () => {
     mountWithThreads();
     const group = screen.getByRole("group", { name: "Projects" });
     const tiles = within(group).getAllByRole("button");
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["ERERBareeq", "BAbb-appimage"]);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(["BAbb-appimage", "ERERBareeq"]);
     expect(screen.queryByText("Quiet")).toBeNull();
-    fireEvent.click(tiles[1]!);
+    fireEvent.click(tiles[0]!);
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
-    expect(tiles[1]!.getAttribute("aria-pressed")).toBe("true");
+    expect(tiles[0]!.getAttribute("aria-pressed")).toBe("true");
     expect(localStorage.getItem("radar-sidebar:rail-scope:v1")).toBe("proj_a");
     // The heading names the project and clears the scope.
     fireEvent.click(screen.getByRole("button", { name: "Showing bb-appimage only. Show every project" }));
@@ -421,8 +498,8 @@ describe("project scope tiles", () => {
     mountWithThreads(true);
     const group = screen.getByRole("group", { name: "Projects" });
     const tiles = within(group).getAllByRole("button");
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["ERERBareeq", "BAbb-appimage"]);
-    fireEvent.click(tiles[1]!);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(["BAbb-appimage", "ERERBareeq"]);
+    fireEvent.click(tiles[0]!);
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
     expect(screen.queryByRole("tooltip")).toBeNull();
   });

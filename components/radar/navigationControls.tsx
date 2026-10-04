@@ -148,7 +148,10 @@ export function MorePopover({
   }, [onClose]);
 
   useEffect(() => {
-    ref.current?.focus();
+    const firstItem = ref.current?.querySelector<HTMLButtonElement>(
+      "button:not(:disabled)",
+    );
+    (firstItem ?? ref.current)?.focus();
     return () => {
       triggerRef.current?.focus();
     };
