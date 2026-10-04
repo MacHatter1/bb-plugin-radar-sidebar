@@ -18,6 +18,8 @@ All notable changes to Radar Sidebar are documented here. The format follows
   page above is the only place to change them. Choices saved by earlier
   versions can't be carried over and return to their defaults once.
   `bb plugin config radar-sidebar` no longer lists them.
+- Retake the README's rail and settings screenshots for the badges and the
+  new settings page.
 
 ### Added
 

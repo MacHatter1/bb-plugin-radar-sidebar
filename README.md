@@ -146,7 +146,7 @@ to mark it read or archive it; each direction's action is a setting.
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/nav-more.png" alt="Radar navigation with Skills and Automations moved into More" width="440"><br><sub><b>Navigation with More</b></sub></td>
-<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the plugin settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
+<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page: the Navigation rail and Thread rows cards, each with a live preview above its switches" width="440"><br><sub><b>Plugin settings</b></sub></td>
 </tr>
 </table>
 </div>
@@ -256,7 +256,7 @@ handle to give the thread list more room.
 
 </details>
 
-<p align="center"><img src="docs/screenshots/rail-desktop.png" width="360" alt="Radar Sidebar with Navigation rail enabled: destinations, project tiles with waiting dots, and BB's footer controls in the rail beside the thread list"></p>
+<p align="center"><img src="docs/screenshots/rail-desktop.png" width="360" alt="Radar Sidebar with Navigation rail enabled: destination icons and project tiles with needs-you, working and unread badges beside the thread list, with the project that needs you on top"></p>
 
 ### Labelled rail (experimental, off by default)
 
@@ -278,8 +278,8 @@ on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration
 <div align="center">
 <table>
 <tr>
-<td align="center"><img src="docs/screenshots/rail-wide.png" width="440" alt="The optional labelled rail, with labelled destinations, project rows and BB’s footer actions"><br><sub><b>Labelled rail</b></sub></td>
-<td align="center"><img src="docs/screenshots/rail-mobile.png" width="240" alt="The project rail beside the thread list in the mobile drawer"><br><sub><b>Mobile drawer</b></sub></td>
+<td align="center"><img src="docs/screenshots/rail-wide.png" width="440" alt="The optional labelled rail, with labelled destinations and project rows that carry their badges"><br><sub><b>Labelled rail</b></sub></td>
+<td align="center"><img src="docs/screenshots/rail-mobile.png" width="240" alt="The project rail with its badges beside the thread list in the mobile drawer"><br><sub><b>Mobile drawer</b></sub></td>
 </tr>
 </table>
 </div>
