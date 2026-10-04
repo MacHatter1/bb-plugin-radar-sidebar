@@ -1,153 +1,9 @@
 /* Radar Sidebar. All rules are prefixed `radar-` and read BB's live theme
-   tokens (with fallbacks), so custom palettes keep working. */
+   tokens (with fallbacks), so custom palettes keep working.
 
-/* Widths are shared by the rail, host gutter and host panel expansion. */
-:is(body, .group.peer, [data-sidebar="sidebar"]):has(.radar-double-navigation) {
-  --radar-rail-narrow: 60px;
-  --radar-rail-mobile: 56px;
-  --radar-rail-wide: 168px;
-  --radar-rail-width: var(--radar-rail-narrow);
-}
-:is(.group.peer, [data-sidebar="sidebar"]):has(.radar-double-navigation-wide) {
-  --radar-rail-width: var(--radar-rail-wide);
-}
-
-/* The gutter exists only while this navigation provider is mounted.
-   :has() makes disable, provider changes, crashes and mobile transitions
-   release it automatically, without changing host DOM or inline styles. */
-@media (min-width: 768px) {
-  /* BB's toggle lives in a fixed overlay outside the sidebar. Center it
-     on the rail's icon column only while that sidebar is expanded. */
-  body:has(.radar-double-navigation):has(.group.peer[data-state="expanded"]) [data-testid="app-sidebar-trigger-overlay"] {
-    width: calc(var(--radar-rail-narrow) - 1px);
-    padding-left: 0;
-    justify-content: center;
-  }
-  /* Labelled buttons place their icons 30px from the rail's left edge. */
-  body:has(.radar-double-navigation-wide):has(.group.peer[data-state="expanded"]) [data-testid="app-sidebar-trigger-overlay"] {
-    width: var(--radar-rail-narrow);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) {
-    position: relative;
-    padding-inline-start: var(--radar-rail-width);
-  }
-  /* BB's header row (sidebar trigger, history arrows) stays clickable
-     above the rail surface that now runs behind it. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > div:first-child {
-    position: relative;
-    z-index: 1;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] {
-    position: absolute;
-    inset: auto auto 0 0;
-    z-index: 2;
-    /* Keep BB's horizontal overflow calculation at its original width.
-       Only the 42px controls paint and receive input in the 60px rail. */
-    width: calc(100% - var(--radar-rail-width));
-    padding: 8px 9px 12px;
-    pointer-events: none;
-    isolation: isolate;
-    background: transparent;
-  }
-  /* The host footer stack yields to the rail: it may use whatever height
-     is left under the header and the rail's own needs (published by the
-     plugin as --radar-rail-reserve), scrolling internally below that, but
-     always keeps room for at least two of its controls. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] > [data-sidebar="menu"] {
-    max-height: max(
-      92px,
-      calc(var(--bb-shell-height, 100dvh) - var(--radar-rail-reserve, 290px) - 20px)
-    );
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none;
-    overscroll-behavior: contain;
-  }
-  /* Host footer disclosures open beside the rail, keeping their real
-     controls, focus handling and collapse action in a readable panel. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] > section[aria-label] {
-    position: absolute;
-    inset: auto auto 0 64px;
-    z-index: 3;
-    width: min(320px, calc(100vw - 80px));
-    pointer-events: auto;
-    background: var(--sidebar, var(--background));
-    box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"]::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: -1;
-    width: var(--radar-rail-width, 60px);
-    border-inline-end: 1px solid var(--border);
-    background: var(--sidebar, var(--background));
-    /* Slides with the rail above it, so the column reads as one surface. */
-    transition: width 200ms linear;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-overflow-fade] {
-    display: none;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu"] {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"] {
-    flex: none;
-    flex-direction: column;
-    max-width: 100%;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"]:has(> [data-sidebar="menu"]) {
-    width: 100%;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] a,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] button {
-    pointer-events: auto;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-button"] {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-button"] [data-icon-root] {
-    width: 20px;
-    height: 20px;
-  }
-  /* The host's "updates available" pill is a rounded-full row of a tiny
-     arrow plus provider logos. In the rail it becomes a square like its
-     siblings: a readable arrow on top, the logos as a small row beneath. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) {
-    flex-direction: column;
-    justify-content: center;
-    gap: 3px;
-    width: 42px;
-    height: 42px;
-    padding: 0;
-    border: 0;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--primary) 10%, transparent);
-    color: var(--primary);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]):hover {
-    background: color-mix(in srgb, var(--primary) 18%, transparent);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) > svg {
-    width: 16px;
-    height: 16px;
-    color: inherit;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) > span {
-    display: flex;
-    gap: 2px;
-    line-height: 0;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) [data-provider-icon] {
-    width: 10px;
-    height: 10px;
-  }
-}
-
+   Rules for BB's own elements (the sidebar gutter, header, footer, panel
+   and sidebar toggle) live in components/radar/railHostStyles.ts. The
+   navigation rail renders them only while it is mounted. */
 
 .radar-double-navigation { flex: none; }
 .radar-double-navigation .radar-double-rail {
@@ -373,25 +229,10 @@
     padding-block: 54px 8px; /* still clears BB's 48px header row */
   }
   .radar-double-rail-items { gap: 4px; }
-  .radar-double-rail .radar-nav-icon-button,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu-button"] {
+  .radar-double-rail .radar-nav-icon-button {
     height: 32px;
   }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"] [data-sidebar="menu"] {
-    gap: 4px;
-  }
-}
 
-/* Preserve title space when the rail shares a narrow host sidebar. */
-@container radar-thread-list (max-width: 300px) {
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) .radar-status-word,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) .radar-row-project {
-    display: none;
-  }
-}
-[data-sidebar="sidebar"]:has(.radar-double-navigation) .radar-status-chips {
-  flex-wrap: wrap;
-  overflow: visible;
 }
 
 /* Narrow list (the rail beside a default-width sidebar, or the drawer on
@@ -471,7 +312,6 @@
 .radar-list-scope [data-icon-root] { width: 14px; height: 14px; flex: none; }
 .radar-list-scope:hover { background: var(--accent, var(--muted)); }
 .radar-list-scope:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-[data-sidebar="sidebar"]:has(.radar-double-navigation .radar-double-heading-scope) .radar-list-scope { display: none; }
 
 .radar-list-header {
   position: sticky;
@@ -3845,9 +3685,8 @@ a.radar-row-main:hover {
 
 /* The rail is its own layer: a hair darker (or lighter, in dark themes)
    than the thread list, the way chat apps separate workspaces from
-   channels. Both the nav and the host footer's backdrop share it. */
-.radar-double-navigation .radar-double-rail,
-[data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"]::before {
+   channels. railHostStyles.ts tints BB's footer backdrop to match. */
+.radar-double-navigation .radar-double-rail {
   background: color-mix(in srgb, var(--sidebar, var(--background)) 94%, var(--foreground));
 }
 .radar-double-rail .radar-nav-icon-button:hover:not(:disabled),
@@ -3860,23 +3699,6 @@ a.radar-row-main:hover {
 
 /* Wide mode: the rail grows to 168px and buttons become labelled rows. */
 .radar-rail-label { display: none; }
-@media (min-width: 768px) {
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) { padding-inline-start: var(--radar-rail-width); }
-  /* Grow the whole sidebar by the extra rail width so the thread list keeps
-     its room. Targets the host's `--sidebar-width` wrappers (gap + fixed
-     panel); both animate with the host's own 200ms width transition. */
-  /* Respect BB's offcanvas collapse: its gap goes to zero and its panel
-     returns to the host width, which matches the host's offscreen offset. */
-  .group.peer[data-state="expanded"]:has(.radar-double-navigation-wide) > [data-sidebar="gap"],
-  .group.peer[data-state="expanded"]:has(.radar-double-navigation-wide) > [data-sidebar="panel"] {
-    width: calc(var(--sidebar-width) + var(--radar-rail-wide) - var(--radar-rail-narrow)) !important;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"]::before { width: var(--radar-rail-width); }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] > section[aria-label] { left: calc(var(--radar-rail-width) + 4px); }
-  /* Same curve and duration as BB's own sidebar width transition, so the
-     gutter, the rail and the host panel all move as one. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) { transition: padding-inline-start 200ms linear; }
-}
 
 .radar-double-navigation .radar-double-rail { transition: width 200ms linear; }
 /* Labels wait for the width to land, then fade in; collapsing just drops
@@ -3884,16 +3706,11 @@ a.radar-row-main:hover {
 @keyframes radar-rail-label-in { from { opacity: 0; } to { opacity: 1; } }
 .radar-double-navigation-wide .radar-rail-label,
 .radar-double-navigation-wide .radar-double-rail .radar-nav-count,
-.radar-double-navigation-wide .radar-double-rail .radar-double-shortcut,
-[data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"] > .sr-only,
-[data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"])::after,
-[data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) > span {
+.radar-double-navigation-wide .radar-double-rail .radar-double-shortcut {
   animation: radar-rail-label-in 140ms ease-out 140ms both;
 }
 .radar-double-navigation-wide .radar-double-rail .radar-nav-row-active,
-.radar-double-navigation-wide .radar-double-rail .radar-rail-project-active,
-[data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"]::before,
-[data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"])::before {
+.radar-double-navigation-wide .radar-double-rail .radar-rail-project-active {
   animation: radar-rail-label-in 200ms linear both;
 }
 .radar-double-navigation-wide .radar-double-rail {
@@ -3941,11 +3758,10 @@ a.radar-row-main:hover {
 .radar-double-navigation-wide .radar-rail-toggle { color: var(--muted-foreground); }
 
 @media (prefers-reduced-motion: reduce) {
-  .radar-double-navigation .radar-double-rail,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) > [data-sidebar="footer"]::before,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) { transition: none; }
-  .radar-double-navigation-wide *, .radar-double-navigation-wide *::before, .radar-double-navigation-wide *::after,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] * { animation: none !important; }
+  .radar-double-navigation .radar-double-rail { transition: none; }
+  .radar-double-navigation-wide *,
+  .radar-double-navigation-wide *::before,
+  .radar-double-navigation-wide *::after { animation: none !important; }
 }
 
 /* ---- Project scope tiles on the rail. ---- */
@@ -4075,146 +3891,6 @@ a.radar-row-main:hover {
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread { padding: 0; width: 28px; }
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread > span { display: none; }
 
-/* Wide mode: BB's footer controls grow into labelled rows too. BB decides
-   how many footer actions fit by summing their widths, so every control
-   keeps its 42px box; the row look is painted out of it: a ::before
-   extends the hover surface to the rail's width and the host's own
-   `sr-only` label is placed beside the icon. Absolutely positioned
-   descendants still hit-test to the button, so the whole row clicks. */
-@media (min-width: 768px) {
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] {
-    overflow: visible;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"],
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) {
-    position: relative;
-    isolation: isolate;
-    width: 42px;
-    height: 42px;
-    justify-content: flex-start;
-    flex-direction: row;
-    gap: 0;
-    padding: 0 0 0 11px;
-    border-radius: 12px;
-    overflow: visible;
-    background: transparent !important;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"]::before,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"])::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    z-index: -1;
-    width: 152px;
-    border-radius: 12px;
-    transition: background-color 120ms ease;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"]:hover::before,
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"][data-state="open"]::before {
-    background: color-mix(in srgb, var(--sidebar, var(--background)) 70%, var(--foreground) 10%);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"] [data-icon-root] {
-    width: 20px;
-    height: 20px;
-    flex: none;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-button"] > .sr-only {
-    position: absolute;
-    left: 41px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 101px;
-    height: auto;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    clip: auto;
-    clip-path: none;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: 13px;
-    font-weight: 500;
-    color: inherit;
-  }
-  /* Updates pill: tinted row, "Updates" beside the arrow, logos at the end. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"])::before {
-    background: color-mix(in srgb, var(--primary) 10%, transparent);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]):hover::before {
-    background: color-mix(in srgb, var(--primary) 18%, transparent);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) > svg {
-    width: 18px;
-    height: 18px;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"])::after {
-    content: "Updates";
-    position: absolute;
-    left: 41px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) > span {
-    position: absolute;
-    right: calc(42px - 152px + 10px);
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    gap: 3px;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) [data-provider-icon] {
-    width: 12px;
-    height: 12px;
-  }
-}
-
-/* ---- BB's Customize editor beside the rail. ----
-   Opening Customize makes BB hide this provider's wrapper and render its
-   arrangement editor in the navigation region, which for a single-column
-   nav is "in place". Here that region is the top of the thread column, so
-   the editor shoved the list down and the rail blinked out. Keep the rail
-   visible (so the user can see what they are arranging) and float the
-   editor as a panel beside it, like the footer disclosures. */
-@media (min-width: 768px) {
-  /* BB's preflight hides [hidden] with an !important rule inside
-     `@layer base`; important declarations in a layer outrank unlayered
-     ones, so this joins that same layer (names are document-global) and
-     wins there on specificity. */
-  @layer base {
-    [data-sidebar="sidebar"]:has(.radar-double-navigation) > nav > [hidden]:has(> [data-bb-plugin-root]) {
-      display: contents !important;
-    }
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) [data-sidebar-navigation-customize-mode="true"] {
-    position: absolute;
-    top: 56px;
-    left: 68px;
-    z-index: 4;
-    width: min(300px, calc(100vw - 92px));
-    padding: 0;
-    pointer-events: auto;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide) [data-sidebar-navigation-customize-mode="true"] {
-    left: calc(var(--radar-rail-width) + 8px);
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation) [data-sidebar-navigation-customize-mode="true"] > div {
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    background: var(--popover, var(--sidebar, var(--background)));
-    box-shadow:
-      0 12px 32px rgb(0 0 0 / 0.18),
-      0 2px 6px rgb(0 0 0 / 0.08);
-  }
-  /* The rail's own Customize button reads as "open" while editing. */
-  [data-sidebar="sidebar"]:has(.radar-double-navigation):has([data-sidebar-navigation-customize-mode="true"]) .radar-double-rail-footer button[aria-label="Customize sidebar"] {
-    background: color-mix(in srgb, var(--primary) 12%, transparent);
-    color: var(--primary);
-  }
-}
-
 /* Both stacks retain their full control width. A visible scroll thumb in
    the rail's edge tracks the viewport without fading the final item or
    changing BB's footer overflow measurements. Wheel/touch scroll normally. */
@@ -4230,37 +3906,11 @@ a.radar-row-main:hover {
   opacity: 0.65;
   pointer-events: none;
 }
-@media (min-width: 768px) {
-  [data-sidebar="sidebar"]:has(.radar-double-navigation[data-footer-overflow]) > [data-sidebar="footer"]::after {
-    content: "";
-    position: absolute;
-    left: 55px;
-    top: var(--radar-scroll-top);
-    height: var(--radar-scroll-height);
-    width: 3px;
-    border-radius: 9999px;
-    background: var(--muted-foreground);
-    opacity: 0.65;
-    pointer-events: none;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-wide[data-footer-overflow]) > [data-sidebar="footer"]::after { left: calc(var(--radar-rail-width) - 5px); }
-}
-
 
 /* ---- The rail in the mobile drawer. ----
    Same rail, 56px wide, full height; BB's footer keeps its mobile row
    layout beside it. No hover tooltips or wide mode here. */
 @media (max-width: 767px) {
-  body:has(.radar-double-navigation-compact) [data-testid="app-sidebar-trigger-overlay"] {
-    width: calc(var(--radar-rail-mobile) - 1px);
-    padding-left: 0;
-    justify-content: center;
-  }
-  [data-sidebar="sidebar"]:has(.radar-double-navigation-compact):not(:has([data-sidebar-navigation-customize-mode="true"])) {
-    position: relative;
-    --radar-rail-width: var(--radar-rail-mobile);
-    padding-inline-start: var(--radar-rail-width);
-  }
   /* Phones with a notch / home bar: BB pads the drawer by the safe-area
      insets, so the rail does the same instead of sliding under them. */
   .radar-double-navigation-compact .radar-double-rail {
@@ -4276,7 +3926,4 @@ a.radar-row-main:hover {
   .radar-double-navigation-compact .radar-double-heading { min-height: 44px; padding-top: 4px; }
   .radar-double-navigation-compact .radar-double-heading-scope { min-height: 44px; }
   .radar-double-navigation-compact .radar-double-new-thread { min-width: 44px; height: 44px; flex: none; }
-  /* BB's mobile Customize is a full-drawer screen that replaces the
-     navigation (the drawer wraps it differently from desktop), so the
-     gutter steps aside while it is open rather than floating a panel. */
 }

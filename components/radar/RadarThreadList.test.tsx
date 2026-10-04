@@ -204,17 +204,17 @@ describe("thread families", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse replies" }));
 
-    // Folded rows stay mounted so the collapse can animate both ways; they
-    // are hidden via visibility, which also drops them from tab order.
-    const fold = await waitFor(() => {
-      const node = slot.container.querySelector(".radar-fold-collapsed");
-      expect(node).toBeTruthy();
-      return node as HTMLElement;
-    });
+    // The fold hides its rows at once (visibility also drops them from tab
+    // order) but keeps them mounted while the collapse animates, then lets
+    // them go so a folded family costs nothing.
+    const fold = slot.container.querySelector<HTMLElement>(".radar-fold-collapsed")!;
     expect(fold.getAttribute("aria-hidden")).toBe("true");
-    expect(
-      fold.querySelector('[data-sidebar-thread-id="c"]'),
-    ).not.toBeNull();
+    expect(fold.querySelector('[data-sidebar-thread-id="c"]')).not.toBeNull();
+    await waitFor(() => expect(visibleRowIds(slot.container)).toEqual(["p"]));
+
+    // Opening mounts them again in the same commit, so the grid can grow.
+    fireEvent.click(screen.getByRole("button", { name: "Expand replies" }));
+    expect(visibleRowIds(slot.container)).toEqual(["p", "c"]);
   });
 
   it("keeps folded rows out of the jump shortcut numbering", async () => {
@@ -1265,7 +1265,7 @@ describe("settings gates", () => {
 });
 
 describe("folded row work", () => {
-  it.each(["family", "group"])("suspends requests and gestures in a saved %s fold", async (fold) => {
+  it.each(["family", "group"])("mounts no rows, requests or gestures behind a saved %s fold", async (fold) => {
     const parentId = `${fold}-fold-parent`;
     const childId = `${fold}-fold-child`;
     localStorage.setItem(
@@ -1279,27 +1279,31 @@ describe("folded row work", () => {
       makeThread({ id: parentId }),
       makeThread({ id: childId, parentThreadId: parentId, status: "active", indicator: "runtime" }),
     ], { settings: { swipeActions: true }, sdk: { ...sdkFakes(), threads: { defaultExecutionOptions: fetch } } });
-    const child = slot.container.querySelector(`[data-sidebar-thread-id="${childId}"]`)!
-      .closest<HTMLElement>(".radar-row")!;
-    const childGestures = (spy: typeof added) => spy.mock.calls.filter(([type], index) =>
-      (type === "wheel" || type === "touchmove" || type === "click") && spy.mock.contexts[index] === child,
+    const childRow = () => slot.container.querySelector(`[data-sidebar-thread-id="${childId}"]`)
+      ?.closest<HTMLElement>(".radar-row") ?? null;
+    const gestures = (spy: typeof added, row: HTMLElement) => spy.mock.calls.filter(([type], index) =>
+      (type === "wheel" || type === "touchmove" || type === "click") && spy.mock.contexts[index] === row,
     );
-    expect(child.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(childRow()).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
-    expect(childGestures(added)).toHaveLength(0);
     fireEvent.focus(window);
     expect(fetch).not.toHaveBeenCalled();
     const toggle = (expand: boolean) => fireEvent.click(screen.getByRole("button", {
       name: fold === "family" ? expand ? "Expand replies" : "Collapse replies" : /Today,/,
     }));
     toggle(true);
+    const child = childRow()!;
     await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
     expect(fetch).toHaveBeenCalledWith({ threadId: childId });
-    expect(childGestures(added)).toHaveLength(3);
+    expect(gestures(added, child)).toHaveLength(3);
+    // Folding stops gestures at once, and drops the row once it has animated.
     toggle(false);
-    expect(childGestures(removed)).toHaveLength(3);
+    expect(gestures(removed, child)).toHaveLength(3);
+    expect(child.closest('[aria-hidden="true"]')).not.toBeNull();
+    await waitFor(() => expect(childRow()).toBeNull());
     toggle(true);
     // A fold is a pause, not a restart: an unchanged run reuses its cache.
+    expect(childRow()).not.toBeNull();
     expect(fetch).toHaveBeenCalledOnce();
     toggle(false);
     fireEvent.focus(window);
@@ -1343,7 +1347,7 @@ describe("folded row work", () => {
     expect(context).not.toHaveBeenCalled();
   });
 
-  it("keeps family summaries reactive while child rows stay folded", () => {
+  it("keeps family summaries reactive while child rows stay unmounted", () => {
     localStorage.setItem("radar-sidebar:collapsed-threads:v1", JSON.stringify(["reactive-parent"]));
     const parent = makeThread({ id: "reactive-parent", latestAttentionAt: NOW });
     const child = makeThread({ id: "reactive-child", parentThreadId: parent.id, latestAttentionAt: NOW });
@@ -1364,8 +1368,57 @@ describe("folded row work", () => {
     const pill = slot.container.querySelector(".radar-kids-pill")!;
     expect(pill.textContent).toBe("1");
     expect(pill.querySelector(".radar-dot-error")).not.toBeNull();
-    expect(slot.container.querySelector('[data-sidebar-thread-id="reactive-child"]')!
-      .closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(slot.container.querySelector('[data-sidebar-thread-id="reactive-child"]')).toBeNull();
+  });
+});
+
+describe("render cost", () => {
+  // Every row asks for its jump shortcut exactly once per render.
+  const renderedRowIds = (spy: { mock: { calls: unknown[][] } }) =>
+    new Set(spy.mock.calls.map(([threadId]) => threadId));
+  const props = {
+    activeThreadId: null, activeProjectId: "proj_a", isCompactViewport: false,
+    onNavigate: () => {}, searchQuery: "",
+  };
+
+  it("re-renders only the row whose thread changed when the host pushes a snapshot", () => {
+    const threads = Array.from({ length: 12 }, (_, index) =>
+      makeThread({ id: `snap-${index}`, latestAttentionAt: NOW - index * HOUR }));
+    const state: PluginSidebarThreadsState = {
+      status: "ready", threads, projects: [makeProject({ id: "proj_a" })],
+      sections: [], experimental_archived: null,
+    };
+    const snapshot = vi.spyOn(pluginSdk, "experimental_useSidebarThreads").mockReturnValue(state);
+    const rows = vi.spyOn(pluginSdk, "useSidebarThreadShortcut");
+    const slot = renderSlot(threadList, props, { sdk: sdkFakes() });
+    expect(renderedRowIds(rows).size).toBe(12);
+
+    // The host hands over a new array on every update, even when only one
+    // thread changed, and the list's derived order is rebuilt from it.
+    rows.mockClear();
+    const next = threads.slice();
+    next[3] = { ...next[3]!, isUnread: true, indicator: "unread-success" };
+    snapshot.mockReturnValue({ ...state, threads: next });
+    slot.rerender(createElement(threadList.component, props));
+    expect(renderedRowIds(rows)).toEqual(new Set(["snap-3"]));
+
+    rows.mockClear();
+    snapshot.mockReturnValue({ ...state, threads: next.slice() });
+    slot.rerender(createElement(threadList.component, props));
+    expect(rows).not.toHaveBeenCalled();
+  });
+
+  it("re-renders only rows whose time label moved on the minute tick", () => {
+    vi.useFakeTimers({ now: NOW, toFake: ["Date", "setInterval", "clearInterval"] });
+    const rows = vi.spyOn(pluginSdk, "useSidebarThreadShortcut");
+    renderThreads([
+      makeThread({ id: "recent", latestAttentionAt: NOW - 5 * 60_000 }),
+      makeThread({ id: "hours", latestAttentionAt: NOW - 3 * HOUR - 10 * 60_000 }),
+      makeThread({ id: "days", latestAttentionAt: NOW - 3 * DAY }),
+    ]);
+    rows.mockClear();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(renderedRowIds(rows)).toEqual(new Set(["recent"]));
   });
 });
 

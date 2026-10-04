@@ -51,7 +51,7 @@ import {
 } from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
 import { RadarThreadRow } from "./RadarThreadRow";
-import { isRunningThread } from "./time";
+import { activityTime, isRunningThread, timeAgo } from "./time";
 import {
   GroupHeader,
   SortableGroupSection,
@@ -261,6 +261,48 @@ function DraggableThreadRow({
   );
 }
 
+/** Outlasts the `.radar-fold` collapse transition (280ms in app.css). */
+const FOLD_UNMOUNT_MS = 320;
+
+/**
+ * A collapsible group or family body. Its rows stay mounted only while open
+ * and through the closing animation, so a folded group costs nothing: no
+ * rows, no per-row host subscriptions, no pull-request lookups. Opening
+ * mounts them in the same commit the grid starts growing, so it animates.
+ */
+function Fold({
+  collapsed,
+  role,
+  label,
+  children,
+}: {
+  collapsed: boolean;
+  role: "list" | "group";
+  label: string;
+  children: () => ReactNode;
+}) {
+  const [closed, setClosed] = useState(collapsed);
+  useEffect(() => {
+    if (!collapsed) {
+      setClosed(false);
+      return;
+    }
+    const timer = setTimeout(() => setClosed(true), FOLD_UNMOUNT_MS);
+    return () => clearTimeout(timer);
+  }, [collapsed]);
+  return (
+    <div
+      className={cn("radar-fold", collapsed && "radar-fold-collapsed")}
+      aria-hidden={collapsed || undefined}
+      inert={collapsed || undefined}
+    >
+      <div className="radar-fold-inner" role={role} aria-label={label}>
+        {collapsed && closed ? null : children()}
+      </div>
+    </div>
+  );
+}
+
 function renderSubtree(
   thread: PluginSidebarThread,
   depth: number,
@@ -277,7 +319,7 @@ function renderSubtree(
   collapsedIds: ReadonlySet<string>,
   isLastChild: boolean,
   draggable: boolean,
-  /** Inside a folded group or family, so the row is mounted but not shown. */
+  /** Inside a closing group or family fold: still mounted, no longer shown. */
   hidden: boolean,
 ): ReactNode {
   const kids = depth > 25 ? [] : (children.get(thread.id) ?? []);
@@ -297,20 +339,9 @@ function renderSubtree(
     <Fragment key={thread.id}>
       {rowNode}
       {kids.length === 0 ? null : (
-        <div
-          className={cn(
-            "radar-fold",
-            folded && "radar-fold-collapsed",
-          )}
-          aria-hidden={folded || undefined}
-          inert={folded || undefined}
-        >
-          <div
-            className="radar-fold-inner"
-            role="group"
-            aria-label="Replies"
-          >
-            {kids.map((child, index) =>
+        <Fold collapsed={folded} role="group" label="Replies">
+          {() =>
+            kids.map((child, index) =>
               renderSubtree(
                 child,
                 depth + 1,
@@ -322,9 +353,9 @@ function renderSubtree(
                 false,
                 hidden || folded,
               ),
-            )}
-          </div>
-        </div>
+            )
+          }
+        </Fold>
       )}
     </Fragment>
   );
@@ -695,15 +726,20 @@ export function RadarThreadList({
     () => new Set(visibleFlattenedThreadIds),
     [visibleFlattenedThreadIds],
   );
+  // Every host snapshot rebuilds the flattened order. Rows read it through a
+  // ref so their select handler stays stable and the memo keeps them still.
+  const visibleOrderRef = useRef(visibleFlattenedThreadIds);
+  visibleOrderRef.current = visibleFlattenedThreadIds;
 
   const handleToggleSelect = useCallback(
     (event: { shiftKey: boolean }, threadId: string) => {
+      const order = visibleOrderRef.current;
       if (event.shiftKey && lastSelectedIdRef.current) {
-        const fromIdx = visibleFlattenedThreadIds.indexOf(lastSelectedIdRef.current);
-        const toIdx = visibleFlattenedThreadIds.indexOf(threadId);
+        const fromIdx = order.indexOf(lastSelectedIdRef.current);
+        const toIdx = order.indexOf(threadId);
         if (fromIdx !== -1 && toIdx !== -1) {
           const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
-          const range = visibleFlattenedThreadIds.slice(start, end + 1);
+          const range = order.slice(start, end + 1);
           setSelectedIds((prev) => new Set([...prev, ...range]));
           lastSelectedIdRef.current = threadId;
           return;
@@ -717,7 +753,7 @@ export function RadarThreadList({
       });
       lastSelectedIdRef.current = threadId;
     },
-    [visibleFlattenedThreadIds],
+    [],
   );
 
   // Selection only ever covers rows the list still shows: a filter or
@@ -745,8 +781,9 @@ export function RadarThreadList({
       ? focusedRowId
       : document.activeElement === document.body ? hiddenKeyboardId : null;
     if (!hiddenFocusId) return;
-    // Folds stay mounted for their animation. Move focus out of hidden rows,
-    // preserving focus on any visible control the user clicked to fold them.
+    // A closing fold keeps its rows mounted while it animates. Move focus out
+    // of hidden rows, preserving focus on any visible control the user
+    // clicked to fold them.
     let parentId = rowById.get(hiddenFocusId)?.parentThreadId;
     const visited = new Set<string>();
     while (parentId && !visited.has(parentId)) {
@@ -1252,7 +1289,7 @@ export function RadarThreadList({
           isEditing={thread.id === editingId}
           isVisible={visibleThreadIds.has(thread.id)}
           actions={actions}
-          now={now}
+          timeText={timeAgo(activityTime(thread, now), now)}
           onNavigate={onNavigate}
           onOpenMenu={openMenu}
           onStartRename={startRename}
@@ -1326,20 +1363,13 @@ export function RadarThreadList({
       };
 
       const foldContent = (
-        <div
-          className={cn(
-            "radar-fold",
-            isCollapsed && "radar-fold-collapsed",
-          )}
-          aria-hidden={isCollapsed || undefined}
-          inert={isCollapsed || undefined}
+        <Fold
+          collapsed={isCollapsed}
+          role="list"
+          label={`${group.label} threads`}
         >
-          <div
-            className="radar-fold-inner"
-            role="list"
-            aria-label={`${group.label} threads`}
-          >
-            {group.roots.length === 0 ? (
+          {() =>
+            group.roots.length === 0 ? (
               <p className="radar-group-empty">Drop a thread here to file it.</p>
             ) : (
               group.roots.map((root, index) =>
@@ -1355,9 +1385,9 @@ export function RadarThreadList({
                   isCollapsed,
                 ),
               )
-            )}
-          </div>
-        </div>
+            )
+          }
+        </Fold>
       );
 
       if (isSortable) {

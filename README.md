@@ -269,9 +269,13 @@ on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration
 ## Compatibility notes
 
 The gutter, footer stacking and updates tile use BB's `data-sidebar` DOM
-attributes via `:has()`, scoped to this provider. If a future BB shell
-changes those, the rail still renders but the footer may need a selector
-update. Nothing here touches BB's data: thread operations go through the
+attributes. The rail renders those overrides as `<style>` elements in its
+own markup (`components/radar/railHostStyles.ts`), so they exist only
+while it is mounted and it never writes to BB's elements. It doesn't use
+`:has()`: anchored on the page or the sidebar, it made the browser restyle
+the whole page on every DOM change in BB. If a future BB shell changes
+those attributes, the rail still renders but the footer may need a
+selector update. Nothing here touches BB's data: thread operations go through the
 public SDK, navigation order through `setOrder`/`setVisible`, and client
 state lives under `radar-sidebar:*` localStorage keys.
 

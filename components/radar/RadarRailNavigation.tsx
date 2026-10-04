@@ -36,6 +36,7 @@ import {
 } from "./navigationControls";
 import { RailTooltip, moveRailFocus, type RailTip } from "./railTooltip";
 import { useRailHostStructure, useRailMeasurements } from "./railLayout";
+import { railHostCss } from "./railHostStyles";
 
 type RailProject = {
   id: string;
@@ -47,9 +48,30 @@ type RailProject = {
   latest: number;
 };
 
+function sameRailProjects(
+  a: readonly RailProject[],
+  b: readonly RailProject[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every((project, index) => {
+      const other = b[index]!;
+      return (
+        project.id === other.id &&
+        project.name === other.name &&
+        project.threads === other.threads &&
+        project.live === other.live &&
+        project.waiting === other.waiting &&
+        project.unread === other.unread
+      );
+    })
+  );
+}
+
 /** Projects with at least one visible thread, most recently active first. */
 function useRailProjects() {
   const { threads, projects, status } = experimental_useSidebarThreads();
+  const previous = useRef<RailProject[]>([]);
   const railProjects = useMemo(() => {
     const now = Date.now();
     const byId = new Map<string, RailProject>();
@@ -83,8 +105,12 @@ function useRailProjects() {
       if (thread.isUnread) entry.unread += 1;
       entry.latest = Math.max(entry.latest, activityTime(thread, now));
     }
-    return [...byId.values()].sort((a, b) => b.latest - a.latest);
+    const next = [...byId.values()].sort((a, b) => b.latest - a.latest);
+    // Every thread update lands here. Keep the previous list when nothing
+    // the tiles show moved, so they skip rendering.
+    return sameRailProjects(previous.current, next) ? previous.current : next;
   }, [threads, projects]);
+  previous.current = railProjects;
   return { railProjects, projects, status };
 }
 
@@ -161,6 +187,14 @@ function RailNavigationBody({
   const wideAllowed = settingValues?.wideRail === true && !isCompactViewport;
   const hostSupportsWide = useRailHostStructure(railRef);
   const wide = wideChoice && wideAllowed && hostSupportsWide;
+  // BB's sidebar is restyled from the rail's own <style> elements below,
+  // never by writing to BB's elements, so unmounting releases it.
+  const scoped = scopedProject !== null;
+  const hostCss = useMemo(
+    () => railHostCss({ wide, compact: isCompactViewport, scoped }),
+    [wide, isCompactViewport, scoped],
+  );
+  const hostValuesRef = useRef<HTMLStyleElement | null>(null);
 
   // Rail tooltip: armed on hover/focus after a short delay, dropped on
   // leave, blur, click, right-click, or when any overlay opens.
@@ -197,38 +231,60 @@ function RailNavigationBody({
     if (isCompactViewport) hideTip();
   }, [isCompactViewport, hideTip]);
 
-  const activate = (
-    item: ExperimentalSidebarNavigationItem,
-    openInSplit: boolean,
-  ) => {
-    if (item.isDisabled || item.isLoading) return;
-    hideTip();
-    setMoreAt(null);
-    setMenu(null);
-    actions.activate(item.id, { openInSplit });
-  };
-
-  const destinations = items.filter(
-    (item) => item.action.kind !== "new-thread",
+  // Callbacks and derived lists stay stable across thread updates so the
+  // memoized destination buttons and project tiles below skip rendering.
+  const activate = useCallback(
+    (item: ExperimentalSidebarNavigationItem, openInSplit: boolean) => {
+      if (item.isDisabled || item.isLoading) return;
+      hideTip();
+      setMoreAt(null);
+      setMenu(null);
+      actions.activate(item.id, { openInSplit });
+    },
+    [actions, hideTip],
   );
-  const inlineDestinations = destinations.filter((item) => item.isVisible);
-  const overflow = destinations.filter((item) => !item.isVisible);
+  const closeMore = useCallback(() => setMoreAt(null), []);
 
-  const newThread = items.find((item) => item.action.kind === "new-thread");
+  const { inlineDestinations, overflow, newThread } = useMemo(() => {
+    const destinations = items.filter(
+      (item) => item.action.kind !== "new-thread",
+    );
+    return {
+      inlineDestinations: destinations.filter((item) => item.isVisible),
+      overflow: destinations.filter((item) => !item.isVisible),
+      newThread: items.find((item) => item.action.kind === "new-thread"),
+    };
+  }, [items]);
 
-  useRailMeasurements(railRef, items, railProjects.length, wide);
+  useRailMeasurements(railRef, hostValuesRef, items, railProjects.length, wide);
 
   const overflowActive =
     activeItemId !== null && overflow.some((item) => item.id === activeItemId);
 
-  const openMenu = (
-    clientX: number,
-    clientY: number,
-    item: ExperimentalSidebarNavigationItem,
-  ) => {
-    hideTip();
-    setMenu({ x: clientX, y: clientY, itemId: item.id });
-  };
+  const openMenu = useCallback(
+    (clientX: number, clientY: number, item: ExperimentalSidebarNavigationItem) => {
+      hideTip();
+      setMenu({ x: clientX, y: clientY, itemId: item.id });
+    },
+    [hideTip],
+  );
+
+  // Tooltip wiring for one rail control. Hover waits briefly so sweeping the
+  // pointer down the rail doesn't flicker; keyboard focus shows at once.
+  const tipProps = useCallback(
+    (next: Omit<RailTip, "top" | "left">) =>
+      !isCompactViewport
+        ? {
+            onPointerEnter: (event: React.PointerEvent<HTMLElement>) =>
+              showTip(event.currentTarget, next, 220),
+            onPointerLeave: hideTip,
+            onFocus: (event: React.FocusEvent<HTMLElement>) =>
+              showTip(event.currentTarget, next, 0),
+            onBlur: hideTip,
+          }
+        : {},
+    [isCompactViewport, showTip, hideTip],
+  );
 
   const menuItem = menu
     ? (items.find((item) => item.id === menu.itemId) ?? null)
@@ -359,7 +415,7 @@ function RailNavigationBody({
           activeItemId={activeItemId}
           onActivate={activate}
           onOpenMenu={openMenu}
-          onClose={() => setMoreAt(null)}
+          onClose={closeMore}
           triggerRef={moreTriggerRef}
         />
       ) : null}
@@ -390,19 +446,109 @@ function RailNavigationBody({
     </>
   );
 
-  // Tooltip wiring for one rail control. Hover waits briefly so sweeping the
-  // pointer down the rail doesn't flicker; keyboard focus shows at once.
-  const tipProps = (next: Omit<RailTip, "top" | "left">) =>
-    !isCompactViewport
-      ? {
-          onPointerEnter: (event: React.PointerEvent<HTMLElement>) =>
-            showTip(event.currentTarget, next, 220),
-          onPointerLeave: hideTip,
-          onFocus: (event: React.FocusEvent<HTMLElement>) =>
-            showTip(event.currentTarget, next, 0),
-          onBlur: hideTip,
-        }
-      : {};
+  const destinationButtons = useMemo(
+    () =>
+      inlineDestinations.map((item) => {
+        const hasMenu = item.action.kind !== "search-threads";
+        return (
+          <NavigationButton
+            key={item.id}
+            item={item}
+            isActive={item.id === activeItemId}
+            onActivate={activate}
+            title={!isCompactViewport ? null : hintFor(item)}
+            className={cn(
+              "radar-nav-icon-button",
+              item.id === activeItemId && "radar-nav-row-active",
+            )}
+            onContextMenu={
+              hasMenu
+                ? (event) => {
+                    event.preventDefault();
+                    openMenu(event.clientX, event.clientY, item);
+                  }
+                : undefined
+            }
+            {...tipProps({
+              key: item.id,
+              label: item.label,
+              shortcut: item.shortcut?.label ?? null,
+              hint: hasMenu ? "Right-click to arrange" : null,
+              Accessory: item.experimental_Accessory,
+            })}
+          >
+            <RowIcon item={item} />
+            <span className="radar-rail-label">{item.label}</span>
+            {item.experimental_Accessory ? (
+              <span className="radar-rail-dot" aria-hidden="true" />
+            ) : null}
+            {isShortcutModifierHeld && item.shortcut ? (
+              <kbd className="radar-double-shortcut">
+                {item.shortcut.label}
+              </kbd>
+            ) : null}
+          </NavigationButton>
+        );
+      }),
+    [
+      inlineDestinations,
+      activeItemId,
+      isCompactViewport,
+      isShortcutModifierHeld,
+      activate,
+      openMenu,
+      tipProps,
+    ],
+  );
+
+  const projectTiles = useMemo(
+    () =>
+      railProjects.length > 0 ? (
+        <div role="group" aria-label="Projects" className="radar-rail-projects">
+          <span className="radar-rail-divider" aria-hidden="true" />
+          {railProjects.map((project) => {
+            const isScoped = project.id === scope;
+            return (
+              <button
+                key={project.id}
+                type="button"
+                aria-pressed={isScoped}
+                aria-label={`${project.name}: ${isScoped ? "show every project" : "show only this project"}`}
+                className={cn(
+                  "radar-nav-icon-button radar-rail-project",
+                  isScoped && "radar-rail-project-active",
+                )}
+                style={
+                  {
+                    "--radar-project-hue": projectHue(project.id),
+                  } as React.CSSProperties
+                }
+                onClick={() => {
+                  hideTip();
+                  setRailScope(isScoped ? null : project.id);
+                }}
+                {...tipProps({
+                  key: `project:${project.id}`,
+                  label: project.name,
+                  shortcut: null,
+                  hint: `${projectTally(project)}${isScoped ? " — click to clear" : ""}`,
+                  Accessory: null,
+                })}
+              >
+                <span className="radar-rail-monogram" aria-hidden="true">
+                  {monogram(project.name)}
+                </span>
+                <span className="radar-rail-label">{project.name}</span>
+                {project.waiting > 0 ? (
+                  <span className="radar-rail-project-dot" aria-hidden="true" />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null,
+    [railProjects, scope, hideTip, tipProps],
+  );
 
   return (
     <div
@@ -443,102 +589,12 @@ function RailNavigationBody({
             <HugeiconsIcon icon={Home01Icon} aria-hidden="true" />
             <span className="radar-rail-label">Home</span>
           </button>
-          {inlineDestinations.map((item) => {
-            const hasMenu = item.action.kind !== "search-threads";
-            return (
-              <NavigationButton
-                key={item.id}
-                item={item}
-                isActive={item.id === activeItemId}
-                onActivate={activate}
-                title={!isCompactViewport ? null : hintFor(item)}
-                className={cn(
-                  "radar-nav-icon-button",
-                  item.id === activeItemId && "radar-nav-row-active",
-                )}
-                onContextMenu={
-                  hasMenu
-                    ? (event) => {
-                        event.preventDefault();
-                        openMenu(event.clientX, event.clientY, item);
-                      }
-                    : undefined
-                }
-                {...tipProps({
-                  key: item.id,
-                  label: item.label,
-                  shortcut: item.shortcut?.label ?? null,
-                  hint: hasMenu ? "Right-click to arrange" : null,
-                  Accessory: item.experimental_Accessory,
-                })}
-              >
-                <RowIcon item={item} />
-                <span className="radar-rail-label">{item.label}</span>
-                {item.experimental_Accessory ? (
-                  <span className="radar-rail-dot" aria-hidden="true" />
-                ) : null}
-                {isShortcutModifierHeld && item.shortcut ? (
-                  <kbd className="radar-double-shortcut">
-                    {item.shortcut.label}
-                  </kbd>
-                ) : null}
-              </NavigationButton>
-            );
-          })}
+          {destinationButtons}
           {renderMoreRow()}
-          {railProjects.length > 0 ? (
-            <div
-              role="group"
-              aria-label="Projects"
-              className="radar-rail-projects"
-            >
-              <span className="radar-rail-divider" aria-hidden="true" />
-              {railProjects.map((project) => {
-                const isScoped = project.id === scope;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    aria-pressed={isScoped}
-                    aria-label={`${project.name}: ${isScoped ? "show every project" : "show only this project"}`}
-                    className={cn(
-                      "radar-nav-icon-button radar-rail-project",
-                      isScoped && "radar-rail-project-active",
-                    )}
-                    style={
-                      {
-                        "--radar-project-hue": projectHue(project.id),
-                      } as React.CSSProperties
-                    }
-                    onClick={() => {
-                      hideTip();
-                      setRailScope(isScoped ? null : project.id);
-                    }}
-                    {...tipProps({
-                      key: `project:${project.id}`,
-                      label: project.name,
-                      shortcut: null,
-                      hint: `${projectTally(project)}${isScoped ? " — click to clear" : ""}`,
-                      Accessory: null,
-                    })}
-                  >
-                    <span className="radar-rail-monogram" aria-hidden="true">
-                      {monogram(project.name)}
-                    </span>
-                    <span className="radar-rail-label">{project.name}</span>
-                    {project.waiting > 0 ? (
-                      <span
-                        className="radar-rail-project-dot"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
+          {projectTiles}
         </div>
         <div className="radar-double-rail-footer">
+          <span className="radar-rail-divider" aria-hidden="true" />
           {wideAllowed && hostSupportsWide ? (
             <button
               type="button"
@@ -631,6 +687,8 @@ function RailNavigationBody({
         ) : null}
       </div>
       {renderOverlays()}
+      <style>{hostCss}</style>
+      <style ref={hostValuesRef} />
     </div>
   );
 }

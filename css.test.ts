@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { railHostCss } from "./components/radar/railHostStyles";
 
 /**
  * Structural guards over app.css.
@@ -14,9 +15,15 @@ const css = readFileSync(
   "utf8",
 );
 
+/** Every rail state the host sheet can take. */
+const hostStates = [false, true].flatMap((wide) => [false, true].flatMap((compact) =>
+  [false, true].map((scoped) => ({ wide, compact, scoped }))));
+/** The host sheet with every state on: each block, in cascade order. */
+const hostCss = railHostCss({ wide: true, compact: true, scoped: true });
+
 /** Every `selector { body }` block, with comments stripped. */
-function rules(): { selector: string; body: string }[] {
-  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+function rules(source = css): { selector: string; body: string }[] {
+  const stripped = source.replace(/\/\*[\s\S]*?\*\//g, "");
   return [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({
     selector: selector.trim(),
     body,
@@ -24,29 +31,59 @@ function rules(): { selector: string; body: string }[] {
 }
 
 describe("app.css", () => {
-  it("anchors every host shell override to the mounted rail so deselection releases it", () => {
-    const hostRules = rules().flatMap(rule => rule.selector.split(/,(?![^()]*\))/).map(selector => ({ selector, body: rule.body })))
-      .filter(rule => /\[data-sidebar=|\.group\.peer/.test(rule.selector));
-    expect(hostRules.length).toBeGreaterThan(40);
-    expect(hostRules.filter(rule => !/:has\(\.radar-double-navigation(?:[-[)]|\s)/.test(rule.selector)).map(rule => rule.selector)).toEqual([]);
+  it("leaves BB's elements to the sheet the rail renders while mounted", () => {
+    // Rules for BB's sidebar, panel and toggle live in railHostStyles.ts, so
+    // they exist only while the rail is mounted and release with it.
+    const selectors = rules().flatMap((rule) => rule.selector.split(/,(?![^()]*\))/));
+    expect(selectors.filter((selector) => /\[data-sidebar=|\.group\.peer|\[data-testid=|\bhtml\b|data-radar-rail/.test(selector))).toEqual([]);
+    expect(rules(hostCss).length).toBeGreaterThan(40);
+  });
+
+  it("never anchors :has() on the page or on BB's sidebar for the rail", () => {
+    // body:has() and [data-sidebar]:has(.radar-double-navigation) made the
+    // browser restyle the page (or sidebar) on every DOM change in BB: about
+    // 4-5ms per streamed chunk or tooltip in a 20k-element page.
+    for (const source of [css, ...hostStates.map(railHostCss)]) {
+      const selectors = rules(source).flatMap((rule) => rule.selector.split(/,(?![^()]*\))/));
+      expect(selectors.filter((selector) =>
+        /(^|[\s>+~(])(body|html|:root)(\[[^\]]*\]|\.[\w-]+)*:has\(/.test(selector) ||
+        /:has\(\.radar-double-navigation/.test(selector),
+      )).toEqual([]);
+    }
   });
 
   it("joins BB's hidden preflight layer only for the mounted desktop rail", () => {
-    expect(css).toMatch(/@media \(min-width: 768px\)[\s\S]*@layer base\s*\{\s*\[data-sidebar="sidebar"\]:has\(\.radar-double-navigation\) > nav > \[hidden\]:has\(> \[data-bb-plugin-root\]\)\s*\{\s*display: contents !important/);
-    const hidden = rules().filter(rule => /\[hidden\]/.test(rule.selector));
+    expect(hostCss.replace(/\/\*[\s\S]*?\*\//g, "")).toMatch(/@media \(min-width: 768px\)\s*\{\s*@layer base\s*\{\s*\[data-sidebar="sidebar"\] > nav > \[hidden\]:has\(> \[data-bb-plugin-root\]\)\s*\{\s*display: contents !important/);
+    const hidden = rules(hostCss).filter(rule => /\[hidden\]/.test(rule.selector));
     expect(hidden).toHaveLength(1);
   });
 
   it("derives wide host growth from the rail widths and leaves collapsed host panels alone", () => {
-    const growth = rules().find(rule => /var\(--sidebar-width\)/.test(rule.body));
+    const growth = rules(hostCss).find(rule => /var\(--sidebar-width\)/.test(rule.body));
     expect(growth?.body).toMatch(/var\(--radar-rail-wide\) - var\(--radar-rail-narrow\)/);
     expect(growth?.body).not.toMatch(/108px/);
     for (const selector of growth!.selector.split(",")) expect(selector).toContain('[data-state="expanded"]');
   });
 
+  it("keeps the desktop toggle and the updates chips inside the rail column", () => {
+    const trigger = rules(hostCss).find((rule) => rule.selector.includes("app-desktop-sidebar-trigger") && /left:/.test(rule.body));
+    expect(trigger?.body).toMatch(/left:\s*0/);
+    expect(trigger?.body).toMatch(/var\(--radar-rail-narrow\)/);
+    const menu = rules(hostCss).find((rule) =>
+      rule.selector.endsWith('[data-sidebar="menu"]') && /flex-wrap:/.test(rule.body),
+    );
+    expect(menu?.body).toMatch(/flex-wrap:\s*nowrap/);
+    expect(hostCss).toContain('> li[aria-hidden="true"]');
+    const updates = rules(hostCss).find((rule) =>
+      rule.selector.includes('a:not([data-sidebar="menu-button"])') && /min-height:/.test(rule.body),
+    );
+    expect(updates?.body).toMatch(/min-height:\s*56px/);
+    expect(updates?.body).toMatch(/width:\s*46px/);
+  });
+
   it("separates the touch toolbar grid from the rail's vertical flex layout", () => {
     expect(rules().find(rule => rule.selector === ".radar-double-navigation .radar-double-rail")?.body).toMatch(/display:\s*flex/);
-    expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*:has\(\.radar-double-navigation-compact\)/);
+    expect(railHostCss({ wide: false, compact: true, scoped: false })).toMatch(/@media \(max-width: 767px\)[\s\S]*--radar-rail-width: var\(--radar-rail-mobile\)/);
     expect(css).toContain("env(safe-area-inset-top");
     expect(css).toContain("prefers-reduced-motion");
   });
