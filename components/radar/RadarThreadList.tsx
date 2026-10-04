@@ -35,7 +35,6 @@ import {
   experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
   useSdk,
-  useSettings,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -59,6 +58,7 @@ import {
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
 import { setRailScope, useValidatedRailScope } from "./railScope";
+import { useSettingValues } from "./settingsStore";
 import {
   useThreadGroups,
   type ThreadGroup,
@@ -87,8 +87,6 @@ const COLLAPSED_THREADS_KEY = "radar-sidebar:collapsed-threads:v1";
 const PROJECT_ORDER_KEY = "radar-sidebar:project-order:v1";
 const STATUS_FILTER_KEY = "radar-sidebar:status-filter:v1";
 const DENSITY_KEY = "radar-sidebar:density:v1";
-const LAST_DEFAULT_DENSITY_KEY = "radar-sidebar:last-default-density:v1";
-const LAST_TWO_LINE_TITLES_KEY = "radar-sidebar:last-two-line-titles:v1";
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set();
 
@@ -115,49 +113,25 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** Plugin settings, with the shipped defaults applied while they load. The two
- * that set row height fall back to the value this client last saw instead, so
- * a reload paints rows at their final size without holding the list back.
- * Swipe actions stay off until the settings arrive. */
+/** The plugin's settings, from this browser's store. They are there on the
+ * first render, so rows paint at their final size and swipes know their
+ * actions from the start. */
 function useSidebarSettings() {
-  const { values } = useSettings();
-  const flag = (key: string, fallback: boolean): boolean =>
-    typeof values?.[key] === "boolean" ? (values[key] as boolean) : fallback;
-  const [lastSeen] = useState(() => ({
-    defaultDensity: readStored<DensityMode>(
-      LAST_DEFAULT_DENSITY_KEY,
-      "comfortable",
-      ["comfortable", "compact"],
-    ),
-    wrapTitles: readStored(LAST_TWO_LINE_TITLES_KEY, "off", ["off", "on"]) === "on",
-  }));
-  const loaded = values !== undefined;
-  const defaultDensity: DensityMode = loaded
-    ? values.defaultDensity === "compact" ? "compact" : "comfortable"
-    : lastSeen.defaultDensity;
-  const wrapTitles = loaded ? flag("twoLineTitles", false) : lastSeen.wrapTitles;
-  // Swipes act on threads, so they wait for the saved choice rather than
-  // running on the defaults for someone who turned them off.
-  const swipeOn = loaded && flag("swipeActions", true);
-  useEffect(() => {
-    if (!loaded) return;
-    writeStored(LAST_DEFAULT_DENSITY_KEY, defaultDensity);
-    writeStored(LAST_TWO_LINE_TITLES_KEY, wrapTitles ? "on" : "off");
-  }, [loaded, defaultDensity, wrapTitles]);
+  const values = useSettingValues();
   return {
-    railNav: flag("railNav", false),
-    hoverCard: flag("hoverCard", true),
-    celebrate: flag("celebrate", true),
-    motion: flag("motion", true),
-    loudUnread: flag("loudUnread", true),
-    adaptiveCollapse: flag("adaptiveCollapse", true),
-    defaultDensity,
-    wrapTitles,
-    swipeRight: swipeOn
-      ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
+    railNav: values.railNav,
+    hoverCard: values.hoverCard,
+    celebrate: values.celebrate,
+    motion: values.motion,
+    loudUnread: values.loudUnread,
+    adaptiveCollapse: values.adaptiveCollapse,
+    defaultDensity: values.defaultDensity as DensityMode,
+    wrapTitles: values.twoLineTitles,
+    swipeRight: values.swipeActions
+      ? swipeActionFromSetting(values.swipeRight, DEFAULT_SWIPE_RIGHT)
       : "none",
-    swipeLeft: swipeOn
-      ? swipeActionFromSetting(values?.swipeLeft, DEFAULT_SWIPE_LEFT)
+    swipeLeft: values.swipeActions
+      ? swipeActionFromSetting(values.swipeLeft, DEFAULT_SWIPE_LEFT)
       : "none",
   };
 }

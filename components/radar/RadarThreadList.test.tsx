@@ -931,14 +931,6 @@ describe("swipe actions", () => {
     expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     expect(slot.container.querySelector("[data-radar-swipe=\"off\"]")).not.toBeNull();
   });
-  it("waits for the saved settings before a swipe can act", () => {
-    // No `settings`: still loading, so a swipe must not run on the defaults.
-    const slot = renderThreads([makeThread({ id: "t" })]);
-    swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
-    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
-  });
-
   it("lets a locked drag go home when a second finger lands", () => {
     vi.useFakeTimers();
     try {
@@ -1160,43 +1152,10 @@ describe("density", () => {
 });
 
 describe("settings gates", () => {
-  it("shows rows on the shipped defaults while settings load", () => {
-    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
-      values: undefined, isLoading: true,
-    });
+  it("shows rows on the shipped defaults when nothing is saved", () => {
     const slot = renderThreads([makeThread({ id: "t" })]);
     expect(visibleRowIds(slot.container)).toEqual(["t"]);
     expect(screen.queryByRole("status", { name: "Loading threads" })).toBeNull();
-    expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
-      .toBeNull();
-  });
-
-  it("paints the last-seen density and title mode while settings load", () => {
-    // A first render on settings remembers them for this client...
-    renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: true, defaultDensity: "compact" },
-    });
-    cleanup();
-
-    // ...so the next load sizes rows correctly before settings resolve.
-    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
-      values: undefined, isLoading: true,
-    });
-    const slot = renderThreads([makeThread({ id: "t" })]);
-    expect(visibleRowIds(slot.container)).toEqual(["t"]);
-    expect(slot.container.querySelector(".radar-title-wrap.radar-density-compact"))
-      .not.toBeNull();
-  });
-
-  it("follows the loaded settings over the last-seen ones", () => {
-    renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: true, defaultDensity: "compact" },
-    });
-    cleanup();
-
-    const slot = renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: false },
-    });
     expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
       .toBeNull();
   });

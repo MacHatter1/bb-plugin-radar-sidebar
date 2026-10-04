@@ -338,7 +338,15 @@ flowchart LR
 
 ## Settings
 
-`bb plugin config radar-sidebar`, or **Settings → Installed plugins → Radar Sidebar**.
+Open **Settings → Installed plugins → Radar Sidebar**. The plugin keeps its own
+settings, shared by every device you use, so they don't appear in
+`bb plugin config`.
+
+The settings page groups everything into four cards: Navigation rail, Thread
+rows, Attention and feedback, and Swipe actions. Each card has a small live
+picture that changes as you flip its switches, and options that depend on
+another (Labelled rail and Project badges need Navigation rail; the swipe
+actions need Swipe actions) are greyed out with a note until that one is on.
 
 <details>
 <summary><b>All settings</b></summary>

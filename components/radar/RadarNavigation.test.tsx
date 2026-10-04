@@ -1,15 +1,15 @@
 import { createElement } from "react";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import { railHostCss } from "./railHostStyles";
 import type { ExperimentalSidebarNavigationItem, ExperimentalSidebarNavigationProps, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
 import { DAY, makeProject, makeThread, NOW } from "./fixtures";
 import { resetRailScope, setRailScope, useRailScope } from "./railScope";
+import { seedSettings } from "./settingsStore";
 
 const host = vi.hoisted(() => ({
-  railNav: true,
   items: null as ExperimentalSidebarNavigationItem[] | null,
   sidebarThreads: null as Partial<PluginSidebarThreadsState> | null,
 }));
@@ -17,7 +17,6 @@ vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@get-bb/plugin-sdk/app")>();
   return {
     ...actual,
-    useSettings: () => { const state = actual.useSettings(); return { ...state, values: { ...state.values, railNav: host.railNav } }; },
     experimental_useSidebarThreads: (...args: Parameters<typeof actual.experimental_useSidebarThreads>) => ({
       ...actual.experimental_useSidebarThreads(...args),
       ...host.sidebarThreads,
@@ -46,7 +45,8 @@ function railHostStyles(): HTMLStyleElement[] {
 function mount(items: ExperimentalSidebarNavigationItem[], isCompactViewport = false) {
   return renderSlot(navigation, { ...props, isCompactViewport }, { sidebarNavigation: { items } });
 }
-afterEach(() => { cleanup(); host.items = null; host.railNav = true; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => { seedSettings({ railNav: true }); });
+afterEach(() => { cleanup(); host.items = null; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("host navigation arrangement", () => {
   it.each([false, true])("renders host order and visibility immediately (compact=%s)", (compact) => {
@@ -322,7 +322,7 @@ describe("rail ergonomics", () => {
   });
 
   it.each([false, true])("focuses the first enabled More item for immediate keyboard traversal (rail=%s)", (rail) => {
-    host.railNav = rail;
+    seedSettings({ railNav: rail });
     mount([
       { ...destination("disabled", "Disabled", false), isDisabled: true },
       destination("notes", "Notes", false),
@@ -592,7 +592,7 @@ describe("railNav layout setting", () => {
   it.each([false, true])("keeps the published slot and normal navigation when off (compact=%s)", (compact) => {
     expect(navigation.id).toBe("radar");
     expect(app.experimentalSidebarNavigations).toHaveLength(1);
-    host.railNav = false;
+    seedSettings({ railNav: false });
     const newThread: ExperimentalSidebarNavigationItem = { ...destination("new", "New thread"), action: { kind: "new-thread" }, pluginId: null };
     const slot = mount([newThread, destination("notes", "Notes"), destination("hidden", "Hidden", false)], compact);
     expect(slot.container.querySelector(".radar-double-navigation")).toBeNull();
@@ -610,14 +610,14 @@ describe("railNav layout setting", () => {
     fireEvent.pointerEnter(screen.getByRole("button", { name: "Notes" }));
     fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
     expect(screen.getByRole("group", { name: "More navigation" })).toBeTruthy();
-    host.railNav = false;
+    seedSettings({ railNav: false });
     slot.rerender(createElement(navigation.component, props));
     expect(slot.container.querySelector(".radar-double-navigation")).toBeNull();
     expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(document.documentElement.style.getPropertyValue("--radar-rail-reserve")).toBe("");
     expect(railHostStyles()).toEqual([]);
-    host.railNav = true;
+    seedSettings({ railNav: true });
     slot.rerender(createElement(navigation.component, props));
     expect(screen.getByRole("button", { name: "Home" })).toBeTruthy();
     expect(railHostStyles().map((style) => style.textContent)).toEqual([railHostCss({ wide: false, compact: false, scoped: false })]);
@@ -625,7 +625,7 @@ describe("railNav layout setting", () => {
   });
 
   it("ignores a saved wide choice and wideRail when railNav is off", () => {
-    host.railNav = false;
+    seedSettings({ railNav: false });
     localStorage.setItem("radar-sidebar:rail-wide:v1", "1");
     renderSlot(navigation, props, { sidebarNavigation: { items: [destination("notes", "Notes")] }, settings: { wideRail: true } });
     expect(document.querySelector(".radar-double-navigation-wide")).toBeNull();

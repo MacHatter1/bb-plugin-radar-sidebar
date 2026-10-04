@@ -4019,3 +4019,229 @@ a.radar-row-main:hover {
   .radar-double-navigation-compact .radar-double-heading-scope { min-height: 44px; }
   .radar-double-navigation-compact .radar-double-new-thread { min-width: 44px; height: 44px; flex: none; }
 }
+
+/* ---- Settings section: grouped cards, each with a live picture. ---- */
+
+.radar-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.radar-settings-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card, var(--background));
+  overflow: hidden;
+}
+.radar-settings-card-head { padding: 12px 16px 0; }
+.radar-settings-card-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.radar-settings-card-head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.radar-settings-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  margin: 12px 16px 4px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+.radar-settings-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px 6px;
+}
+.radar-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.radar-setting:first-child { border-top: 0; }
+.radar-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.radar-setting-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.radar-setting-hint {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+.radar-setting-needs {
+  font-size: 11px;
+  color: var(--warning, #b98533);
+}
+.radar-setting-disabled .radar-setting-label,
+.radar-setting-disabled .radar-setting-hint { opacity: 0.55; }
+.radar-setting-control { flex: none; }
+.radar-settings-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--destructive, #d43d3d);
+}
+
+.radar-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 38%, transparent);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.radar-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.radar-switch-on { background: var(--primary); }
+.radar-switch-on .radar-switch-thumb { transform: translateX(14px); }
+.radar-select {
+  max-width: 190px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+.radar-switch:focus-visible,
+.radar-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.radar-switch:disabled,
+.radar-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Pictures. The rail and rows are the real ones; only the frame is new. */
+.radar-settings-railrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+}
+.radar-settings-rail { position: relative; flex: none; }
+.radar-settings-rail .radar-double-rail {
+  position: static;
+  height: auto;
+  padding: 8px 7px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: none;
+}
+.radar-settings-rail .radar-rail-project { cursor: default; }
+.radar-settings-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+}
+.radar-settings-lines i,
+.radar-settings-above i,
+.radar-settings-swipe-row i {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+}
+.radar-settings-lines i:nth-child(2) { width: 70%; }
+.radar-settings-lines i:nth-child(3) { width: 45%; }
+.radar-settings-above {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.radar-settings-above-nav { display: flex; gap: 6px; }
+.radar-settings-above-nav span {
+  width: 26px;
+  height: 22px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--muted-foreground) 26%, transparent);
+}
+.radar-settings-above i:nth-of-type(2) { width: 70%; }
+.radar-settings-above i:nth-of-type(3) { width: 45%; }
+.radar-settings-above em {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--muted-foreground);
+}
+.radar-settings-list {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  pointer-events: none;
+}
+.radar-settings-swipe {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  transition: opacity 140ms ease;
+}
+.radar-settings-swipe-off { opacity: 0.4; }
+.radar-settings-swipe-row {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+.radar-settings-swipe-row i:last-child { width: 55%; }
+.radar-settings-swipe-chip {
+  flex: none;
+  max-width: 34%;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar-settings-swipe-left {
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 16%, transparent);
+  color: color-mix(in srgb, var(--destructive, #d43d3d) 80%, var(--foreground));
+}
+.radar-settings-swipe-right {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: color-mix(in srgb, var(--primary) 80%, var(--foreground));
+}

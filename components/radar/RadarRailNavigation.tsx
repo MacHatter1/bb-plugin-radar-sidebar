@@ -16,7 +16,6 @@ import {
   experimental_useSidebarNavigation,
   experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
-  useSettings,
   type ExperimentalSidebarNavigationItem,
   type ExperimentalSidebarNavigationProps,
 } from "@get-bb/plugin-sdk/app";
@@ -38,8 +37,9 @@ import {
 import { RailTooltip, moveRailFocus, type RailTip } from "./railTooltip";
 import { useRailHostStructure, useRailMeasurements } from "./railLayout";
 import { railHostCss } from "./railHostStyles";
+import { useSettingValues } from "./settingsStore";
 
-type RailProject = {
+export type RailProject = {
   id: string;
   name: string;
   threads: number;
@@ -141,7 +141,7 @@ function badgeCount(count: number): string {
 }
 
 /** Needs you, working, unread. Decorative: the tile's description carries the tally. */
-function ProjectBadges({ project }: { project: RailProject }) {
+export function ProjectBadges({ project }: { project: RailProject }) {
   if (project.waiting + project.active + project.unread === 0) return null;
   return (
     <span className="radar-rail-badges" aria-hidden="true">
@@ -195,9 +195,7 @@ function RailNavigationBody({
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
-  const { values: settingValues } = useSettings();
-  // On by default, so a settings value that hasn't loaded yet counts as on.
-  const projectBadges = settingValues?.projectBadges !== false;
+  const { wideRail, projectBadges } = useSettingValues();
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -231,7 +229,7 @@ function RailNavigationBody({
   // Wide mode restyles BB's own sidebar markup, so it ships off and needs
   // the plugin setting on, plus the host structure it relies on. Without
   // either, the toggle is hidden and the rail stays narrow.
-  const wideAllowed = settingValues?.wideRail === true && !isCompactViewport;
+  const wideAllowed = wideRail && !isCompactViewport;
   const hostSupportsWide = useRailHostStructure(railRef);
   const wide = wideChoice && wideAllowed && hostSupportsWide;
   // BB's sidebar is restyled from the rail's own <style> elements below,

@@ -270,11 +270,17 @@ back to BB's list automatically.
 
 ## Settings
 
-`bb plugin config radar-sidebar`, or Settings → Installed plugins → Radar
-Sidebar. The frontend reads them through `useSettings()`, and every value
-has a default, so the list never waits on them. Until they load,
-`defaultDensity` and `twoLineTitles` use the value this client last saw, so
-rows paint at their final height.
+Settings → Installed plugins → Radar Sidebar. The plugin keeps its own
+settings in its server storage (`getSettings` and `setSetting` over its RPC,
+changes pushed on the `settings` realtime channel), shared by every device.
+BB's plugin settings are not used, so there is no `bb plugin config` for them
+and BB draws no flat list. The frontend reads them from `useSettingValues()`;
+every value has a default, and the last values this browser saw are cached so
+the first paint is right and the list never waits on the server.
+
+The settings page shows these as four cards (Navigation rail, Thread rows,
+Attention and feedback, Swipe actions) with live previews, and greys out
+settings whose requirement is off. The keys and defaults below are unchanged.
 
 | Key | Default | Effect |
 | --- | --- | --- |

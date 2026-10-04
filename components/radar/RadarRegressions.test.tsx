@@ -70,12 +70,11 @@ afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unst
 
 describe("sidebar behavior regressions", () => {
   it("applies an adaptiveCollapse setting change to already mounted rows", async () => {
-    const settings = { adaptiveCollapse: true };
-    const slot = mount([makeThread({ id: "quiet" })], settings);
+    const slot = mount([makeThread({ id: "quiet" })], { adaptiveCollapse: true });
     await act(async () => {});
     expect(slot.container.querySelector(".radar-row-collapsed")).not.toBeNull();
-    settings.adaptiveCollapse = false;
-    slot.rerender(createElement(list.component, { ...props, isCompactViewport: true }));
+    // The server reports the change, as it does when another device saves one.
+    await slot.emitRealtime("settings", { adaptiveCollapse: false });
     expect(slot.container.querySelector(".radar-row-collapsed")).toBeNull();
   });
 

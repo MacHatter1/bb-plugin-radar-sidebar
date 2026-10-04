@@ -6,6 +6,19 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+### Changed
+
+- Reorganise the plugin's settings page into four grouped cards (Navigation
+  rail, Thread rows, Attention and feedback, Swipe actions), each with a live
+  preview of its choices and short one-line descriptions. Settings that need
+  another are greyed out with a note until it is on. The setting keys and
+  defaults are unchanged.
+- The plugin now keeps its settings itself, shared by every device, instead
+  of in BB's plugin settings, so BB's own flat settings list is gone and the
+  page above is the only place to change them. Choices saved by earlier
+  versions can't be carried over and return to their defaults once.
+  `bb plugin config radar-sidebar` no longer lists them.
+
 ### Added
 
 - Badges on the rail's project tiles: an amber count with a pulsing halo for
