@@ -2,8 +2,9 @@
    tokens (with fallbacks), so custom palettes keep working. */
 
 /* Widths are shared by the rail, host gutter and host panel expansion. */
-:is(.group.peer, [data-sidebar="sidebar"]):has(.radar-double-navigation) {
+:is(body, .group.peer, [data-sidebar="sidebar"]):has(.radar-double-navigation) {
   --radar-rail-narrow: 60px;
+  --radar-rail-mobile: 56px;
   --radar-rail-wide: 168px;
   --radar-rail-width: var(--radar-rail-narrow);
 }
@@ -15,6 +16,17 @@
    :has() makes disable, provider changes, crashes and mobile transitions
    release it automatically, without changing host DOM or inline styles. */
 @media (min-width: 768px) {
+  /* BB's toggle lives in a fixed overlay outside the sidebar. Center it
+     on the rail's icon column only while that sidebar is expanded. */
+  body:has(.radar-double-navigation):has(.group.peer[data-state="expanded"]) [data-testid="app-sidebar-trigger-overlay"] {
+    width: calc(var(--radar-rail-narrow) - 1px);
+    padding-left: 0;
+    justify-content: center;
+  }
+  /* Labelled buttons place their icons 30px from the rail's left edge. */
+  body:has(.radar-double-navigation-wide):has(.group.peer[data-state="expanded"]) [data-testid="app-sidebar-trigger-overlay"] {
+    width: var(--radar-rail-narrow);
+  }
   [data-sidebar="sidebar"]:has(.radar-double-navigation) {
     position: relative;
     padding-inline-start: var(--radar-rail-width);
@@ -4239,9 +4251,14 @@ a.radar-row-main:hover {
    Same rail, 56px wide, full height; BB's footer keeps its mobile row
    layout beside it. No hover tooltips or wide mode here. */
 @media (max-width: 767px) {
+  body:has(.radar-double-navigation-compact) [data-testid="app-sidebar-trigger-overlay"] {
+    width: calc(var(--radar-rail-mobile) - 1px);
+    padding-left: 0;
+    justify-content: center;
+  }
   [data-sidebar="sidebar"]:has(.radar-double-navigation-compact):not(:has([data-sidebar-navigation-customize-mode="true"])) {
     position: relative;
-    --radar-rail-width: 56px;
+    --radar-rail-width: var(--radar-rail-mobile);
     padding-inline-start: var(--radar-rail-width);
   }
   /* Phones with a notch / home bar: BB pads the drawer by the safe-area
