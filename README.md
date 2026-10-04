@@ -154,7 +154,7 @@ to mark it read or archive it; each direction's action is a setting.
 ## Install
 
 ```sh
-bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.5.0' --yes
+bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.5.1' --yes
 ```
 
 The Git semver range tracks compatible `v0.5.x` releases. If you installed

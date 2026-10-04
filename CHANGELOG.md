@@ -4,6 +4,14 @@ All notable changes to Radar Sidebar are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.1 - 2026-10-04
+
+### Fixed
+
+- Align BB's sidebar toggle with the navigation rail's icon column in narrow,
+  labelled and mobile layouts. The override releases when the rail is off
+  or the desktop sidebar is collapsed.
+
 ## 0.5.0 - 2026-10-04
 
 ### Added
