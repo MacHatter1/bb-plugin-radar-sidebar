@@ -20,7 +20,7 @@ needs a decision hides at the bottom of the list.
 
 <br>
 
-<img src="docs/screenshots/hero.png" alt="Radar's thread list beside an open thread, with two threads needing input, one working and one finished but unread" width="900">
+<img src="docs/screenshots/hero.png" alt="Radar's thread list beside an open thread waiting for approval: two threads need input, one runs a background command, one is working and one has failed" width="900">
 
 </div>
 
@@ -129,20 +129,20 @@ to mark it read or archive it; each direction's action is a setting.
 <div align="center">
 <table>
 <tr>
-<td align="center"><img src="docs/screenshots/families.png" alt="Today group with needs-you, working, failed and finished rows, one expanded family and one folded family" width="440"><br><sub><b>Attention states and nested families</b></sub></td>
-<td align="center"><img src="docs/screenshots/hover-card.png" alt="Peek card beside a working thread, showing its goal, model, section, branch and context use" width="440"><br><sub><b>Hover peek card</b></sub></td>
+<td align="center"><img src="docs/screenshots/families.png" alt="Today group with needs-you, background-command, failed and finished rows, one expanded family and one folded family" width="440"><br><sub><b>Attention states and nested families</b></sub></td>
+<td align="center"><img src="docs/screenshots/hover-card.png" alt="Peek card beside a thread running a background command, showing its goal, model, section, branch and context use" width="440"><br><sub><b>Hover peek card</b></sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/group-by-project.png" alt="Threads grouped under Tidewater and Lantern project headers" width="440"><br><sub><b>Grouped by project</b></sub></td>
 <td align="center"><img src="docs/screenshots/group-by-section.png" alt="Threads grouped under Bugs and Research section headers" width="440"><br><sub><b>Grouped by section</b></sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/filters-smart-views.png" alt="Waiting status chip active beside a saved smart view named Needs me, showing 2 of 17 threads" width="440"><br><sub><b>Status chips and a saved smart view</b></sub></td>
+<td align="center"><img src="docs/screenshots/filters-smart-views.png" alt="Waiting status chip active beside a saved smart view named Needs me, showing 2 of 15 threads" width="440"><br><sub><b>Status chips and a saved smart view</b></sub></td>
 <td align="center"><img src="docs/screenshots/bulk-select.png" alt="Three selected threads and the bulk bar with Archive, Pin and Read" width="440"><br><sub><b>Multi-select and bulk actions</b></sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/compact.png" alt="The same list in compact density" width="440"><br><sub><b>Compact density</b></sub></td>
-<td align="center"><img src="docs/screenshots/context-menu.png" alt="Right-click menu on a thread, with Move to section open" width="440"><br><sub><b>Right-click menu</b></sub></td>
+<td align="center"><img src="docs/screenshots/context-menu.png" alt="Right-click menu on a thread, with its Move to section choices" width="440"><br><sub><b>Right-click menu</b></sub></td>
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/nav-more.png" alt="Radar navigation with Skills and Automations moved into More" width="440"><br><sub><b>Navigation with More</b></sub></td>
@@ -207,6 +207,9 @@ server rail; BB's footer keeps its mobile row layout next to it. Tooltips
 and the labelled rail are desktop-only. Resize the sidebar with BB's normal
 handle to give the thread list more room.
 
+<details>
+<summary><b>Project scope, tooltips, keyboard and more</b></summary>
+
 - **Project scope.** Below the destinations, every project with an active
   thread gets a coloured monogram tile, most recently active first; an
   amber dot marks a project with a thread waiting on you. Click a tile and
@@ -244,7 +247,9 @@ handle to give the thread list more room.
 - **Mobile heading controls** keep 44px touch targets, and the scoped
   project heading always shows its clear icon.
 
-<p align="center"><img src="docs/screenshots/rail-desktop.webp" width="420" alt="Radar Sidebar with Navigation rail enabled beside its thread list"></p>
+</details>
+
+<p align="center"><img src="docs/screenshots/rail-desktop.png" width="360" alt="Radar Sidebar with Navigation rail enabled: destinations, project tiles with waiting dots, and BB's footer controls in the rail beside the thread list"></p>
 
 ### Labelled rail (experimental, off by default)
 
@@ -263,8 +268,14 @@ sidebar. This integration was live-checked on BB 0.45.1 nightly, with tests
 and typechecking against SDK 0.5.29. Earlier rail prototypes were checked
 on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration.
 
-<p align="center"><img src="docs/screenshots/rail-wide.webp" width="420" alt="The optional labelled rail with BB’s footer actions"></p>
-<p align="center"><img src="docs/screenshots/rail-mobile.webp" width="240" alt="The project rail beside the thread list in the mobile drawer"></p>
+<div align="center">
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/rail-wide.png" width="440" alt="The optional labelled rail, with labelled destinations, project rows and BB’s footer actions"><br><sub><b>Labelled rail</b></sub></td>
+<td align="center"><img src="docs/screenshots/rail-mobile.png" width="240" alt="The project rail beside the thread list in the mobile drawer"><br><sub><b>Mobile drawer</b></sub></td>
+</tr>
+</table>
+</div>
 
 ## Compatibility notes
 
@@ -379,7 +390,8 @@ server.ts               the settings the frontend reads; no storage, no CLI
 app.tsx                 registers the thread-list and navigation slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, nav, menus, peek card and smart views
-components/radar/*.ts   grouping hook, time bucketing, nav placement, model cache
+components/radar/*.ts   grouping hook, time bucketing, nav placement, model cache,
+                        and the styles the rail applies to BB's sidebar while mounted
 lib/swipe.ts            swipe actions and gesture math, shared with server.ts
 components/storage.ts   one-time migration of codex-sidebar: preferences
 components/ui/          vendored BB UI primitives
@@ -391,8 +403,9 @@ docs/                   logo and screenshots
 **Tests** cover time bucketing and nav placement as plain functions, the
 rendered list through BB's plugin test harness (`renderSlot` with seeded
 sidebar threads), saved-view validation, preference migration, execution-cache
-refreshes and completion timers. Static guards over `app.css` cover cascade
-mistakes jsdom cannot reproduce.
+refreshes, completion timers, and render counts, so a sidebar update re-renders
+only the rows that changed. Static guards over `app.css` and the rail's host
+stylesheet cover cascade mistakes jsdom cannot reproduce.
 The test setup uses jsdom's `localStorage` explicitly, including on Node 26,
 whose native storage global otherwise shadows it without a backing file.
 
