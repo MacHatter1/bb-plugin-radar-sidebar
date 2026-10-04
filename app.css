@@ -3828,15 +3828,90 @@ a.radar-row-main:hover {
   border-radius: 9px;
   transform: none;
 }
-.radar-rail-project-dot {
+/* Badges: needs you (top right), working (top left), unread (bottom right).
+   Each thread counts once between needs-you and working. */
+.radar-rail-badges {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
+  inset: 0;
+  pointer-events: none;
+}
+@property --radar-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes radar-ring-spin {
+  to { --radar-spin: 360deg; }
+}
+.radar-rail-badge {
+  box-sizing: border-box;
+  position: absolute;
+  min-width: 15px;
+  padding: 0 3px;
   border-radius: 9999px;
-  background: var(--warning, #b98533);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-foreground, #fff);
   box-shadow: 0 0 0 2px var(--sidebar, var(--background));
+  animation: radar-badge-in 200ms ease-out;
+}
+/* Needs you: a solid amber count with a ripple that radiates out, the same
+   language as the amber glow on waiting rows in the list. The pill is its own
+   stacking context so the ripple sits behind the number. */
+.radar-rail-badge-waiting {
+  top: 1px;
+  right: 1px;
+  isolation: isolate;
+  background: var(--warning, #b98533);
+  color: #fff;
+}
+.radar-rail-badge-waiting::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--warning, #b98533);
+  animation: radar-badge-halo 1.8s ease-out infinite;
+}
+@keyframes radar-badge-halo {
+  from {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+/* Working: the count sits in a ring whose arc turns. The gradient spins, not
+   the pill, so the number stays upright and wider counts keep their shape. */
+.radar-rail-badge-active {
+  --radar-ring: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+  top: 1px;
+  left: 1px;
+  padding: 0 2px;
+  border: 2px solid transparent;
+  line-height: 11px;
+  color: var(--radar-ring);
+  background:
+    linear-gradient(var(--sidebar, var(--background)), var(--sidebar, var(--background))) padding-box,
+    conic-gradient(
+      from var(--radar-spin),
+      var(--radar-ring) 0 28%,
+      color-mix(in srgb, var(--radar-ring) 22%, transparent) 28% 100%
+    ) border-box;
+  animation:
+    radar-badge-in 200ms ease-out,
+    radar-ring-spin 1s linear infinite;
+}
+.radar-rail-badge-unread {
+  right: 1px;
+  bottom: 1px;
+  background: var(--primary);
 }
 
 /* Wide mode: tiles become rows with the monogram as the leading glyph. */
@@ -3851,7 +3926,22 @@ a.radar-row-main:hover {
   color: var(--foreground);
   font-weight: 600;
 }
-.radar-double-navigation-wide .radar-rail-project-dot { top: 50%; right: 10px; transform: translateY(-50%); }
+.radar-double-navigation-wide .radar-rail-badges {
+  position: static;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.radar-double-navigation-wide .radar-rail-badge {
+  position: static;
+  min-width: 18px;
+  font-size: 10px;
+  line-height: 18px;
+  box-shadow: none;
+}
+.radar-double-navigation-wide .radar-rail-badge-waiting { position: relative; }
+.radar-double-navigation-wide .radar-rail-badge-active { line-height: 14px; }
 
 /* Heading: when scoped, the title becomes the project with a clear affordance. */
 .radar-double-heading-scope {
@@ -3886,6 +3976,8 @@ a.radar-row-main:hover {
 @media (prefers-reduced-motion: reduce) {
   .radar-rail-monogram { transition: none; }
   .radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-monogram { transform: none; }
+  .radar-rail-badge { animation: none; }
+  .radar-rail-badge-waiting::after { display: none; }
 }
 /* Scoped heading needs the room: New thread drops to its icon. */
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread { padding: 0; width: 28px; }

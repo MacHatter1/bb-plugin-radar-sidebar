@@ -46,7 +46,12 @@ stays on the rail; **Home** only clears the project filter and never creates
 or opens a thread. **New thread** in the list heading starts in the scoped
 project, or BB's own action when no project is scoped (Option-click opens a
 split without the project preset).
-Project tiles show visible, unarchived threads, newest project first; click a
+Project tiles show visible, unarchived threads, newest project first (projects
+with a needs-you thread stay on top until it is resolved), with
+count badges: amber halo-pulse needs-you, green spinner-ring working (blocked threads are
+counted as needs-you, not working), and primary-coloured unread. The
+`projectBadges` setting (default `true`, needs `railNav`) turns the badges and
+the needs-you ordering off. Click a
 tile to filter, click it again or Home/the heading to clear. A project with
 only archives keeps its scope. A deleted project clears once the directory
 is ready; loading/error snapshots preserve the saved choice. When using
@@ -275,6 +280,7 @@ rows paint at their final height.
 | --- | --- | --- |
 | `railNav` | `false` | Navigation rail beside the list, with project filters; off keeps navigation above the list. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav` and a recognised host shell. |
+| `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and needs-you projects kept on top; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed; off under `prefers-reduced-motion` regardless. |

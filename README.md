@@ -211,10 +211,16 @@ handle to give the thread list more room.
 <summary><b>Project scope, tooltips, keyboard and more</b></summary>
 
 - **Project scope.** Below the destinations, every project with an active
-  thread gets a coloured monogram tile, most recently active first; an
-  amber dot marks a project with a thread waiting on you. Click a tile and
-  the thread list shows only that project, its heading becomes the project
-  name, and the tile fills with its colour. Click it again, the heading, or
+  thread gets a coloured monogram tile, most recently active first (a project
+  with a thread waiting on you stays on top until you've dealt with it), with
+  count badges: a solid amber count with a pulsing halo for threads waiting
+  on you (top right), a green count in a spinning ring for work in progress
+  (top left), and the theme's primary colour for unread (bottom right). Wide
+  mode lines them up at the end of the row. Turn the badges, and the
+  needs-you ordering, off with **Project badges** (`projectBadges`, on by
+  default with the rail). Click a tile and the thread list shows only that
+  project, its heading becomes the project name, and the tile fills with its
+  colour. Click it again, the heading, or
   Home to see every project. Home only clears the filter; **New thread** in
   the heading starts the thread in the scoped project (Option-click opens a
   split instead, without the project preset). Tooltips carry the tally ("4 threads ·
@@ -341,6 +347,7 @@ flowchart LR
 | --- | --- | --- |
 | `railNav` | `false` | Navigation rail with project filters beside the thread list. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav`. |
+| `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and projects that need you kept on top; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed. Also respects `prefers-reduced-motion`. |

@@ -44,6 +44,8 @@ type RailProject = {
   name: string;
   threads: number;
   live: number;
+  /** Live work that isn't blocked on you; the badge's count, so no thread is in two badges. */
+  active: number;
   waiting: number;
   unread: number;
   latest: number;
@@ -62,6 +64,7 @@ function sameRailProjects(
         project.name === other.name &&
         project.threads === other.threads &&
         project.live === other.live &&
+        project.active === other.active &&
         project.waiting === other.waiting &&
         project.unread === other.unread
       );
@@ -69,8 +72,8 @@ function sameRailProjects(
   );
 }
 
-/** Projects with at least one visible thread, most recently active first. */
-function useRailProjects() {
+/** Projects with at least one visible thread: needs-you first, then most recently active. */
+function useRailProjects(pinNeedsYou: boolean) {
   const { threads, projects, status } = experimental_useSidebarThreads();
   const previous = useRef<RailProject[]>([]);
   const railProjects = useMemo(() => {
@@ -89,6 +92,7 @@ function useRailProjects() {
           name: project.isPersonal ? "Personal" : project.name,
           threads: 0,
           live: 0,
+          active: 0,
           waiting: 0,
           unread: 0,
           latest: 0,
@@ -96,21 +100,28 @@ function useRailProjects() {
         byId.set(project.id, entry);
       }
       entry.threads += 1;
-      if (isLiveThread(thread)) entry.live += 1;
-      if (
+      const live = isLiveThread(thread);
+      const waiting =
         thread.indicator === "waiting-for-input" ||
-        thread.indicator === "queued-waiting"
-      ) {
-        entry.waiting += 1;
-      }
+        thread.indicator === "queued-waiting";
+      if (live) entry.live += 1;
+      if (waiting) entry.waiting += 1;
+      if (live && !waiting && !thread.hasPendingInteraction) entry.active += 1;
       if (thread.isUnread) entry.unread += 1;
       entry.latest = Math.max(entry.latest, activityTime(thread, now));
     }
-    const next = [...byId.values()].sort((a, b) => b.latest - a.latest);
+    // With badges on, a project that needs you stays on top until that's
+    // resolved; the rest (and ties among those that need you) follow recent
+    // activity.
+    const next = [...byId.values()].sort(
+      (a, b) =>
+        (pinNeedsYou ? Number(b.waiting > 0) - Number(a.waiting > 0) : 0) ||
+        b.latest - a.latest,
+    );
     // Every thread update lands here. Keep the previous list when nothing
     // the tiles show moved, so they skip rendering.
     return sameRailProjects(previous.current, next) ? previous.current : next;
-  }, [threads, projects]);
+  }, [threads, projects, pinNeedsYou]);
   previous.current = railProjects;
   return { railProjects, projects, status };
 }
@@ -123,6 +134,34 @@ function projectTally(project: RailProject): string {
     project.unread > 0 ? `${project.unread} unread` : null,
   ].filter((part): part is string => part !== null);
   return parts.join(" · ");
+}
+
+function badgeCount(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
+
+/** Needs you, working, unread. Decorative: the tile's description carries the tally. */
+function ProjectBadges({ project }: { project: RailProject }) {
+  if (project.waiting + project.active + project.unread === 0) return null;
+  return (
+    <span className="radar-rail-badges" aria-hidden="true">
+      {project.waiting > 0 ? (
+        <span className="radar-rail-badge radar-rail-badge-waiting">
+          {badgeCount(project.waiting)}
+        </span>
+      ) : null}
+      {project.active > 0 ? (
+        <span className="radar-rail-badge radar-rail-badge-active">
+          {badgeCount(project.active)}
+        </span>
+      ) : null}
+      {project.unread > 0 ? (
+        <span className="radar-rail-badge radar-rail-badge-unread">
+          {badgeCount(project.unread)}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 const RAIL_WIDE_KEY = "radar-sidebar:rail-wide:v1";
@@ -156,6 +195,9 @@ function RailNavigationBody({
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
+  const { values: settingValues } = useSettings();
+  // On by default, so a settings value that hasn't loaded yet counts as on.
+  const projectBadges = settingValues?.projectBadges !== false;
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -167,7 +209,11 @@ function RailNavigationBody({
   const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
   const [wideChoice, setWide] = useState(readRailWide);
-  const { railProjects, projects, status: projectStatus } = useRailProjects();
+  const {
+    railProjects,
+    projects,
+    status: projectStatus,
+  } = useRailProjects(projectBadges);
   const scope = useValidatedRailScope({ projects, status: projectStatus });
   const project = scope
     ? projects.find((candidate) => candidate.id === scope)
@@ -185,7 +231,6 @@ function RailNavigationBody({
   // Wide mode restyles BB's own sidebar markup, so it ships off and needs
   // the plugin setting on, plus the host structure it relies on. Without
   // either, the toggle is hidden and the rail stays narrow.
-  const { values: settingValues } = useSettings();
   const wideAllowed = settingValues?.wideRail === true && !isCompactViewport;
   const hostSupportsWide = useRailHostStructure(railRef);
   const wide = wideChoice && wideAllowed && hostSupportsWide;
@@ -536,6 +581,7 @@ function RailNavigationBody({
                 type="button"
                 aria-pressed={isScoped}
                 aria-label={`${project.name}: ${isScoped ? "show every project" : "show only this project"}`}
+                aria-description={projectTally(project)}
                 className={cn(
                   "radar-nav-icon-button radar-rail-project",
                   isScoped && "radar-rail-project-active",
@@ -561,15 +607,13 @@ function RailNavigationBody({
                   {monogram(project.name)}
                 </span>
                 <span className="radar-rail-label">{project.name}</span>
-                {project.waiting > 0 ? (
-                  <span className="radar-rail-project-dot" aria-hidden="true" />
-                ) : null}
+                {projectBadges ? <ProjectBadges project={project} /> : null}
               </button>
             );
           })}
         </div>
       ) : null,
-    [railProjects, scope, hideTip, tipProps],
+    [railProjects, scope, hideTip, tipProps, projectBadges],
   );
 
   return (

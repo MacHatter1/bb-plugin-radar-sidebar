@@ -6,6 +6,24 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- Badges on the rail's project tiles: an amber count with a pulsing halo for
+  threads that need you, a green count in a spinning ring for work in
+  progress, and a count of unread threads. A thread counts once between
+  needs-you and working. A project with a thread that needs you moves to the
+  top of the tiles until that is resolved. Wide mode shows the badges as a
+  row of pills at the end of the tile. The tile's description carries the
+  tally for assistive tech.
+- A **Project badges** setting (`projectBadges`, on by default) turns the
+  badges and the needs-you ordering off. It applies when the rail is on.
+
+### Fixed
+
+- Start the thread in the scoped project when you press New thread beside
+  the project's name in the rail's heading. It opened the composer with no
+  project chosen. Option-click still opens a split through BB's own action.
+
 ## 0.5.2 - 2026-10-04
 
 ### Fixed

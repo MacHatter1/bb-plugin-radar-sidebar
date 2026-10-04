@@ -80,6 +80,13 @@ export default async function plugin(bb: BbPluginApi) {
         "Requires Navigation rail. Adds a toggle at the foot of the navigation rail that widens it to show labels, including BB's own footer actions. Experimental: uses BB's sidebar layout and falls back to icons when the expected layout is unavailable.",
       default: false,
     },
+    projectBadges: {
+      type: "boolean",
+      label: "Project badges",
+      description:
+        "Requires Navigation rail. Show needs-you, working and unread counts on the rail's project tiles, and keep projects that need you at the top.",
+      default: true,
+    },
     swipeActions: {
       type: "boolean",
       label: "Swipe actions",

@@ -442,6 +442,8 @@ describe("project scope tiles", () => {
     makeThread({ id: "t3", projectId: "proj_b", updatedAt: NOW - 5000, isArchived: true }),
   ];
   function Scope() { return createElement("span", { "data-testid": "scope" }, useRailScope() ?? "none"); }
+  /** The tile's monogram and name, without its badges. */
+  const tileLabel = (tile: HTMLElement) => `${tile.querySelector(".radar-rail-monogram")?.textContent}${tile.querySelector(".radar-rail-label")?.textContent}`;
   function mountWithThreads(isCompactViewport = false) {
     const wrapped = { ...navigation, component: (p: ExperimentalSidebarNavigationProps) => createElement("div", null, createElement(navigation.component, p), createElement(Scope)) };
     const newThread: ExperimentalSidebarNavigationItem = { ...destination("new", "New thread"), id: "__bb__/new-thread", action: { kind: "new-thread" }, pluginId: null };
@@ -483,7 +485,7 @@ describe("project scope tiles", () => {
     mountWithThreads();
     const group = screen.getByRole("group", { name: "Projects" });
     const tiles = within(group).getAllByRole("button");
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["BAbb-appimage", "ERERBareeq"]);
+    expect(tiles.map(tileLabel)).toEqual(["BAbb-appimage", "ERERBareeq"]);
     expect(screen.queryByText("Quiet")).toBeNull();
     fireEvent.click(tiles[0]!);
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
@@ -535,7 +537,7 @@ describe("project scope tiles", () => {
   it("explains the tally in the tile tooltip and marks waiting projects", () => {
     mountWithThreads();
     const tile = screen.getByRole("button", { name: "bb-appimage: show only this project" });
-    expect(tile.querySelector(".radar-rail-project-dot")).toBeTruthy();
+    expect(tile.querySelector(".radar-rail-badge-waiting")).toBeTruthy();
     fireEvent.focus(tile);
     expect(screen.getByRole("tooltip").textContent).toContain("1 thread · 1 waiting");
   });
@@ -544,7 +546,7 @@ describe("project scope tiles", () => {
     mountWithThreads(true);
     const group = screen.getByRole("group", { name: "Projects" });
     const tiles = within(group).getAllByRole("button");
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["BAbb-appimage", "ERERBareeq"]);
+    expect(tiles.map(tileLabel)).toEqual(["BAbb-appimage", "ERERBareeq"]);
     fireEvent.click(tiles[0]!);
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -686,6 +688,105 @@ describe("host styles", () => {
     // A change the tiles do show still lands.
     host.sidebarThreads = { ...host.sidebarThreads, threads: [{ ...thread, indicator: "waiting-for-input" }] };
     slot.rerender(createElement(navigation.component, props));
-    expect(tile.querySelector(".radar-rail-project-dot")).not.toBeNull();
+    expect(tile.querySelector(".radar-rail-badge-waiting")).not.toBeNull();
+  });
+});
+
+describe("project badges", () => {
+  const projects = [makeProject({ id: "proj_a", name: "bb-appimage" })];
+  function tileFor(threads: ReturnType<typeof makeThread>[]) {
+    host.sidebarThreads = { status: "ready", projects, threads };
+    mount([]);
+    const tile = screen.getByRole("button", { name: "bb-appimage: show only this project" });
+    return { tile, badge: (kind: "waiting" | "active" | "unread") => tile.querySelector(`.radar-rail-badge-${kind}`)?.textContent ?? null };
+  }
+
+  it("counts what needs you, what is working, and what is unread", () => {
+    const { badge } = tileFor([
+      makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input" }),
+      makeThread({ id: "queued", queuedWork: "waiting", indicator: "queued-waiting" }),
+      makeThread({ id: "run-a", status: "active" }),
+      makeThread({ id: "run-b", status: "active", isUnread: true }),
+      makeThread({ id: "unread", isUnread: true }),
+      makeThread({ id: "quiet" }),
+    ]);
+    expect(badge("waiting")).toBe("2");
+    // Blocked and queued work is already under needs-you, not counted twice.
+    expect(badge("active")).toBe("2");
+    expect(badge("unread")).toBe("2");
+  });
+
+  it("draws only the badges a project has", () => {
+    const { tile, badge } = tileFor([makeThread({ id: "unread", isUnread: true })]);
+    expect(badge("unread")).toBe("1");
+    expect(badge("waiting")).toBeNull();
+    expect(badge("active")).toBeNull();
+    expect(tile.querySelectorAll(".radar-rail-badge")).toHaveLength(1);
+  });
+
+  it("draws none for a quiet project", () => {
+    const { tile } = tileFor([makeThread({ id: "quiet" })]);
+    expect(tile.querySelector(".radar-rail-badges")).toBeNull();
+  });
+
+  it("caps large counts", () => {
+    const { badge } = tileFor(Array.from({ length: 120 }, (_, index) => makeThread({ id: `u${index}`, isUnread: true })));
+    expect(badge("unread")).toBe("99+");
+  });
+
+  it("pins a project that needs you above busier ones until it is resolved", () => {
+    const pair = [makeProject({ id: "proj_a", name: "bb-appimage" }), makeProject({ id: "proj_b", name: "ERBareeq" })];
+    const running = makeThread({ id: "running", projectId: "proj_b", status: "active" });
+    const blocked = makeThread({ id: "blocked", projectId: "proj_a", updatedAt: NOW - 7 * DAY, latestAttentionAt: NOW - 7 * DAY, hasPendingInteraction: true, indicator: "waiting-for-input" });
+    const order = () => within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button").map((tile) => tile.getAttribute("aria-label"));
+    host.sidebarThreads = { status: "ready", projects: pair, threads: [running, blocked] };
+    const slot = mount([]);
+    expect(order()).toEqual(["bb-appimage: show only this project", "ERBareeq: show only this project"]);
+    // Answered: back to activity order.
+    host.sidebarThreads = { status: "ready", projects: pair, threads: [running, { ...blocked, hasPendingInteraction: false, indicator: "none" }] };
+    slot.rerender(createElement(navigation.component, props));
+    expect(order()).toEqual(["ERBareeq: show only this project", "bb-appimage: show only this project"]);
+  });
+
+  it("orders projects that need you by activity among themselves", () => {
+    const pair = [makeProject({ id: "proj_a", name: "bb-appimage" }), makeProject({ id: "proj_b", name: "ERBareeq" })];
+    host.sidebarThreads = {
+      status: "ready", projects: pair,
+      threads: [
+        makeThread({ id: "older", projectId: "proj_a", indicator: "waiting-for-input", updatedAt: NOW - 3 * DAY, latestAttentionAt: NOW - 3 * DAY }),
+        makeThread({ id: "newer", projectId: "proj_b", indicator: "waiting-for-input", updatedAt: NOW - DAY, latestAttentionAt: NOW - DAY }),
+      ],
+    };
+    mount([]);
+    const tiles = within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button");
+    expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual(["ERBareeq: show only this project", "bb-appimage: show only this project"]);
+  });
+
+  it("shows no badges when Project badges is off, but keeps the tally", () => {
+    host.sidebarThreads = { status: "ready", projects, threads: [makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input", isUnread: true })] };
+    renderSlot(navigation, props, { sidebarNavigation: { items: [] }, settings: { projectBadges: false } });
+    const tile = screen.getByRole("button", { name: "bb-appimage: show only this project" });
+    expect(tile.querySelector(".radar-rail-badges")).toBeNull();
+    expect(tile.getAttribute("aria-description")).toContain("1 waiting");
+  });
+
+  it("keeps activity order, without the needs-you pin, when Project badges is off", () => {
+    const pair = [makeProject({ id: "proj_a", name: "bb-appimage" }), makeProject({ id: "proj_b", name: "ERBareeq" })];
+    host.sidebarThreads = {
+      status: "ready", projects: pair,
+      threads: [
+        makeThread({ id: "running", projectId: "proj_b", status: "active" }),
+        makeThread({ id: "blocked", projectId: "proj_a", updatedAt: NOW - 7 * DAY, latestAttentionAt: NOW - 7 * DAY, hasPendingInteraction: true, indicator: "waiting-for-input" }),
+      ],
+    };
+    renderSlot(navigation, props, { sidebarNavigation: { items: [] }, settings: { projectBadges: false } });
+    const tiles = within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button");
+    expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual(["ERBareeq: show only this project", "bb-appimage: show only this project"]);
+  });
+
+  it("describes the tally to assistive tech without renaming the tile", () => {
+    const { tile } = tileFor([makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input", isUnread: true })]);
+    expect(tile.getAttribute("aria-description")).toBe("1 thread · 1 waiting · 1 live · 1 unread");
+    expect(tile.querySelector(".radar-rail-badges")?.getAttribute("aria-hidden")).toBe("true");
   });
 });
