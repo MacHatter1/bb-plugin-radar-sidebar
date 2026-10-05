@@ -42,6 +42,14 @@ export const SETTINGS = {
       "Requires Navigation rail. Show needs-you, working and unread counts on the rail's project tiles, and keep projects that need you at the top.",
     default: true,
   },
+  projectStyle: {
+    type: "select",
+    label: "Project style",
+    description:
+      "Requires Navigation rail. How projects look on the rail: Tiles (hue squares with overlaid counts), Rings (state in the ring) or Chips (pills edged by state).",
+    options: ["Tiles", "Rings", "Chips"],
+    default: "Tiles",
+  },
   defaultDensity: {
     type: "select",
     label: "Default row density",
@@ -151,7 +159,7 @@ export const SETTING_GROUPS: readonly {
     id: "rail",
     title: "Navigation rail",
     description: "A vertical rail of destinations and projects beside the list.",
-    keys: ["railNav", "wideRail", "projectBadges"],
+    keys: ["railNav", "wideRail", "projectBadges", "projectStyle"],
   },
   {
     id: "rows",
@@ -177,6 +185,7 @@ export const SETTING_GROUPS: readonly {
 export const SETTING_REQUIRES: Partial<Record<SettingKey, SettingKey>> = {
   wideRail: "railNav",
   projectBadges: "railNav",
+  projectStyle: "railNav",
   swipeRight: "swipeActions",
   swipeLeft: "swipeActions",
 };
@@ -188,6 +197,7 @@ export const SETTING_HINTS: Record<SettingKey, string> = {
   wideRail: "Widen the rail to show labels. Experimental.",
   projectBadges:
     "Needs-you, working and unread counts on each project. Projects that need you float to the top.",
+  projectStyle: "Tiles, Rings or Chips for the rail's projects.",
   defaultDensity: "Starting row size. The header toggle overrides it per client.",
   twoLineTitles: "Wrap long titles onto a second line.",
   loudUnread: "Tint and accent finished threads you haven't seen.",

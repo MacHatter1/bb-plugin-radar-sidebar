@@ -164,6 +164,61 @@ export function ProjectBadges({ project }: { project: RailProject }) {
   );
 }
 
+/** The loudest thing a project tile shows: needs you beats working beats unread. */
+export function projectRailState(project: Pick<RailProject, "waiting" | "active" | "unread">): "waiting" | "working" | "unread" | "quiet" {
+  if (project.waiting > 0) return "waiting";
+  if (project.active > 0) return "working";
+  if (project.unread > 0) return "unread";
+  return "quiet";
+}
+
+/**
+ * A project tile's leading glyph in the chosen style. Tiles keep the hue
+ * monogram; Rings carry state in the ring (amber glow, working arc) with
+ * the monogram inside; Chips are a dot-plus-monogram pill edged by state.
+ * Wide rows reuse the same end counts, so only the glyph and chrome vary.
+ */
+export function ProjectGlyph({ project, style }: {
+  project: Pick<RailProject, "name" | "waiting" | "active" | "unread">;
+  style: string;
+}) {
+  const letters = monogram(project.name);
+  if (style === "Rings") {
+    if (projectRailState(project) === "working") {
+      return (
+        <span className="radar-rail-ringwrap" aria-hidden="true">
+          <span className="radar-rail-arc" />
+          <span className="radar-rail-ringcore">{letters}</span>
+        </span>
+      );
+    }
+    return (
+      <span
+        className={cn(
+          "radar-rail-ring",
+          projectRailState(project) === "waiting" && "radar-rail-ring-waiting",
+        )}
+        aria-hidden="true"
+      >
+        {letters}
+      </span>
+    );
+  }
+  if (style === "Chips") {
+    return (
+      <span className="radar-rail-chip" aria-hidden="true">
+        <span className="radar-rail-chipdot" />
+        <span className="radar-rail-chipmono">{letters}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="radar-rail-monogram" aria-hidden="true">
+      {letters}
+    </span>
+  );
+}
+
 const RAIL_WIDE_KEY = "radar-sidebar:rail-wide:v1";
 
 function readRailWide(): boolean {
@@ -194,7 +249,7 @@ function RailNavigationBody({
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
-  const { wideRail, projectBadges } = useSettingValues();
+  const { wideRail, projectBadges, projectStyle } = useSettingValues();
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -580,6 +635,9 @@ function RailNavigationBody({
                 aria-description={projectTally(project)}
                 className={cn(
                   "radar-nav-icon-button radar-rail-project",
+                  projectStyle === "Rings" && "radar-rail-style-rings",
+                  projectStyle === "Chips" && "radar-rail-style-chips",
+                  `radar-rail-state-${projectRailState(project)}`,
                   isScoped && "radar-rail-project-active",
                 )}
                 style={
@@ -599,9 +657,7 @@ function RailNavigationBody({
                   Accessory: null,
                 })}
               >
-                <span className="radar-rail-monogram" aria-hidden="true">
-                  {monogram(project.name)}
-                </span>
+                <ProjectGlyph project={project} style={projectStyle} />
                 <span className="radar-rail-label">{project.name}</span>
                 {projectBadges ? <ProjectBadges project={project} /> : null}
               </button>
@@ -609,7 +665,7 @@ function RailNavigationBody({
           })}
         </div>
       ) : null,
-    [railProjects, scope, hideTip, tipProps, projectBadges],
+    [railProjects, scope, hideTip, tipProps, projectBadges, projectStyle],
   );
 
   return (

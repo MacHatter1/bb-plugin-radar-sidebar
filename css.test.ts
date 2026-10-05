@@ -170,6 +170,25 @@ describe("app.css", () => {
     expect(offenders.map((rule) => rule.selector)).toEqual([]);
   });
 
+  it("defines each project style for the narrow and wide rail", () => {
+    const selectors = rules().map((rule) => rule.selector);
+    for (const selector of [
+      ".radar-rail-ring",
+      ".radar-rail-ringwrap",
+      ".radar-rail-style-chips .radar-rail-chip",
+      ".radar-double-navigation-wide .radar-rail-style-chips",
+    ]) {
+      expect(selectors).toContain(selector);
+    }
+    // Narrow rings and chips narrow the badges; wide rows show them all.
+    for (const selector of [
+      ".radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-rings .radar-rail-badge-waiting",
+      ".radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-chips .radar-rail-badge-unread",
+    ]) {
+      expect(css).toContain(selector);
+    }
+  });
+
   it("keeps the child indent defined", () => {
     const child = rules().find((rule) => rule.selector === ".radar-row-child");
     const deep = rules().find((rule) => rule.selector === ".radar-row-deep");

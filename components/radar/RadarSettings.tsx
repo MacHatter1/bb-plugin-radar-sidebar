@@ -7,8 +7,8 @@ import {
   SETTING_REQUIRES,
   type SettingKey,
 } from "@/lib/settings";
-import { ProjectBadges, type RailProject } from "./RadarRailNavigation";
-import { monogram, projectHue } from "./railScope";
+import { ProjectBadges, ProjectGlyph, projectRailState, type RailProject } from "./RadarRailNavigation";
+import { projectHue } from "./railScope";
 import { useSetSetting, useSettingValues } from "./settingsStore";
 
 /** The plugin's settings as BB's Settings page shows them: grouped into cards,
@@ -137,6 +137,7 @@ function RailPreview({ settings }: { settings: Settings }) {
   const railNav = settings.flag("railNav");
   const wide = settings.flag("wideRail");
   const badges = settings.flag("projectBadges");
+  const style = settings.text("projectStyle");
 
   if (!railNav) {
     return (
@@ -170,27 +171,29 @@ function RailPreview({ settings }: { settings: Settings }) {
     >
       <nav className="radar-double-rail">
         <div className="radar-rail-projects">
-          {tiles.map((project) => (
-            <button
-              key={project.id}
-              type="button"
-              tabIndex={-1}
-              className="radar-nav-icon-button radar-rail-project"
-              style={
-                { "--radar-project-hue": projectHue(project.id) } as CSSProperties
-              }
-            >
-              <span className="radar-rail-monogram">
-                {monogram(project.name)}
-              </span>
-              <span className="radar-rail-label">{project.name}</span>
-              {badges ? (
-                <ProjectBadges
-                  project={{ ...project, threads: 1, live: 0, latest: 0 }}
-                />
-              ) : null}
-            </button>
-          ))}
+          {tiles.map((project) => {
+            const full = { ...project, threads: 1, live: 0, latest: 0 };
+            return (
+              <button
+                key={project.id}
+                type="button"
+                tabIndex={-1}
+                className={cn(
+                  "radar-nav-icon-button radar-rail-project",
+                  style === "Rings" && "radar-rail-style-rings",
+                  style === "Chips" && "radar-rail-style-chips",
+                  `radar-rail-state-${projectRailState(full)}`,
+                )}
+                style={
+                  { "--radar-project-hue": projectHue(project.id) } as CSSProperties
+                }
+              >
+                <ProjectGlyph project={full} style={style} />
+                <span className="radar-rail-label">{project.name}</span>
+                {badges ? <ProjectBadges project={full} /> : null}
+              </button>
+            );
+          })}
         </div>
       </nav>
     </div>

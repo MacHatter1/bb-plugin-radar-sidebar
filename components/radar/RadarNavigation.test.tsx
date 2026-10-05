@@ -7,6 +7,7 @@ import { railHostCss } from "./railHostStyles";
 import type { ExperimentalSidebarNavigationItem, ExperimentalSidebarNavigationProps, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
 import { DAY, makeProject, makeThread, NOW } from "./fixtures";
 import { resetRailScope, setRailScope, useRailScope } from "./railScope";
+import { projectRailState } from "./RadarRailNavigation";
 import { seedSettings } from "./settingsStore";
 
 const host = vi.hoisted(() => ({
@@ -745,5 +746,55 @@ describe("project badges", () => {
     const { tile } = tileFor([makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input", isUnread: true })]);
     expect(tile.getAttribute("aria-description")).toBe("1 thread · 1 waiting · 1 live · 1 unread");
     expect(tile.querySelector(".radar-rail-badges")?.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+describe("project styles", () => {
+  const projects = [makeProject({ id: "proj_a", name: "bb-appimage" })];
+  function styledTile(style: string, thread = makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input" })) {
+    host.sidebarThreads = { status: "ready", projects, threads: [thread] };
+    renderSlot(navigation, props, { sidebarNavigation: { items: [] }, settings: { projectStyle: style } });
+    return screen.getByRole("button", { name: "bb-appimage: show only this project" });
+  }
+
+  it("names the loudest state waiting first, then working, then unread", () => {
+    expect(projectRailState({ waiting: 1, active: 2, unread: 3 })).toBe("waiting");
+    expect(projectRailState({ waiting: 0, active: 2, unread: 3 })).toBe("working");
+    expect(projectRailState({ waiting: 0, active: 0, unread: 3 })).toBe("unread");
+    expect(projectRailState({ waiting: 0, active: 0, unread: 0 })).toBe("quiet");
+  });
+
+  it("draws hue monograms with no style class for Tiles", () => {
+    const tile = styledTile("Tiles");
+    expect(tile.querySelector(".radar-rail-monogram")?.textContent).toBe("BA");
+    expect(tile.className).not.toContain("radar-rail-style-");
+    expect(tile.className).toContain("radar-rail-state-waiting");
+  });
+
+  it("draws a glowing ring while waiting and an arc while working for Rings", () => {
+    const waiting = styledTile("Rings");
+    expect(waiting.className).toContain("radar-rail-style-rings");
+    expect(waiting.querySelector(".radar-rail-ring-waiting")?.textContent).toBe("BA");
+    expect(waiting.querySelector(".radar-rail-ringwrap")).toBeNull();
+    cleanup();
+    host.sidebarThreads = null;
+    const working = styledTile("Rings", makeThread({ id: "run", status: "active" }));
+    expect(working.querySelector(".radar-rail-ringwrap .radar-rail-arc")).not.toBeNull();
+    expect(working.querySelector(".radar-rail-ringcore")?.textContent).toBe("BA");
+  });
+
+  it("draws a dot-plus-monogram pill edged by state for Chips", () => {
+    const tile = styledTile("Chips");
+    expect(tile.className).toContain("radar-rail-style-chips");
+    expect(tile.className).toContain("radar-rail-state-waiting");
+    expect(tile.querySelector(".radar-rail-chipdot")).not.toBeNull();
+    expect(tile.querySelector(".radar-rail-chipmono")?.textContent).toBe("BA");
+  });
+
+  it.each(["Tiles", "Rings", "Chips"])("keeps the full badge set in the %s tile for wide rows and assistive tech", (style) => {
+    const tile = styledTile(style);
+    // Narrow rings and chips show a subset via CSS; the tally stays whole.
+    expect(tile.querySelector(".radar-rail-badge-waiting")?.textContent).toBe("1");
+    expect(tile.getAttribute("aria-description")).toContain("1 waiting");
   });
 });

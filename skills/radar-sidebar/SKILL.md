@@ -51,7 +51,10 @@ with a needs-you thread stay on top until it is resolved), with
 count badges: amber halo-pulse needs-you, green spinner-ring working (blocked threads are
 counted as needs-you, not working), and primary-coloured unread. The
 `projectBadges` setting (default `true`, needs `railNav`) turns the badges and
-the needs-you ordering off. Click a
+the needs-you ordering off. `projectStyle` (default `"Tiles"`, needs
+`railNav`) redraws them as `Rings` (amber glow / working arc in the ring,
+unread count only) or `Chips` (pill edged by the loudest state, waiting
+count only); the labelled rail keeps the full end counts in every style. Click a
 tile to filter, click it again or Home/the heading to clear. A project with
 only archives keeps its scope. A deleted project clears once the directory
 is ready; loading/error snapshots preserve the saved choice. When using
@@ -287,6 +290,7 @@ settings whose requirement is off. The keys and defaults below are unchanged.
 | `railNav` | `false` | Navigation rail beside the list, with project filters; off keeps navigation above the list. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav` and a recognised host shell. |
 | `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and needs-you projects kept on top; requires `railNav`. |
+| `projectStyle` | `"Tiles"` | How rail projects look: `Tiles`, `Rings` or `Chips`; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed; off under `prefers-reduced-motion` regardless. |

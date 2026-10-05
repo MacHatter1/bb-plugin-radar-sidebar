@@ -3943,6 +3943,151 @@ a.radar-row-main:hover {
 .radar-double-navigation-wide .radar-rail-badge-waiting { position: relative; }
 .radar-double-navigation-wide .radar-rail-badge-active { line-height: 14px; }
 
+/* ---- Project style: Rings. State lives in the ring: an amber halo when
+   it needs you, a turning green arc while working. Narrow shows the unread
+   count only; wide rows reuse the full end counts. */
+.radar-rail-ring {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--muted);
+  color: oklch(0.42 0.11 var(--radar-project-hue));
+  border: 2.5px solid oklch(0.65 0.14 var(--radar-project-hue));
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  .radar-rail-ring,
+  .radar-rail-ringcore {
+    color: oklch(0.88 0.08 var(--radar-project-hue));
+  }
+}
+.dark .radar-rail-ring,
+.dark .radar-rail-ringcore,
+[data-theme="dark"] .radar-rail-ring,
+[data-theme="dark"] .radar-rail-ringcore {
+  color: oklch(0.88 0.08 var(--radar-project-hue));
+}
+.radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-ring {
+  transform: scale(1.08);
+}
+.radar-rail-ring-waiting {
+  position: relative;
+  isolation: isolate;
+  border-color: var(--warning, #b98533);
+}
+.radar-rail-ring-waiting::after {
+  content: "";
+  position: absolute;
+  inset: -2.5px;
+  z-index: -1;
+  border-radius: inherit;
+  border: 2.5px solid var(--warning, #b98533);
+  animation: radar-badge-halo 1.8s ease-out infinite;
+}
+.radar-rail-ringwrap {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+.radar-rail-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(
+    color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground)) 0 32%,
+    var(--border) 32% 100%
+  );
+  animation: radar-ring-rotate 1.2s linear infinite;
+}
+@keyframes radar-ring-rotate {
+  to { transform: rotate(360deg); }
+}
+.radar-rail-ringcore {
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 9999px;
+  background: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: oklch(0.42 0.11 var(--radar-project-hue));
+}
+.radar-double-rail .radar-rail-project-active.radar-rail-style-rings .radar-rail-ring,
+.radar-double-rail .radar-rail-project-active.radar-rail-style-rings .radar-rail-ringcore {
+  color: #fff;
+  background: oklch(0.55 0.16 var(--radar-project-hue));
+  border-color: oklch(0.55 0.16 var(--radar-project-hue));
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-rings .radar-rail-badge-waiting,
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-rings .radar-rail-badge-active {
+  display: none;
+}
+
+/* ---- Project style: Chips. A dot-plus-monogram pill edged by the loudest
+   state; wide rows stretch the pill across with the counts at the end. */
+.radar-rail-style-chips .radar-rail-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 48px;
+  height: 30px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.radar-rail-chipdot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex: none;
+  background: oklch(0.62 0.15 var(--radar-project-hue));
+}
+.radar-rail-state-waiting.radar-rail-style-chips .radar-rail-chip {
+  border-color: var(--warning, #b98533);
+}
+.radar-rail-state-working.radar-rail-style-chips .radar-rail-chip {
+  border-color: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+}
+.radar-rail-state-unread.radar-rail-style-chips .radar-rail-chip {
+  border-color: var(--primary);
+}
+.radar-double-rail .radar-rail-project-active.radar-rail-style-chips .radar-rail-chip {
+  background: color-mix(in srgb, oklch(0.55 0.16 var(--radar-project-hue)) 12%, transparent);
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-chips .radar-rail-badge-active,
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-chips .radar-rail-badge-unread {
+  display: none;
+}
+.radar-double-navigation-wide .radar-rail-style-chips {
+  border: 1.5px solid var(--border);
+}
+.radar-double-navigation-wide .radar-rail-state-waiting.radar-rail-style-chips {
+  border-color: var(--warning, #b98533);
+}
+.radar-double-navigation-wide .radar-rail-state-working.radar-rail-style-chips {
+  border-color: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+}
+.radar-double-navigation-wide .radar-rail-state-unread.radar-rail-style-chips {
+  border-color: var(--primary);
+}
+.radar-double-navigation-wide .radar-rail-style-chips .radar-rail-chip {
+  border: 0;
+  width: auto;
+  height: auto;
+  background: transparent;
+}
+.radar-double-navigation-wide .radar-rail-style-chips .radar-rail-chipmono {
+  display: none;
+}
+
 /* Heading: when scoped, the title becomes the project with a clear affordance. */
 .radar-double-heading-scope {
   display: inline-flex;
@@ -3978,6 +4123,10 @@ a.radar-row-main:hover {
   .radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-monogram { transform: none; }
   .radar-rail-badge { animation: none; }
   .radar-rail-badge-waiting::after { display: none; }
+  .radar-rail-ring { transition: none; }
+  .radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-ring { transform: none; }
+  .radar-rail-ring-waiting::after { display: none; }
+  .radar-rail-arc { animation: none; }
 }
 /* Scoped heading needs the room: New thread drops to its icon. */
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread { padding: 0; width: 28px; }

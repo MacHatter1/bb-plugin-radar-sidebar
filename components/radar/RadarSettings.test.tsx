@@ -56,7 +56,8 @@ describe("settings section", () => {
     for (const label of ["Labelled rail (experimental)", "Project badges"]) {
       expect((toggle(label) as HTMLButtonElement).disabled).toBe(true);
     }
-    expect(screen.getAllByText("Turn on Navigation rail first")).toHaveLength(2);
+    expect((screen.getByRole("combobox", { name: "Project style" }) as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getAllByText("Turn on Navigation rail first")).toHaveLength(3);
     expect((screen.getByRole("combobox", { name: "Swipe right" }) as HTMLSelectElement).disabled).toBe(false);
   });
 
@@ -107,6 +108,17 @@ describe("settings previews", () => {
   it("widens the preview rail with Labelled rail", () => {
     mount({ railNav: true, wideRail: true });
     expect(document.querySelector(".radar-settings-rail.radar-double-navigation-wide")).not.toBeNull();
+  });
+
+  it.each([
+    ["Tiles", ".radar-rail-monogram", ".radar-rail-ring"],
+    ["Rings", ".radar-rail-ring", ".radar-rail-monogram"],
+    ["Chips", ".radar-rail-chip", ".radar-rail-monogram"],
+  ])("draws the preview projects in the %s style", (style, present, absent) => {
+    mount({ railNav: true, projectStyle: style });
+    const preview = document.querySelector(".radar-settings-rail")!;
+    expect(preview.querySelector(present)).not.toBeNull();
+    expect(preview.querySelector(absent)).toBeNull();
   });
 
   it("follows the row settings", () => {

@@ -219,7 +219,10 @@ handle to give the thread list more room.
   (top left), and the theme's primary colour for unread (bottom right). Wide
   mode lines them up at the end of the row. Turn the badges, and the
   needs-you ordering, off with **Project badges** (`projectBadges`, on by
-  default with the rail). Click a tile and the thread list shows only that
+  default with the rail). **Project style** (`projectStyle`, Tiles by default)
+  redraws the projects as Rings (state in the ring: amber glow, working arc)
+  or Chips (pills edged by the loudest state); wide rows keep the full end
+  counts in every style. Click a tile and the thread list shows only that
   project, its heading becomes the project name, and the tile fills with its
   colour. Click it again, the heading, or
   Home to see every project. Home only clears the filter; **New thread** in
@@ -355,6 +358,7 @@ actions need Swipe actions) are greyed out with a note until that one is on.
 | `railNav` | `false` | Navigation rail with project filters beside the thread list. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav`. |
 | `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and projects that need you kept on top; requires `railNav`. |
+| `projectStyle` | `"Tiles"` | How rail projects look: `Tiles`, `Rings` or `Chips`; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed. Also respects `prefers-reduced-motion`. |
