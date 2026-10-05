@@ -9,6 +9,7 @@ import { DAY, makeProject, makeThread, NOW } from "./fixtures";
 import { resetRailScope, setRailScope, useRailScope } from "./railScope";
 import { projectRailState } from "./RadarRailNavigation";
 import { seedSettings } from "./settingsStore";
+import type { RailLiveStatus } from "@/lib/settings";
 
 const host = vi.hoisted(() => ({
   items: null as ExperimentalSidebarNavigationItem[] | null,
@@ -48,6 +49,108 @@ function mount(items: ExperimentalSidebarNavigationItem[], isCompactViewport = f
 }
 beforeEach(() => { seedSettings({ railNav: true }); });
 afterEach(() => { cleanup(); host.items = null; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+describe("live rail accessories", () => {
+  const Accessory = () => <span data-testid="mascot">working</span>;
+  const dot = () => ({ ...destination("dot", "Dot"), experimental_Accessory: Accessory });
+  const staticIcon = (button: HTMLElement) => button.querySelector('[data-sidebar-navigation-icon]');
+
+  it("offers Live status only when an item has an accessory", () => {
+    mount([dot(), destination("plain", "Plain")]);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Plain" }));
+    expect(screen.queryByText("Live status")).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
+    expect(screen.getByText("Live status")).toBeTruthy();
+    for (const name of ["Off (dot indicator)", "As a badge", "Instead of the icon"])
+      expect(screen.getByRole("menuitem", { name })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Off (dot indicator)" }).querySelector(".radar-menu-check")).not.toBeNull();
+  });
+
+  it.each(["off", "badge", "icon"] as RailLiveStatus[])("renders %s without changing activation, accessible name or shortcuts", (mode) => {
+    const item = { ...dot(), shortcut: { label: "⌘1", ariaKeyShortcuts: "Meta+1" } };
+    seedSettings({ railLiveStatus: { [item.id]: mode } });
+    const slot = mount([item]);
+    const button = screen.getByRole("button", { name: "Dot (⌘1)" });
+    expect(button.getAttribute("aria-keyshortcuts")).toBe("Meta+1");
+    expect(Boolean(button.querySelector(".radar-rail-dot"))).toBe(mode === "off");
+    expect(Boolean(within(button).queryByTestId("mascot"))).toBe(mode !== "off");
+    expect(Boolean(staticIcon(button))).toBe(mode !== "icon");
+    if (mode !== "off") {
+      expect(button.querySelector(`.radar-rail-accessory-${mode}`)?.hasAttribute("inert")).toBe(true);
+      expect(button.querySelector(".radar-rail-icon-slot")?.getAttribute("aria-hidden")).toBe("true");
+    }
+    fireEvent.click(button, { altKey: true });
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([{ method: "activate", itemId: item.id, openInSplit: true }]);
+    fireEvent.focus(button);
+    expect(screen.getByRole("tooltip").textContent).toContain("working");
+  });
+
+  it("saves only the chosen item and preserves all other settings", async () => {
+    const item = dot();
+    const saved = { railNav: true, motion: false, railLiveStatus: { "other/nav": "badge" } };
+    seedSettings(saved);
+    const setSetting = vi.fn(({ key, value }) => ({ ...saved, [key]: value }));
+    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => saved, setSetting } });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Instead of the icon" }));
+    await act(async () => {});
+    expect(setSetting).toHaveBeenCalledWith({ key: "railLiveStatus", value: { "other/nav": "badge", [item.id]: "icon" } });
+    expect(screen.getByRole("button", { name: "Dot" }).querySelector(".radar-rail-accessory-icon")).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!).motion).toBe(false);
+  });
+
+  it("allows choosing a live rail mode from More", async () => {
+    const item = { ...dot(), isVisible: false };
+    const saved = { railNav: true };
+    const setSetting = vi.fn(({ key, value }) => ({ ...saved, [key]: value }));
+    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => saved, setSetting } });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(button.querySelector(".radar-nav-accessory")?.textContent).toBe("working");
+    fireEvent.contextMenu(button);
+    fireEvent.click(screen.getByRole("menuitem", { name: "As a badge" }));
+    await act(async () => {});
+    expect(setSetting).toHaveBeenCalledWith({ key: "railLiveStatus", value: { [item.id]: "badge" } });
+  });
+
+  it.each(["off", "badge", "icon"] as RailLiveStatus[])("isolates a throwing accessory in %s and in its tooltip and popover", (mode) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const Broken = () => { throw new Error("broken accessory"); };
+    const item = { ...dot(), experimental_Accessory: Broken };
+    seedSettings({ railLiveStatus: { [item.id]: mode } });
+    const slot = mount([item, { ...item, id: "alpha/hidden", label: "Hidden", isVisible: false }]);
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(staticIcon(button)).not.toBeNull();
+    fireEvent.focus(button);
+    expect(staticIcon(screen.getByRole("tooltip"))).not.toBeNull();
+    fireEvent.click(button);
+    expect(slot.inspection.sidebarNavigationCalls).toContainEqual({ method: "activate", itemId: item.id, openInSplit: false });
+    fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
+    expect(staticIcon(screen.getByRole("button", { name: "Hidden" }))).not.toBeNull();
+  });
+
+  it.each([false, true])("shows a trailing accessory in standard navigation (compact=%s)", (compact) => {
+    seedSettings({ railNav: false });
+    mount([dot()], compact);
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(button.querySelector(".radar-nav-accessory")?.textContent).toBe("working");
+    expect(staticIcon(button)).not.toBeNull();
+  });
+
+  it("keeps standard navigation usable when a trailing accessory throws", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    seedSettings({ railNav: false });
+    const item = { ...dot(), experimental_Accessory: () => { throw new Error("broken accessory"); } };
+    const slot = mount([item]);
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(staticIcon(button)).not.toBeNull();
+    fireEvent.click(button);
+    expect(slot.inspection.sidebarNavigationCalls).toHaveLength(1);
+  });
+});
 
 describe("host navigation arrangement", () => {
   it.each([false, true])("renders host order and visibility immediately (compact=%s)", (compact) => {

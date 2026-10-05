@@ -7,6 +7,33 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { moveRailFocus } from "./railTooltip";
+import { SidebarAccessory } from "./SidebarAccessory";
+import type { RailLiveStatus } from "@/lib/settings";
+
+export function RailItemIcon({ item, mode }: {
+  item: ExperimentalSidebarNavigationItem;
+  mode: RailLiveStatus;
+}) {
+  const Accessory = item.experimental_Accessory;
+  const icon = <RowIcon item={item} />;
+  if (!Accessory || mode === "off") return <>{icon}{Accessory ? <span className="radar-rail-dot" aria-hidden="true" /> : null}</>;
+  return (
+    <span className="radar-rail-icon-slot" aria-hidden="true">
+      {mode === "badge" ? icon : null}
+      <span className={`radar-rail-accessory radar-rail-accessory-${mode}`} inert>
+        <SidebarAccessory key={mode} Accessory={Accessory} fallback={mode === "icon" ? icon : null} />
+      </span>
+    </span>
+  );
+}
+
+export function RowAccessory({ item }: { item: ExperimentalSidebarNavigationItem }) {
+  return item.experimental_Accessory ? (
+    <span className="radar-nav-accessory" aria-hidden="true" inert>
+      <SidebarAccessory Accessory={item.experimental_Accessory} />
+    </span>
+  ) : null;
+}
 
 export function hintFor(item: ExperimentalSidebarNavigationItem): string {
   const parts = [item.label];
@@ -174,7 +201,6 @@ export function MorePopover({
       <div className="radar-nav-more-list">
         {items.map((item) => {
           const isActive = item.id === activeItemId;
-          const Accessory = item.experimental_Accessory;
           return (
             <NavigationButton
               key={item.id}
@@ -195,11 +221,7 @@ export function MorePopover({
             >
               <RowIcon item={item} className="radar-nav-icon" />
               <span className="radar-nav-label">{item.label}</span>
-              {Accessory ? (
-                <span className="radar-nav-accessory">
-                  <Accessory />
-                </span>
-              ) : null}
+              <RowAccessory item={item} />
               {item.shortcut ? (
                 <kbd className="radar-kbd">{item.shortcut.label}</kbd>
               ) : null}

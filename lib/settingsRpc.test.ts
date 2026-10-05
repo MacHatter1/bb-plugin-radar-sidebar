@@ -8,6 +8,7 @@ describe("settings RPC schemas", () => {
   it("accepts a change a setting can take", () => {
     expect(validate(SETTINGS_RPC.setSetting.input, { key: "railNav", value: true }).value).toEqual({ key: "railNav", value: true });
     expect(validate(SETTINGS_RPC.setSetting.input, { key: "swipeLeft", value: "Pin / unpin" }).issues).toBeUndefined();
+    expect(validate(SETTINGS_RPC.setSetting.input, { key: "railLiveStatus", value: { "dot/dot": "icon" } }).issues).toBeUndefined();
   });
 
   it.each([
@@ -15,6 +16,7 @@ describe("settings RPC schemas", () => {
     [{ key: "constructor", value: true }, "Unknown setting."],
     [{ key: "railNav", value: "yes" }, "Not a value railNav can take."],
     [{ key: "defaultDensity", value: "roomy" }, "Not a value defaultDensity can take."],
+    [{ key: "railLiveStatus", value: { "dot/dot": "mascot" } }, "Not a value railLiveStatus can take."],
     [null, "Unknown setting."],
   ])("rejects %j", (input, message) => {
     expect(validate(SETTINGS_RPC.setSetting.input, input).issues?.[0]?.message).toBe(message);

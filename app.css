@@ -88,8 +88,7 @@
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
-/* A plugin accessory exists but can't fit the 42px cap; hint with a dot and
-   show the real accessory in the tooltip. */
+/* Off keeps the original indicator; live modes fit within the icon square. */
 .radar-rail-dot {
   position: absolute;
   top: 8px;
@@ -99,6 +98,38 @@
   border-radius: 9999px;
   background: var(--primary);
   box-shadow: 0 0 0 2px var(--sidebar, var(--background));
+}
+.radar-rail-icon-slot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  overflow: hidden;
+}
+.radar-rail-accessory {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.radar-rail-accessory-icon { width: 28px; height: 28px; }
+.radar-rail-accessory-badge {
+  position: absolute;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 16px;
+  height: 16px;
+}
+/* Rail icon rules must not resize a plugin's own SVG artwork. */
+.radar-double-rail .radar-nav-icon-button .radar-rail-accessory svg {
+  width: 100%;
+  height: 100%;
+  transition: none;
+  transform: none;
 }
 .radar-double-rail .radar-nav-icon-button .radar-nav-count {
   right: 4px;
@@ -207,7 +238,7 @@
   white-space: nowrap;
 }
 .radar-rail-tip-label { font-weight: 600; }
-.radar-rail-tip-accessory { display: inline-flex; align-items: center; }
+.radar-rail-tip-accessory { display: inline-flex; align-items: center; max-width: 4rem; max-height: 1.25rem; overflow: hidden; }
 .radar-rail-tip-hint { color: var(--muted-foreground); font-size: 11px; }
 @keyframes radar-rail-tip-in {
   from { opacity: 0; transform: translateY(-50%) translateX(-4px); }
@@ -3266,6 +3297,19 @@ a.radar-row-main:hover {
   max-width: 4rem;
   max-height: 1.25rem;
   overflow: hidden;
+}
+/* Compact standard navigation has icon buttons, so keep live status out of
+   their grid flow and at the trailing edge. */
+.radar-nav-compact .radar-nav-accessory {
+  position: absolute;
+  bottom: 0;
+  inset-inline-end: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  width: 20px;
+  height: 20px;
+  max-width: 20px;
 }
 
 .radar-nav-primary-in-pop {

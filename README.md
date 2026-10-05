@@ -208,6 +208,15 @@ server rail. Tooltips
 and the labelled rail are desktop-only. Resize the sidebar with BB's normal
 handle to give the thread list more room.
 
+Right-click a plugin destination with a live accessory to choose **Live status**:
+**Off (dot indicator)** keeps the static icon and status dot (the default),
+**As a badge** shows the accessory in a clipped 16×16px box at the icon's bottom
+trailing corner, and **Instead of the icon** centres it in a clipped 28×28px
+square. The choice is saved per navigation item in `railLiveStatus` and shared
+across devices. Accessories are decorative and isolated by error boundaries;
+if one fails, its static icon remains. Tooltips, More and standard navigation
+also show live accessories, clipped to the host's 4rem by 1.25rem slot.
+
 <details>
 <summary><b>Project scope, tooltips, keyboard and more</b></summary>
 
@@ -357,6 +366,7 @@ actions need Swipe actions) are greyed out with a note until that one is on.
 | --- | --- | --- |
 | `railNav` | `false` | Navigation rail with project filters beside the thread list. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav`. |
+| `railLiveStatus` | `{}` | Per-item live accessory placement (`off`, `badge`, `icon`), chosen by right-clicking a rail destination or More row. |
 | `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and projects that need you kept on top; requires `railNav`. |
 | `projectStyle` | `"Tiles"` | How rail projects look: `Tiles`, `Rings` or `Chips`; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |

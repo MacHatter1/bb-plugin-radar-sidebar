@@ -31,13 +31,15 @@ import { activityTime, isLiveThread } from "./time";
 import {
   hintFor,
   RowIcon,
+  RailItemIcon,
   NavigationButton,
   MorePopover,
 } from "./navigationControls";
 import { RailTooltip, moveRailFocus, type RailTip } from "./railTooltip";
 import { useRailHostStructure, useRailMeasurements } from "./railLayout";
 import { railHostCss } from "./railHostStyles";
-import { useSettingValues } from "./settingsStore";
+import { useSetSetting, useSettingValues } from "./settingsStore";
+import { isRailLiveStatus } from "@/lib/settings";
 
 export type RailProject = {
   id: string;
@@ -249,7 +251,8 @@ function RailNavigationBody({
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
-  const { wideRail, projectBadges, projectStyle } = useSettingValues();
+  const { wideRail, projectBadges, projectStyle, railLiveStatus } = useSettingValues();
+  const saveSetting = useSetSetting();
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -418,6 +421,16 @@ function RailNavigationBody({
   const menuItems = useMemo<RadarMenuItem[]>(() => {
     if (!menuItem) return [];
     const list: RadarMenuItem[] = [];
+    if (menuItem.experimental_Accessory) {
+      const mode = railLiveStatus[menuItem.id] ?? "off";
+      list.push({ kind: "header", label: "Live status" });
+      for (const [value, label] of [
+        ["off", "Off (dot indicator)"],
+        ["badge", "As a badge"],
+        ["icon", "Instead of the icon"],
+      ] as const) list.push({ kind: "item", id: `live-status:${value}`, label, checked: mode === value });
+      list.push({ kind: "separator" });
+    }
     if (menuItem.action.kind === "open-plugin-panel") {
       list.push({
         kind: "item",
@@ -462,7 +475,7 @@ function RailNavigationBody({
       });
     }
     return list;
-  }, [menuItem, menuSiblings, menuIndex]);
+  }, [menuItem, menuSiblings, menuIndex, railLiveStatus]);
 
   // Swap the item with its on-screen neighbour inside BB's full order.
   const moveMenuItem = (direction: -1 | 1) => {
@@ -545,7 +558,10 @@ function RailNavigationBody({
           onSelect={(id) => {
             const target = menuItem;
             setMenu(null);
-            if (id === "open-split") {
+            const mode = id.startsWith("live-status:") ? id.slice("live-status:".length) : null;
+            if (target.experimental_Accessory && isRailLiveStatus(mode)) {
+              void saveSetting("railLiveStatus", { ...railLiveStatus, [target.id]: mode });
+            } else if (id === "open-split") {
               activate(target, true);
             } else if (id === "toggle") {
               actions.setVisible(target.id, !target.isVisible);
@@ -593,13 +609,11 @@ function RailNavigationBody({
               shortcut: item.shortcut?.label ?? null,
               hint: hasMenu ? "Right-click to arrange" : null,
               Accessory: item.experimental_Accessory,
+              accessoryFallback: <RowIcon item={item} />,
             })}
           >
-            <RowIcon item={item} />
+            <RailItemIcon item={item} mode={railLiveStatus[item.id] ?? "off"} />
             <span className="radar-rail-label">{item.label}</span>
-            {item.experimental_Accessory ? (
-              <span className="radar-rail-dot" aria-hidden="true" />
-            ) : null}
             {isShortcutModifierHeld && item.shortcut ? (
               <kbd className="radar-double-shortcut">
                 {item.shortcut.label}
@@ -616,6 +630,7 @@ function RailNavigationBody({
       activate,
       openMenu,
       tipProps,
+      railLiveStatus,
     ],
   );
 

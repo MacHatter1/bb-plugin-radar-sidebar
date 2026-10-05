@@ -10,6 +10,7 @@ import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import {
   hintFor,
   RowIcon,
+  RowAccessory,
   NavigationButton,
   MorePopover,
 } from "./navigationControls";
@@ -119,6 +120,7 @@ export function RadarStandardNavigation({
       >
         <RowIcon item={item} className="radar-nav-icon" />
         <span className="radar-nav-label">{item.label}</span>
+        <RowAccessory item={item} />
       </NavigationButton>
     );
   };
@@ -244,6 +246,7 @@ export function RadarStandardNavigation({
               }
             >
               <RowIcon item={item} />
+              <RowAccessory item={item} />
             </NavigationButton>
           ))}
           {renderMoreRow()}

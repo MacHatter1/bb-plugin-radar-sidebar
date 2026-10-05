@@ -6,7 +6,7 @@ description: Use the Radar Sidebar plugin's thread list and navigation. Use when
 # Radar Sidebar
 
 Replaces BB's sidebar thread list and the navigation above it. There is no
-CLI and no server state: everything below is UI in the BB app, and thread mutations go
+CLI; plugin settings are stored on the server. Everything below is UI in the BB app, and thread mutations go
 through BB's own flows (pins, reads, renames, archives, deletes).
 
 ## Surfaces
@@ -81,6 +81,24 @@ writes to BB's elements, and it avoids `:has()` on the page or sidebar,
 which restyled the whole page on every DOM change.
 A BB shell update can require selector adjustments. Wide mode and tooltips
 are desktop-only; safe-area padding and reduced motion are respected.
+
+
+## Live plugin status on the rail
+
+For a navigation item with `experimental_Accessory`, right-click its rail button
+(or its row in More) and choose under **Live status**: **Off (dot indicator)**,
+**As a badge**, or **Instead of the icon**. Off is the default for every item.
+The plugin persists these choices by item id in its `railLiveStatus` settings
+map (`off`, `badge`, `icon`), shared across devices. Do not change other entries
+when setting one item's mode. Items without accessories have no Live status menu.
+
+The icon replacement slot is 28×28px; the badge is 16×16px at the icon's bottom
+trailing corner. Both clip their contents. Accessories are no-props decorative
+components, made inert inside the button. Every accessory placement has its
+own error boundary; a failed replacement shows the static icon, and failed
+badges/row accessories leave the existing icon. Standard navigation, More and
+tooltips use a trailing slot capped at 4rem by 1.25rem. If a plugin's accessory
+doesn't adapt to the rail slot, report the dimensions to its owner.
 
 ## Organisation tools
 
