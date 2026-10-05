@@ -4,7 +4,9 @@
  * panel in labelled mode, and BB's sidebar toggle.
  *
  * BB's footer keeps its default bottom bar under the thread list, to the
- * right of the rail. The gutter offsets it; nothing here touches its layout.
+ * right of the rail. The gutter offsets it; its controls use the rail's
+ * exact metrics (42px boxes, 20px icons, 8px gaps, rail hover) while BB
+ * keeps the row layout, overflow and disclosures.
  *
  * RadarRailNavigation renders these as <style> elements in its own markup,
  * so they apply exactly while the rail is mounted and nothing is written to
@@ -83,6 +85,39 @@ const BLOCKS: readonly (readonly [keyof RailHostState | null, string])[] = [
   [data-sidebar="sidebar"] > div:first-child {
     position: relative;
     z-index: 1;
+  }
+  /* Footer bar controls with the rail's exact metrics: 42px boxes, 20px
+     icons at full opacity, 8px gaps. BB keeps its row layout, overflow
+     and disclosure behaviour. */
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] {
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sidebar, var(--background)) 94%, var(--foreground));
+  }
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] [data-sidebar="menu"] {
+    gap: 8px;
+  }
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] [data-sidebar="menu-button"] {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    color: var(--muted-foreground);
+  }
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] [data-sidebar="menu-button"] [data-icon-root] {
+    width: 20px;
+    height: 20px;
+    opacity: 1;
+  }
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] [data-sidebar="menu-button"]:hover:not(:disabled) {
+    background: var(--sidebar-accent, var(--accent));
+    color: var(--foreground);
+  }
+  /* Updates pill keeps BB's badge shape, tinted like the rail's accents. */
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]) {
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    color: var(--primary);
+  }
+  [data-sidebar="sidebar"] > [data-sidebar="footer"] [data-sidebar="menu-item"] > a:not([data-sidebar="menu-button"]):hover {
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
   }
 }
 `],

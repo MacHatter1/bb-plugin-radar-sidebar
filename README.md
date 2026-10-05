@@ -201,7 +201,8 @@ saved navigation order and visibility: visible destinations inline, hidden
 ones in **More** (with a count on the icon), **Customize sidebar** at the
 foot. BB's own footer controls (Settings, Mobile apps, usage, Report a bug,
 updates, account) keep their default bottom bar under the thread list, to
-the right of the rail. Below 768px the same rail (56px) runs down the left of
+the right of the rail, on a tonal bar with the rail's exact control
+metrics (42px boxes, 20px icons, matching hover). Below 768px the same rail (56px) runs down the left of
 BB's mobile drawer with the thread list beside it, like a chat app's
 server rail. Tooltips
 and the labelled rail are desktop-only. Resize the sidebar with BB's normal
@@ -284,7 +285,7 @@ on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration
 
 ## Compatibility notes
 
-The gutter and Customize editor use BB's `data-sidebar` DOM
+The gutter, footer surface and Customize editor use BB's `data-sidebar` DOM
 attributes. The rail renders those overrides as a `<style>` element in its
 own markup (`components/radar/railHostStyles.ts`), so they exist only
 while it is mounted and it never writes to BB's elements. It doesn't use

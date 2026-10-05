@@ -69,7 +69,7 @@ editor. Narrow lists fold status chips at 284px while keeping accessible labels.
 Show labels / Hide labels control on desktop. The 168px rail expands the
 sidebar by its extra width so the thread list keeps its room. It probes the
 host sidebar/footer/width structure and hides the toggle when unavailable.
-The gutter and Customize layout use host `data-sidebar`
+The gutter, footer surface and Customize layout use host `data-sidebar`
 selectors in `components/radar/railHostStyles.ts`. The rail renders them
 as a `<style>` element in its own markup, by state (wide, compact, scoped).
 BB's footer keeps its default bar under the thread list. Disabling the rail

@@ -65,13 +65,19 @@ describe("app.css", () => {
     for (const selector of growth!.selector.split(",")) expect(selector).toContain('[data-state="expanded"]');
   });
 
-  it("centers the desktop toggle on the rail and leaves BB's footer bar alone", () => {
+  it("centers the desktop toggle on the rail and sizes BB's footer boxes like it", () => {
     const trigger = rules(hostCss).find((rule) => rule.selector.includes("app-desktop-sidebar-trigger") && /left:/.test(rule.body));
     expect(trigger?.body).toMatch(/left:\s*0/);
     expect(trigger?.body).toMatch(/var\(--radar-rail-narrow\)/);
-    // The footer keeps its default bottom bar under the thread list; only
-    // the gutter offsets it. No menu, disclosure or updates overrides.
-    expect(hostCss).not.toContain('[data-sidebar="footer"]');
+    // The footer keeps BB's row layout and overflow; its controls use the
+    // rail's exact metrics (42px boxes, 20px icons, 8px gaps, rail hover).
+    expect(hostCss).toContain('[data-sidebar="footer"]');
+    expect(hostCss).toContain("width: 42px");
+    expect(hostCss).toContain("border-radius: 12px");
+    expect(hostCss).not.toContain("flex-direction: column");
+    const footerRules = rules(hostCss).filter((rule) => rule.selector.includes('[data-sidebar="footer"]'));
+    expect(footerRules.length).toBeGreaterThan(0);
+    for (const rule of footerRules) expect(rule.body).not.toMatch(/position:\s*absolute/);
   });
 
   it("separates the touch toolbar grid from the rail's vertical flex layout", () => {

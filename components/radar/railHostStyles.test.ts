@@ -25,7 +25,12 @@ describe("railHostCss", () => {
     expect(railHostCss(base)).toContain('div.group.peer[data-state="expanded"] ~ [data-testid="app-desktop-sidebar-trigger"]');
   });
 
-  it("leaves BB's footer bar alone, offset only by the gutter", () => {
-    expect(railHostCss(base)).not.toContain('[data-sidebar="footer"]');
+  it("sizes BB's footer bar boxes like the rail without taking its layout", () => {
+    const css = railHostCss(base);
+    expect(css).toContain('[data-sidebar="footer"]');
+    expect(css).toContain("width: 42px");
+    expect(css).toContain("border-radius: 12px");
+    expect(css).toContain("94%, var(--foreground)");
+    expect(css).not.toContain("flex-direction: column");
   });
 });
