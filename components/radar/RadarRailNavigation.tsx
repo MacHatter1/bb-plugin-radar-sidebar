@@ -190,8 +190,7 @@ function writeRailWide(wide: boolean): void {
  */
 function RailNavigationBody({
   isCompactViewport,
-  footerHeight = 0,
-}: ExperimentalSidebarNavigationProps & { footerHeight: number }) {
+}: ExperimentalSidebarNavigationProps) {
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
@@ -232,14 +231,13 @@ function RailNavigationBody({
   const wideAllowed = wideRail && !isCompactViewport;
   const hostSupportsWide = useRailHostStructure(railRef);
   const wide = wideChoice && wideAllowed && hostSupportsWide;
-  // BB's sidebar is restyled from the rail's own <style> elements below,
+  // BB's sidebar is restyled from the rail's own <style> element below,
   // never by writing to BB's elements, so unmounting releases it.
   const scoped = scopedProject !== null;
   const hostCss = useMemo(
     () => railHostCss({ wide, compact: isCompactViewport, scoped }),
     [wide, isCompactViewport, scoped],
   );
-  const hostValuesRef = useRef<HTMLStyleElement | null>(null);
 
   // Rail tooltip: armed on hover/focus after a short delay, dropped on
   // leave, blur, click, right-click, or when any overlay opens.
@@ -321,7 +319,7 @@ function RailNavigationBody({
     };
   }, [items]);
 
-  useRailMeasurements(railRef, hostValuesRef, items, railProjects.length, wide);
+  useRailMeasurements(railRef, items, railProjects.length);
 
   const overflowActive =
     activeItemId !== null && overflow.some((item) => item.id === activeItemId);
@@ -626,7 +624,6 @@ function RailNavigationBody({
         ref={railRef}
         aria-label="Primary"
         className={cn("radar-nav radar-nav-compact", "radar-double-rail")}
-        style={{ bottom: footerHeight }}
         onKeyDown={moveRailFocus}
       >
         <div className={"radar-double-rail-items"}>
@@ -752,19 +749,17 @@ function RailNavigationBody({
       </div>
       {renderOverlays()}
       <style>{hostCss}</style>
-      <style ref={hostValuesRef} />
     </div>
   );
 }
 
 export function RadarRailNavigation(props: ExperimentalSidebarNavigationProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [footerHeight, setFooterHeight] = useState(0);
   const [bodyVisible, setBodyVisible] = useState(true);
 
   // BB retains the app sidebar beneath a hidden body while Settings is
   // shown. Unmount the rail in that body so its :has() styles and layout
-  // effects release the gutter, labelled width and footer reservations.
+  // effects release the gutter and labelled width.
   // Observe the sidebar's direct child, not the provider's own wrapper:
   // Customize hides that inner wrapper while intentionally keeping the rail.
   useLayoutEffect(() => {
@@ -782,33 +777,11 @@ export function RadarRailNavigation(props: ExperimentalSidebarNavigationProps) {
     return () => observer.disconnect();
   }, []);
 
-  // BB still owns and renders the footer. On desktop it stacks into the
-  // rail's column, so reserve its measured height and keep navigation and
-  // Customize above it. In the mobile drawer the footer stays a row beside
-  // the rail, which runs the full height instead.
-  useLayoutEffect(() => {
-    if (props.isCompactViewport) {
-      setFooterHeight(0);
-      return;
-    }
-    const sidebar = rootRef.current?.closest('[data-sidebar="sidebar"]');
-    const footer = sidebar?.querySelector<HTMLElement>(
-      ':scope > [data-sidebar="footer"]',
-    );
-    if (!footer) return;
-    const measure = () => setFooterHeight(footer.offsetHeight);
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(footer);
-    return () => observer.disconnect();
-  }, [props.isCompactViewport]);
-
+  // BB still owns and renders the footer as a bottom bar under the thread
+  // list, to the right of the rail. The rail runs the full height beside it.
   return (
     <div ref={rootRef}>
-      {bodyVisible ? (
-        <RailNavigationBody {...props} footerHeight={footerHeight} />
-      ) : null}
+      {bodyVisible ? <RailNavigationBody {...props} /> : null}
     </div>
   );
 }

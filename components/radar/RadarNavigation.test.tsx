@@ -137,22 +137,7 @@ describe("host navigation arrangement", () => {
     expect(screen.getByRole("button", { name: "Customize sidebar" })).toBeTruthy();
   });
 
-  it("reserves changing host footer height and releases its observer on mobile", () => {
-    let footerHeight = 180;
-    // Two observers exist: the footer-height one under test and the rail's
-    // own reserve/overflow one. Fan callbacks out to all of them.
-    const callbacks: Array<() => void> = [];
-    const resize = () => callbacks.forEach((callback) => callback());
-    const disconnect = vi.fn();
-    const observe = vi.fn();
-    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
-      return this.getAttribute("data-sidebar") === "footer" ? footerHeight : 0;
-    });
-    vi.stubGlobal("ResizeObserver", class {
-      constructor(callback: () => void) { callbacks.push(callback); }
-      observe = observe;
-      disconnect = disconnect;
-    });
+  it("runs the rail full height beside BB's footer bar", () => {
     const wrapped = {
       ...navigation,
       component: (p: ExperimentalSidebarNavigationProps) => createElement(
@@ -162,19 +147,13 @@ describe("host navigation arrangement", () => {
       ),
     };
     const slot = renderSlot(wrapped, props, { sidebarNavigation: { items: [destination("board", "Board")] } });
-    expect(observe).toHaveBeenCalledWith(document.querySelector('[data-sidebar="footer"]'));
-    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("180px");
-    footerHeight = 280;
-    act(() => resize());
-    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("280px");
-    slot.rerender(createElement(wrapped.component, { ...props, isCompactViewport: true }));
-    // The footer observer is released; the rail stays, running full height.
-    expect(disconnect).toHaveBeenCalled();
-    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("0px");
+    // No inline bottom: the rail's CSS runs it the full sidebar height,
+    // and BB's footer keeps its default bar under the thread list.
+    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("");
     slot.lifecycle.unmount();
   });
 
-  it("tracks scroll position in both stacks and releases cues and listeners on unmount", () => {
+  it("tracks the rail's scroll position and releases cues and listeners on unmount", () => {
     let overflowing = true;
     const callbacks: Array<() => void> = [];
     const frames: FrameRequestCallback[] = [];
@@ -185,59 +164,37 @@ describe("host navigation arrangement", () => {
       observe() {}
       disconnect() {}
     });
-    const isStack = (element: HTMLElement) => element.classList.contains("radar-double-rail-items")
-      || element.getAttribute("data-sidebar") === "menu";
+    const isStack = (element: HTMLElement) => element.classList.contains("radar-double-rail-items");
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
       return isStack(this) ? 100 : 0;
     });
     vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
       return isStack(this) ? (overflowing ? 200 : 100) : 0;
     });
-    const wrapped = {
-      ...navigation,
-      component: (p: ExperimentalSidebarNavigationProps) => createElement(
-        "div", { "data-sidebar": "sidebar" },
-        createElement(navigation.component, p),
-        createElement("div", { "data-sidebar": "footer" },
-          createElement("div", { "data-sidebar": "menu" })),
-      ),
-    };
-    const slot = renderSlot(wrapped, props, { sidebarNavigation: { items: [destination("board", "Board")] } });
+    const slot = mount([destination("board", "Board")]);
     const nav = document.querySelector(".radar-double-navigation")!;
-    const sidebar = document.querySelector<HTMLElement>('[data-sidebar="sidebar"]')!;
     const rail = document.querySelector<HTMLElement>(".radar-double-rail")!;
-    const footer = document.querySelector<HTMLElement>('[data-sidebar="footer"]')!;
-    const stacks = [document.querySelector<HTMLElement>(".radar-double-rail-items")!,
-      document.querySelector<HTMLElement>('[data-sidebar="menu"]')!];
-    // BB's footer thumb and the height reserve are rules in the rail's own
-    // <style>; BB's elements are never written to.
-    const hostValues = nav.querySelectorAll<HTMLStyleElement>(":scope > style")[1]!;
-    const value = (name: string) => hostValues.textContent?.match(new RegExp(`${name}: ([^;]+);`))?.[1] ?? "";
-    const thumbs = (name: string) => [rail.style.getPropertyValue(name), value(name)];
+    const stack = document.querySelector<HTMLElement>(".radar-double-rail-items")!;
     expect(nav.hasAttribute("data-rail-overflow")).toBe(true);
-    expect(value("--radar-rail-reserve")).not.toBe("");
-    expect(thumbs("--radar-scroll-height")).toEqual(["50px", "50px"]);
-    expect(thumbs("--radar-scroll-top")).toEqual(["0px", "0px"]);
-    for (const element of [document.documentElement, sidebar, footer]) expect(element.getAttribute("style")).toBeNull();
+    expect(rail.style.getPropertyValue("--radar-scroll-height")).toBe("50px");
+    expect(rail.style.getPropertyValue("--radar-scroll-top")).toBe("0px");
     // A burst of scroll events waits for one frame instead of reading
     // layout per event.
-    stacks.forEach((stack) => { stack.scrollTop = 100; fireEvent.scroll(stack); fireEvent.scroll(stack); });
-    expect(thumbs("--radar-scroll-top")).toEqual(["0px", "0px"]);
+    stack.scrollTop = 100;
+    fireEvent.scroll(stack);
+    fireEvent.scroll(stack);
+    expect(rail.style.getPropertyValue("--radar-scroll-top")).toBe("0px");
     expect(frames).toHaveLength(1);
     frames.splice(0).forEach((frame) => frame(0));
-    expect(thumbs("--radar-scroll-top")).toEqual(["50px", "50px"]);
+    expect(rail.style.getPropertyValue("--radar-scroll-top")).toBe("50px");
     overflowing = false;
     act(() => callbacks.forEach((callback) => callback()));
     expect(nav.hasAttribute("data-rail-overflow")).toBe(false);
-    expect(thumbs("--radar-scroll-height")).toEqual(["", ""]);
-    expect(hostValues.textContent).not.toContain("::after");
-    overflowing = true;
-    act(() => callbacks.forEach((callback) => callback()));
+    expect(rail.style.getPropertyValue("--radar-scroll-height")).toBe("");
     slot.lifecycle.unmount();
-    stacks.forEach((stack) => fireEvent.scroll(stack));
+    fireEvent.scroll(stack);
     expect(frames).toHaveLength(0);
     expect(railHostStyles()).toEqual([]);
-    for (const element of [document.documentElement, sidebar, footer]) expect(element.getAttribute("style")).toBeNull();
   });
 
   it.each([false, true])("releases the rail when BB hides the app body for Settings and restores it on return (compact=%s)", async (compact) => {

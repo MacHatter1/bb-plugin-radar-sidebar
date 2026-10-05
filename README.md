@@ -200,10 +200,10 @@ On desktop a 60px icon rail sits beside the thread list. It follows BB's
 saved navigation order and visibility: visible destinations inline, hidden
 ones in **More** (with a count on the icon), **Customize sidebar** at the
 foot. BB's own footer controls (Settings, Mobile apps, usage, Report a bug,
-updates, account) stack at the bottom of the same column; their disclosures
-open beside the rail. Below 768px the same rail (56px) runs down the left of
+updates, account) keep their default bottom bar under the thread list, to
+the right of the rail. Below 768px the same rail (56px) runs down the left of
 BB's mobile drawer with the thread list beside it, like a chat app's
-server rail; BB's footer keeps its mobile row layout next to it. Tooltips
+server rail. Tooltips
 and the labelled rail are desktop-only. Resize the sidebar with BB's normal
 handle to give the thread list more room.
 
@@ -245,10 +245,9 @@ handle to give the thread list more room.
 - **Customize beside the rail.** BB's arrangement editor opens as a panel
   next to the rail with the rail still visible, so reordering and hiding
   items is reflected live where they sit.
-- **Short windows.** The rail reserves the height it needs; BB's footer
-  stack takes what is left and scrolls internally, so destinations and
-  Customize stay visible on small screens. Visible position indicators
-  show when either stack scrolls, without fading the last item.
+- **Short windows.** The rail scrolls internally with a position indicator,
+  so destinations stay reachable on small screens while Customize stays
+  pinned at the foot.
 - **Status chips fold** to glyph and count when the list is 284px or less,
   so the filter row stays on one line.
 - **Mobile heading controls** keep 44px touch targets, and the scoped
@@ -263,12 +262,11 @@ handle to give the thread list more room.
 Settings → Installed plugins → Radar Sidebar → **Labelled rail**
 (`wideRail`) requires Navigation rail and adds a double-chevron toggle at the foot of the rail. On, the rail widens to 168px
 with labels, the sidebar grows by the same amount so the thread list keeps
-its width, and BB's footer actions become labelled rows too. The choice is
+its width. The choice is
 remembered per client.
 
-This restyles BB's sidebar markup (its `data-sidebar` attributes, the
-sidebar width variable, and the screen-reader labels inside footer
-buttons), which is why it ships off: a BB update that changes that markup
+This restyles BB's sidebar markup (its `data-sidebar` attributes and the
+sidebar width variable), which is why it ships off: a BB update that changes that markup
 can break it. The plugin checks for the structure it needs and hides the
 toggle when it is missing, so the worst case is a narrow rail, not a broken
 sidebar. This integration was live-checked on BB 0.45.1 nightly, with tests
@@ -286,13 +284,13 @@ on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration
 
 ## Compatibility notes
 
-The gutter, footer stacking and updates tile use BB's `data-sidebar` DOM
-attributes. The rail renders those overrides as `<style>` elements in its
+The gutter and Customize editor use BB's `data-sidebar` DOM
+attributes. The rail renders those overrides as a `<style>` element in its
 own markup (`components/radar/railHostStyles.ts`), so they exist only
 while it is mounted and it never writes to BB's elements. It doesn't use
 `:has()`: anchored on the page or the sidebar, it made the browser restyle
 the whole page on every DOM change in BB. If a future BB shell changes
-those attributes, the rail still renders but the footer may need a
+those attributes, the rail still renders but the gutter may need a
 selector update. Nothing here touches BB's data: thread operations go through the
 public SDK, navigation order through `setOrder`/`setVisible`, and client
 state lives under `radar-sidebar:*` localStorage keys.

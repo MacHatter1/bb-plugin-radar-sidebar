@@ -36,7 +36,7 @@ describe("app.css", () => {
     // they exist only while the rail is mounted and release with it.
     const selectors = rules().flatMap((rule) => rule.selector.split(/,(?![^()]*\))/));
     expect(selectors.filter((selector) => /\[data-sidebar=|\.group\.peer|\[data-testid=|\bhtml\b|data-radar-rail/.test(selector))).toEqual([]);
-    expect(rules(hostCss).length).toBeGreaterThan(40);
+    expect(rules(hostCss).length).toBeGreaterThan(15);
   });
 
   it("never anchors :has() on the page or on BB's sidebar for the rail", () => {
@@ -65,20 +65,13 @@ describe("app.css", () => {
     for (const selector of growth!.selector.split(",")) expect(selector).toContain('[data-state="expanded"]');
   });
 
-  it("keeps the desktop toggle and the updates chips inside the rail column", () => {
+  it("centers the desktop toggle on the rail and leaves BB's footer bar alone", () => {
     const trigger = rules(hostCss).find((rule) => rule.selector.includes("app-desktop-sidebar-trigger") && /left:/.test(rule.body));
     expect(trigger?.body).toMatch(/left:\s*0/);
     expect(trigger?.body).toMatch(/var\(--radar-rail-narrow\)/);
-    const menu = rules(hostCss).find((rule) =>
-      rule.selector.endsWith('[data-sidebar="menu"]') && /flex-wrap:/.test(rule.body),
-    );
-    expect(menu?.body).toMatch(/flex-wrap:\s*nowrap/);
-    expect(hostCss).toContain('> li[aria-hidden="true"]');
-    const updates = rules(hostCss).find((rule) =>
-      rule.selector.includes('a:not([data-sidebar="menu-button"])') && /min-height:/.test(rule.body),
-    );
-    expect(updates?.body).toMatch(/min-height:\s*56px/);
-    expect(updates?.body).toMatch(/width:\s*46px/);
+    // The footer keeps its default bottom bar under the thread list; only
+    // the gutter offsets it. No menu, disclosure or updates overrides.
+    expect(hostCss).not.toContain('[data-sidebar="footer"]');
   });
 
   it("separates the touch toolbar grid from the rail's vertical flex layout", () => {

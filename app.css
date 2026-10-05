@@ -3983,9 +3983,8 @@ a.radar-row-main:hover {
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread { padding: 0; width: 28px; }
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread > span { display: none; }
 
-/* Both stacks retain their full control width. A visible scroll thumb in
-   the rail's edge tracks the viewport without fading the final item or
-   changing BB's footer overflow measurements. Wheel/touch scroll normally. */
+/* A visible scroll thumb in the rail's edge tracks the viewport without
+   fading the final item. Wheel/touch scroll normally. */
 .radar-double-navigation[data-rail-overflow] .radar-double-rail::after {
   content: "";
   position: absolute;
