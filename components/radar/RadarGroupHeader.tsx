@@ -13,6 +13,7 @@ export interface GroupHeaderData {
   unread: number;
   live: number;
   needsUser: number;
+  queued: number;
   failed: number;
   projectId: string | null;
 }
@@ -56,6 +57,17 @@ function GroupStatus({ group }: { group: GroupHeaderData }) {
         aria-label={`${group.needsUser} waiting for input`}
       >
         <span className="radar-dot radar-dot-attention radar-dot-pulse" />
+      </span>
+    );
+  }
+  if (group.queued > 0) {
+    return (
+      <span
+        className="radar-group-status"
+        title={plural(group.queued, "queued thread")}
+        aria-label={`${group.queued} queued`}
+      >
+        <span className="radar-dot radar-dot-attention" />
       </span>
     );
   }

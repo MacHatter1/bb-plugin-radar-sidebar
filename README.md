@@ -341,10 +341,11 @@ flowchart LR
 
 ## Privacy
 
-- 🛰️ **Nothing leaves the machine.** Radar makes no network requests of its own;
-  every read and write goes to your BB server through the plugin SDK.
-- 🧾 **No storage of its own.** No database, no files. Preferences live in
-  browser `localStorage`, except nav placement, which is BB's own synced state.
+- 🛰️ **No third-party requests.** Radar sends reads and writes only to your BB
+  server through the plugin SDK; it contacts no external service.
+- 🧾 **Preferences only.** Shared plugin settings live in BB's plugin KV storage.
+  Browser `localStorage` holds a first-paint cache and per-client view choices;
+  nav placement is BB's own synced state. Radar creates no separate database.
 - 🔒 **No secrets.** The plugin defines no secret settings and reads none.
 
 ## Settings
@@ -415,13 +416,14 @@ bb plugin dev                      # rebuild and reload on every save
 ```
 
 ```
-server.ts               the settings the frontend reads; no storage, no CLI
+server.ts               shared settings in plugin KV storage; RPC and realtime, no CLI
 app.tsx                 registers the thread-list and navigation slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, nav, menus, peek card and smart views
 components/radar/*.ts   grouping hook, time bucketing, nav placement, model cache,
                         and the styles the rail applies to BB's sidebar while mounted
-lib/swipe.ts            swipe actions and gesture math, shared with server.ts
+lib/settingsRpc.ts      versioned settings snapshots and atomic per-item edits
+lib/swipe.ts            swipe actions and gesture math
 components/storage.ts   one-time migration of codex-sidebar: preferences
 components/ui/          vendored BB UI primitives
 skills/                 the bundled agent skill
@@ -433,7 +435,10 @@ docs/                   logo and screenshots
 rendered list through BB's plugin test harness (`renderSlot` with seeded
 sidebar threads), saved-view validation, preference migration, execution-cache
 refreshes, completion timers, and render counts, so a sidebar update re-renders
-only the rows that changed. Static guards over `app.css` and the rail's host
+only the rows that changed. Settings tests cover pending edits, stale snapshots,
+reconnection and concurrent accessory changes; interaction regressions cover
+complete pointer clicks, IME composition and folded queued work.
+Static guards over `app.css` and the rail's host
 stylesheet cover cascade mistakes jsdom cannot reproduce.
 The test setup uses jsdom's `localStorage` explicitly, including on Node 26,
 whose native storage global otherwise shadows it without a backing file.

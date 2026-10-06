@@ -24,8 +24,9 @@ import {
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import { isComposingKey } from "@/lib/keyboard";
 import { toast } from "sonner";
-import { isLiveThread } from "./time";
+import { isLiveThread, threadAttention } from "./time";
 import {
   formatReasoningLevel,
   useModelDisplayName,
@@ -46,15 +47,16 @@ export interface RowCollapse {
   hiddenUnread: number;
   hiddenLive: boolean;
   hiddenNeedsUser: boolean;
+  hiddenQueued: boolean;
   hiddenFailed: boolean;
   hiddenKids: { id: string; title: string; dot: string | null }[];
   onToggle: () => void;
 }
 
-/** Loudest hidden state first: failed, needs-you, then live. */
+/** Loudest hidden state first: failed, needs-you/queued, then live. */
 function hiddenRollupDotClass(collapse: RowCollapse): string | null {
   if (collapse.hiddenFailed) return "radar-dot-error";
-  if (collapse.hiddenNeedsUser) return "radar-dot-attention";
+  if (collapse.hiddenNeedsUser || collapse.hiddenQueued) return "radar-dot-attention";
   if (collapse.hiddenLive) return "radar-dot-running radar-dot-pulse";
   return null;
 }
@@ -69,6 +71,7 @@ function hiddenSummary(collapse: RowCollapse): string {
   const parts = [
     `${collapse.hiddenTotal} hidden`,
     collapse.hiddenUnread > 0 ? `${collapse.hiddenUnread} unread` : null,
+    collapse.hiddenQueued ? "queued work" : null,
   ].filter((part): part is string => !!part);
   return parts.join(", ");
 }
@@ -601,17 +604,14 @@ function RadarThreadRowImpl({
   // Action states get the full wash+bar+pulse treatment whether read or not:
   // they stay loud until resolved. Plain unread (FYI-done) keeps the green
   // wash only while unseen.
-  const needsUser = thread.indicator === "waiting-for-input";
-  const failed =
-    thread.indicator === "unread-error" ||
-    thread.indicator === "queued-failed";
+  const attention = threadAttention(thread);
+  const needsUser = attention === "needs-user";
+  const failed = attention === "failed";
   // Motion is reserved for rows that need action — FYI-done stays static.
   const actionPulseClass =
-    thread.indicator === "waiting-for-input" ||
-    thread.indicator === "queued-waiting"
+    needsUser || attention === "queued"
       ? "radar-row-pulse-amber"
-      : thread.indicator === "unread-error" ||
-          thread.indicator === "queued-failed"
+      : failed
         ? "radar-row-pulse-red"
         : null;
   const foldedSummary =
@@ -970,6 +970,7 @@ function RadarThreadRowImpl({
               value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               onKeyDown={(event) => {
+                if (isComposingKey(event.nativeEvent)) return;
                 if (event.key === "Enter") {
                   event.preventDefault();
                   commit();
@@ -1340,6 +1341,7 @@ function sameCollapse(a: RowCollapse | null, b: RowCollapse | null): boolean {
     a.hiddenUnread === b.hiddenUnread &&
     a.hiddenLive === b.hiddenLive &&
     a.hiddenNeedsUser === b.hiddenNeedsUser &&
+    a.hiddenQueued === b.hiddenQueued &&
     a.hiddenFailed === b.hiddenFailed &&
     a.hiddenKids.length === b.hiddenKids.length &&
     a.hiddenKids.every((kid, index) => {

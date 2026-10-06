@@ -43,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { isComposingKey } from "@/lib/keyboard";
 import {
   DEFAULT_SWIPE_LEFT,
   DEFAULT_SWIPE_RIGHT,
@@ -50,7 +51,7 @@ import {
 } from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
 import { RadarThreadRow } from "./RadarThreadRow";
-import { activityTime, isRunningThread, timeAgo } from "./time";
+import { activityTime, isRunningThread, threadAttention, timeAgo } from "./time";
 import {
   GroupHeader,
   SortableGroupSection,
@@ -819,7 +820,7 @@ export function RadarThreadList({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Another handler (a host menu, dialog or select) already owns this key.
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || isComposingKey(event)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
 
       if (target !== null && target === searchInputRef.current) {
@@ -1216,6 +1217,7 @@ export function RadarThreadList({
     ) => {
       const kidCount = (shownChildren.get(thread.id) ?? []).length;
       const counts = kidCount > 0 ? countSubtree(thread) : null;
+      const attention = threadAttention(thread);
       const collapse =
         kidCount > 0 && counts
           ? {
@@ -1224,14 +1226,9 @@ export function RadarThreadList({
               hiddenUnread:
                 counts.unread - (thread.isUnread ? 1 : 0),
               hiddenLive: counts.live - Number(isRunningThread(thread)) > 0,
-              hiddenNeedsUser:
-                counts.needsUser -
-                  Number(thread.indicator === "waiting-for-input") > 0,
-              hiddenFailed:
-                counts.failed - Number(
-                  thread.indicator === "unread-error" ||
-                  thread.indicator === "queued-failed",
-                ) > 0,
+              hiddenNeedsUser: counts.needsUser - Number(attention === "needs-user") > 0,
+              hiddenQueued: counts.queued - Number(attention === "queued") > 0,
+              hiddenFailed: counts.failed - Number(attention === "failed") > 0,
               hiddenKids: counts.kids,
               onToggle: () => toggleThreadCollapse(thread.id),
             }

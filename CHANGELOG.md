@@ -35,6 +35,20 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Fixed
 
+- Keep pending settings edits visible while earlier saves finish; apply newer
+  remote snapshots without letting stale replies or fetches overwrite them.
+  Reconcile missed changes after realtime reconnects or the sidebar remounts.
+- Save live-status preferences as atomic per-item edits, so simultaneous edits
+  from different windows or devices do not overwrite unrelated accessories.
+  Existing stored choices remain readable.
+- Let a second click on More close it instead of closing on pointer-down and
+  immediately reopening on click, in both standard navigation and the rail.
+- Leave search and inline-rename keys to the IME while composing text, including
+  the legacy key-code fallback used when confirming a candidate.
+- Keep queued work visible in folded families and group headers, separately
+  from threads waiting for input from the user.
+- Correct the privacy and development notes to describe shared plugin KV
+  preferences and the local first-paint cache.
 - Start the thread in the scoped project when you press New thread beside
   the project's name in the rail's heading. It opened the composer with no
   project chosen. Option-click still opens a split through BB's own action.

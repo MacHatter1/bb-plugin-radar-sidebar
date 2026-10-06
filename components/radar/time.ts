@@ -15,6 +15,23 @@ export function isLiveThread(thread: PluginSidebarThread): boolean {
   );
 }
 
+/** Attention follows the host's displayed indicator everywhere: queues wait
+ * for execution, not for input from the user. */
+export function threadAttention(thread: PluginSidebarThread): "failed" | "needs-user" | "queued" | null {
+  switch (thread.indicator) {
+    case "unread-error":
+    case "queued-failed": return "failed";
+    case "waiting-for-input": return "needs-user";
+    case "queued-waiting": return "queued";
+    default: return null;
+  }
+}
+
+export function isWaitingThread(thread: PluginSidebarThread): boolean {
+  const attention = threadAttention(thread);
+  return attention === "needs-user" || attention === "queued";
+}
+
 /** Execution and background work, excluding queued or blocked work. */
 export function isRunningThread(thread: PluginSidebarThread): boolean {
   if (

@@ -150,7 +150,9 @@ export function MorePopover({
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (ref.current && !ref.current.contains(target) && !triggerRef.current?.contains(target)) {
+        // Let the trigger's click toggle it once; closing here would reopen it.
         onClose();
       }
     };
@@ -172,7 +174,7 @@ export function MorePopover({
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   useEffect(() => {
     const firstItem = ref.current?.querySelector<HTMLButtonElement>(

@@ -28,8 +28,32 @@ describe("settings RPC schemas", () => {
     expect(validate(SETTINGS_RPC.getSettings.input, { a: 1 }).issues?.[0]?.message).toBe("Takes no input.");
   });
 
+  it("preserves the server revision while sanitizing saved choices", () => {
+    expect(validate(SETTINGS_RPC.getSettings.output, { railNav: true, ghost: 1, revision: 7 }).value)
+      .toEqual({ railNav: true, revision: 7 });
+  });
+
+  it.each([-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "2"])("rejects an invalid snapshot revision %s", (revision) => {
+    expect(validate(SETTINGS_RPC.getSettings.output, { railNav: true, revision }).issues?.[0]?.message)
+      .toBe("Invalid settings snapshot.");
+  });
+
+  it.each(["off", "badge", "icon"])("accepts an atomic accessory mode %s", (mode) => {
+    expect(validate(SETTINGS_RPC.setRailLiveStatus.input, { itemId: "alpha/dot", mode }).value)
+      .toEqual({ itemId: "alpha/dot", mode });
+  });
+
+  it.each([
+    null, {}, { itemId: "", mode: "off" }, { itemId: 123, mode: "off" },
+    { itemId: "__proto__", mode: "badge" }, { itemId: "constructor", mode: "icon" },
+    { itemId: "prototype", mode: "off" }, { itemId: "alpha/dot", mode: "mascot" },
+  ])("rejects an invalid atomic accessory edit %j", (input) => {
+    expect(validate(SETTINGS_RPC.setRailLiveStatus.input, input).issues?.[0]?.message)
+      .toBe("Invalid live-status item or mode.");
+  });
+
   it("drops anything unknown or invalid from the saved set", () => {
     const output = validate(SETTINGS_RPC.getSettings.output, { railNav: true, motion: "no", ghost: 1, defaultDensity: "compact" });
-    expect(output.value).toEqual({ railNav: true, defaultDensity: "compact" });
+    expect(output.value).toEqual({ railNav: true, defaultDensity: "compact", revision: 0 });
   });
 });

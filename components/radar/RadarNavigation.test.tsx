@@ -90,22 +90,46 @@ describe("live rail accessories", () => {
     const item = dot();
     const saved = { railNav: true, motion: false, railLiveStatus: { "other/nav": "badge" } };
     seedSettings(saved);
-    const setSetting = vi.fn(({ key, value }) => ({ ...saved, [key]: value }));
-    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => saved, setSetting } });
+    const setRailLiveStatus = vi.fn(({ itemId, mode }) => ({
+      ...saved, railLiveStatus: { ...saved.railLiveStatus, [itemId]: mode }, revision: 1,
+    }));
+    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => ({ ...saved, revision: 0 }), setRailLiveStatus } });
     await act(async () => {});
     fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Instead of the icon" }));
     await act(async () => {});
-    expect(setSetting).toHaveBeenCalledWith({ key: "railLiveStatus", value: { "other/nav": "badge", [item.id]: "icon" } });
+    expect(setRailLiveStatus).toHaveBeenCalledWith({ itemId: item.id, mode: "icon" });
     expect(screen.getByRole("button", { name: "Dot" }).querySelector(".radar-rail-accessory-icon")).not.toBeNull();
     expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!).motion).toBe(false);
+  });
+
+  it("preserves a newer remote accessory edit while the local item's reply is pending", async () => {
+    const item = dot();
+    const other = { ...destination("other", "Other"), experimental_Accessory: Accessory };
+    let release!: (value: unknown) => void;
+    const mounted = renderSlot(navigation, props, {
+      sidebarNavigation: { items: [item, other] },
+      rpc: {
+        getSettings: async () => ({ railNav: true, revision: 0 }),
+        setRailLiveStatus: () => new Promise((resolve) => { release = resolve; }),
+      },
+    });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Instead of the icon" }));
+    expect(screen.getByRole("button", { name: "Dot" }).querySelector(".radar-rail-accessory-icon")).not.toBeNull();
+    await mounted.emitRealtime("settings", {
+      railNav: true, railLiveStatus: { [item.id]: "icon", [other.id]: "badge" }, revision: 2,
+    });
+    await act(async () => release({ railNav: true, railLiveStatus: { [item.id]: "icon" }, revision: 1 }));
+    expect(screen.getByRole("button", { name: "Other" }).querySelector(".radar-rail-accessory-badge")).not.toBeNull();
   });
 
   it("allows choosing a live rail mode from More", async () => {
     const item = { ...dot(), isVisible: false };
     const saved = { railNav: true };
-    const setSetting = vi.fn(({ key, value }) => ({ ...saved, [key]: value }));
-    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => saved, setSetting } });
+    const setRailLiveStatus = vi.fn(({ itemId, mode }) => ({ ...saved, railLiveStatus: { [itemId]: mode }, revision: 1 }));
+    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => ({ ...saved, revision: 0 }), setRailLiveStatus } });
     await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
     const button = screen.getByRole("button", { name: "Dot" });
@@ -113,7 +137,7 @@ describe("live rail accessories", () => {
     fireEvent.contextMenu(button);
     fireEvent.click(screen.getByRole("menuitem", { name: "As a badge" }));
     await act(async () => {});
-    expect(setSetting).toHaveBeenCalledWith({ key: "railLiveStatus", value: { [item.id]: "badge" } });
+    expect(setRailLiveStatus).toHaveBeenCalledWith({ itemId: item.id, mode: "badge" });
   });
 
   it.each(["off", "badge", "icon"] as RailLiveStatus[])("isolates a throwing accessory in %s and in its tooltip and popover", (mode) => {
@@ -345,6 +369,28 @@ describe("host navigation arrangement", () => {
 });
 
 describe("rail ergonomics", () => {
+  it.each([false, true])("toggles More closed with a complete pointer click (rail=%s)", (railNav) => {
+    seedSettings({ railNav });
+    mount([destination("hidden", "Hidden", false)]);
+    const trigger = screen.getByRole("button", { name: "More navigation, 1 items" });
+    const clickTrigger = () => {
+      fireEvent.pointerDown(trigger.firstElementChild ?? trigger);
+      fireEvent.pointerUp(trigger.firstElementChild ?? trigger);
+      fireEvent.click(trigger.firstElementChild ?? trigger);
+    };
+    clickTrigger();
+    expect(screen.getByRole("group", { name: "More navigation" })).toBeTruthy();
+    clickTrigger();
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    clickTrigger();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Hidden" }));
+    expect(screen.getByRole("group", { name: "More navigation" })).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+  });
+
   it("steps focus through the rail with arrow keys and wraps at the ends", () => {
     mount([destination("notes", "Notes"), destination("board", "Board")]);
     const notes = screen.getByRole("button", { name: "Notes" });

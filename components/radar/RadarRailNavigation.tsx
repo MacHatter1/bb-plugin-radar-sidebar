@@ -27,7 +27,7 @@ import {
   setRailScope,
   useValidatedRailScope,
 } from "./railScope";
-import { activityTime, isLiveThread } from "./time";
+import { activityTime, isLiveThread, isWaitingThread } from "./time";
 import {
   hintFor,
   RowIcon,
@@ -38,7 +38,7 @@ import {
 import { RailTooltip, moveRailFocus, type RailTip } from "./railTooltip";
 import { useRailHostStructure, useRailMeasurements } from "./railLayout";
 import { railHostCss } from "./railHostStyles";
-import { useSetSetting, useSettingValues } from "./settingsStore";
+import { useSetRailLiveStatus, useSettingValues } from "./settingsStore";
 import { isRailLiveStatus } from "@/lib/settings";
 
 export type RailProject = {
@@ -103,9 +103,7 @@ function useRailProjects(pinNeedsYou: boolean) {
       }
       entry.threads += 1;
       const live = isLiveThread(thread);
-      const waiting =
-        thread.indicator === "waiting-for-input" ||
-        thread.indicator === "queued-waiting";
+      const waiting = isWaitingThread(thread);
       if (live) entry.live += 1;
       if (waiting) entry.waiting += 1;
       if (live && !waiting && !thread.hasPendingInteraction) entry.active += 1;
@@ -252,7 +250,7 @@ function RailNavigationBody({
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
   const { wideRail, projectBadges, projectStyle, railLiveStatus } = useSettingValues();
-  const saveSetting = useSetSetting();
+  const saveLiveStatus = useSetRailLiveStatus();
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -560,7 +558,7 @@ function RailNavigationBody({
             setMenu(null);
             const mode = id.startsWith("live-status:") ? id.slice("live-status:".length) : null;
             if (target.experimental_Accessory && isRailLiveStatus(mode)) {
-              void saveSetting("railLiveStatus", { ...railLiveStatus, [target.id]: mode });
+              void saveLiveStatus(target.id, mode);
             } else if (id === "open-split") {
               activate(target, true);
             } else if (id === "toggle") {

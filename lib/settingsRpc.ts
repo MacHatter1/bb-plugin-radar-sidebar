@@ -7,11 +7,24 @@ import {
   isValidSettingValue,
   sanitizeSaved,
   type SavedSettings,
+  type RailLiveStatus,
   type SettingKey,
   type SettingValues,
 } from "./settings";
 
-/** The realtime channel the server publishes the full saved set on. */
+/** Full saved choices plus a monotonically increasing server revision. */
+export type SettingsSnapshot = SavedSettings & { revision: number };
+
+/** Legacy snapshots have no revision; their choices remain readable at revision 0. */
+export function parseSettingsSnapshot(raw: unknown): SettingsSnapshot | null {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const revision = (raw as Record<string, unknown>).revision;
+  if (revision !== undefined &&
+      (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)) return null;
+  return { ...sanitizeSaved(raw), revision: revision === undefined ? 0 : revision as number };
+}
+
+/** The realtime channel the server publishes versioned saved choices on. */
 export const SETTINGS_CHANNEL = "settings";
 
 type Checked<T> = { ok: true; value: T } | { ok: false; message: string };
@@ -36,6 +49,16 @@ export interface SettingChange {
   value: SettingValues[SettingKey];
 }
 
+export type RailLiveStatusChange = { itemId: string; mode: RailLiveStatus };
+const liveStatusChange = schema<RailLiveStatusChange>((input) => {
+  const itemId = (input as RailLiveStatusChange | null)?.itemId;
+  const mode = (input as RailLiveStatusChange | null)?.mode;
+  if (typeof itemId !== "string" || !isValidSettingValue("railLiveStatus", { [itemId]: mode })) {
+    return { ok: false, message: "Invalid live-status item or mode." };
+  }
+  return { ok: true, value: { itemId, mode: mode as RailLiveStatus } };
+});
+
 const noInput = schema<null>((value) =>
   value === null || value === undefined
     ? { ok: true, value: null }
@@ -52,12 +75,15 @@ const change = schema<SettingChange>((value) => {
     : { ok: false, message: `Not a value ${key} can take.` };
 });
 
-const saved = schema<SavedSettings>((value) => ({
-  ok: true,
-  value: sanitizeSaved(value),
-}));
+const saved = schema<SettingsSnapshot>((value) => {
+  const snapshot = parseSettingsSnapshot(value);
+  return snapshot
+    ? { ok: true, value: snapshot }
+    : { ok: false, message: "Invalid settings snapshot." };
+});
 
 export const SETTINGS_RPC = {
   getSettings: { input: noInput, output: saved },
   setSetting: { input: change, output: saved },
+  setRailLiveStatus: { input: liveStatusChange, output: saved },
 } as const;

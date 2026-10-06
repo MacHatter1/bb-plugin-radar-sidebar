@@ -292,8 +292,13 @@ back to BB's list automatically.
 ## Settings
 
 Settings → Installed plugins → Radar Sidebar. The plugin keeps its own
-settings in its server storage (`getSettings` and `setSetting` over its RPC,
-changes pushed on the `settings` realtime channel), shared by every device.
+settings in its server KV storage (`getSettings` and `setSetting` over RPC;
+`setRailLiveStatus` patches just one accessory item), shared by every device.
+RPC replies and the `settings` realtime channel carry the full saved choices
+with a monotonically increasing `revision`. The frontend keeps pending edits
+visible without discarding remote changes, and refetches after reconnecting or
+returning to a previously unmounted sidebar. Earlier unversioned saved choices
+remain readable.
 BB's plugin settings are not used, so there is no `bb plugin config` for them
 and BB draws no flat list. The frontend reads them from `useSettingValues()`;
 every value has a default, and the last values this browser saw are cached so

@@ -87,6 +87,21 @@ describe("family derivation cache", () => {
     ]);
   });
 
+  it("rolls up queued descendants separately from running or user-blocked work", () => {
+    const parent = makeThread({ id: "parent" });
+    const threads = [parent,
+      makeThread({ id: "child", parentThreadId: "parent" }),
+      makeThread({ id: "queued", parentThreadId: "child", queuedWork: "waiting", indicator: "queued-waiting" }),
+    ];
+    const hook = renderHook(() => useThreadGroups(argsFor(threads)));
+    expect(hook.result.current.countSubtree(parent)).toMatchObject({
+      total: 3, live: 0, needsUser: 0, queued: 1, failed: 0,
+    });
+    expect(hook.result.current.groups[0]).toMatchObject({ live: 0, needsUser: 0, queued: 1 });
+    expect(hook.result.current.statusCounts).toMatchObject({ live: 1, waiting: 1 });
+    expect(hook.result.current.countSubtree(parent).kids.find(kid => kid.id === "queued")?.dot).toBe("radar-dot-attention");
+  });
+
   it("preserves the traversal depth guard", () => {
     const threads = Array.from({ length: 32 }, (_, i) => makeThread({
       id: `t${i}`, parentThreadId: i === 0 ? null : `t${i - 1}`,

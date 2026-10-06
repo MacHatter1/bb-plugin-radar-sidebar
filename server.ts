@@ -8,31 +8,42 @@
 // a change is published so every open window and device picks it up.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { sanitizeSaved, type SavedSettings } from "./lib/settings";
-import { SETTINGS_CHANNEL, SETTINGS_RPC } from "./lib/settingsRpc";
+import { parseSettingsSnapshot, SETTINGS_CHANNEL, SETTINGS_RPC, type SettingsSnapshot } from "./lib/settingsRpc";
 
 const STORAGE_KEY = "settings";
 
 export default async function plugin(bb: BbPluginApi) {
   bb.log.info("loaded");
 
-  const read = async (): Promise<SavedSettings> =>
-    sanitizeSaved(await bb.storage.kv.get(STORAGE_KEY));
+  const read = async (): Promise<SettingsSnapshot> => {
+    const raw = await bb.storage.kv.get(STORAGE_KEY);
+    return parseSettingsSnapshot(raw) ?? { ...sanitizeSaved(raw), revision: 0 };
+  };
 
   // Changes read, merge and write in turn, so two quick toggles can't lose one.
   let queue: Promise<unknown> = Promise.resolve();
 
+  const update = (apply: (current: SavedSettings) => SavedSettings): Promise<SettingsSnapshot> => {
+    const next = queue.then(async () => {
+      const current = await read();
+      if (current.revision === Number.MAX_SAFE_INTEGER) throw new Error("Settings revision exhausted.");
+      const saved: SettingsSnapshot = { ...apply(current), revision: current.revision + 1 };
+      // Choices and revision share one KV write, including on a reload.
+      await bb.storage.kv.set(STORAGE_KEY, saved);
+      bb.realtime.publish(SETTINGS_CHANNEL, saved);
+      return saved;
+    });
+    queue = next.catch(() => undefined);
+    return next;
+  };
+
   bb.rpc.register(SETTINGS_RPC, {
     getSettings: read,
-    setSetting: ({ key, value }) => {
-      const next = queue.then(async () => {
-        const saved: SavedSettings = { ...(await read()), [key]: value };
-        await bb.storage.kv.set(STORAGE_KEY, saved);
-        bb.realtime.publish(SETTINGS_CHANNEL, saved);
-        return saved;
-      });
-      queue = next.catch(() => undefined);
-      return next;
-    },
+    setSetting: ({ key, value }) => update((current) => ({ ...current, [key]: value })),
+    // Patch only this item against the latest map, inside the same write queue.
+    setRailLiveStatus: ({ itemId, mode }) => update((current) => ({
+      ...current, railLiveStatus: { ...current.railLiveStatus, [itemId]: mode },
+    })),
   });
 
   bb.onDispose(() => {
