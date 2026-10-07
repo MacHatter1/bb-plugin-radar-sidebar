@@ -80,12 +80,19 @@ export function resetRailScope(): void {
   }
 }
 
-/** Two-letter monogram for a project tile: "bb-plugin-radar" → "BP". */
+/** Two-letter monogram, ignoring a leading bb-plugin prefix when a name follows. */
 export function monogram(name: string): string {
   const words = name
     .split(/[\s\-_./]+/)
     .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
     .filter(Boolean);
+  if (
+    words.length > 2 &&
+    words[0]!.toLowerCase() === "bb" &&
+    words[1]!.toLowerCase() === "plugin"
+  ) {
+    words.splice(0, 2);
+  }
   if (words.length === 0) return "?";
   if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
   return (words[0]![0]! + words[1]![0]!).toUpperCase();
