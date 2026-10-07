@@ -11,11 +11,13 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
 import ArrowLeftDoubleIcon from "@hugeicons/core-free-icons/ArrowLeftDoubleIcon";
 import ArrowRightDoubleIcon from "@hugeicons/core-free-icons/ArrowRightDoubleIcon";
+import { toast } from "sonner";
 import {
   experimental_Icon as HostIcon,
   experimental_useSidebarNavigation,
   experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
+  useSdk,
   type ExperimentalSidebarNavigationItem,
   type ExperimentalSidebarNavigationProps,
 } from "@get-bb/plugin-sdk/app";
@@ -40,6 +42,7 @@ import { useRailHostStructure, useRailMeasurements } from "./railLayout";
 import { railHostCss } from "./railHostStyles";
 import { useSetRailLiveStatus, useSettingValues } from "./settingsStore";
 import { isRailLiveStatus } from "@/lib/settings";
+import { isMacosDesktop, openProjectInFinder } from "./projectFinder";
 
 export type RailProject = {
   id: string;
@@ -249,6 +252,8 @@ function RailNavigationBody({
   const { items, activeItemId, actions, isShortcutModifierHeld } =
     experimental_useSidebarNavigation();
   const threadActions = experimental_useSidebarThreadActions();
+  const sdk = useSdk();
+  const canOpenFinder = isMacosDesktop();
   const { wideRail, projectBadges, projectStyle, railLiveStatus } = useSettingValues();
   const saveLiveStatus = useSetRailLiveStatus();
   // The rail is the layout on every viewport; compact only changes what
@@ -258,6 +263,11 @@ function RailNavigationBody({
     x: number;
     y: number;
     itemId: string;
+  } | null>(null);
+  const [projectMenu, setProjectMenu] = useState<{
+    x: number;
+    y: number;
+    projectId: string;
   } | null>(null);
   const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
@@ -338,6 +348,7 @@ function RailNavigationBody({
       hideTip();
       setMoreAt(null);
       setMenu(null);
+      setProjectMenu(null);
       actions.activate(item.id, { openInSplit });
     },
     [actions, hideTip],
@@ -355,6 +366,7 @@ function RailNavigationBody({
       hideTip();
       setMoreAt(null);
       setMenu(null);
+      setProjectMenu(null);
       threadActions.openNewThread({
         projectId: scopedProjectId,
         focusPrompt: true,
@@ -383,10 +395,19 @@ function RailNavigationBody({
   const openMenu = useCallback(
     (clientX: number, clientY: number, item: ExperimentalSidebarNavigationItem) => {
       hideTip();
+      setProjectMenu(null);
       setMenu({ x: clientX, y: clientY, itemId: item.id });
     },
     [hideTip],
   );
+
+  const openProjectMenu = useCallback((clientX: number, clientY: number, projectId: string) => {
+    hideTip();
+    setMoreAt(null);
+    setMenu(null);
+    setProjectMenu({ x: clientX, y: clientY, projectId });
+  }, [hideTip]);
+  const projectMenuItem = projectMenu ? projects.find((candidate) => candidate.id === projectMenu.projectId) : null;
 
   // Tooltip wiring for one rail control. Hover waits briefly so sweeping the
   // pointer down the rail doesn't flicker; keyboard focus shows at once.
@@ -490,6 +511,7 @@ function RailNavigationBody({
 
   const openMore = (event: MouseEvent<HTMLButtonElement>) => {
     hideTip();
+    setProjectMenu(null);
     const rect = event.currentTarget.getBoundingClientRect();
     const width = 248;
     const x =
@@ -574,7 +596,28 @@ function RailNavigationBody({
           onClose={() => setMenu(null)}
         />
       ) : null}
-      {!isCompactViewport && tip && !moreAt && !menu ? <RailTooltip tip={tip} /> : null}
+      {canOpenFinder && projectMenu && projectMenuItem ? (
+        <RadarMenu
+          x={projectMenu.x}
+          y={projectMenu.y}
+          label="Project actions"
+          items={[
+            { kind: "header", label: projectMenuItem.isPersonal ? "Personal" : projectMenuItem.name },
+            { kind: "item", id: "open-finder", label: "Open in Finder", icon: "Folder" },
+          ]}
+          onSelect={() => {
+            const projectId = projectMenu.projectId;
+            setProjectMenu(null);
+            void openProjectInFinder(sdk, projectId).catch((error: unknown) => {
+              toast.error("Couldn’t open project in Finder", {
+                description: error instanceof Error ? error.message : undefined,
+              });
+            });
+          }}
+          onClose={() => setProjectMenu(null)}
+        />
+      ) : null}
+      {!isCompactViewport && tip && !moreAt && !menu && !projectMenu ? <RailTooltip tip={tip} /> : null}
     </>
   );
 
@@ -662,6 +705,10 @@ function RailNavigationBody({
                   hideTip();
                   setRailScope(isScoped ? null : project.id);
                 }}
+                onContextMenu={canOpenFinder ? (event) => {
+                  event.preventDefault();
+                  openProjectMenu(event.clientX, event.clientY, project.id);
+                } : undefined}
                 {...tipProps({
                   key: `project:${project.id}`,
                   label: project.name,
@@ -678,7 +725,7 @@ function RailNavigationBody({
           })}
         </div>
       ) : null,
-    [railProjects, scope, hideTip, tipProps, projectBadges, projectStyle],
+    [railProjects, scope, hideTip, tipProps, projectBadges, projectStyle, canOpenFinder, openProjectMenu],
   );
 
   return (
@@ -706,6 +753,7 @@ function RailNavigationBody({
               hideTip();
               setMoreAt(null);
               setMenu(null);
+              setProjectMenu(null);
               setRailScope(null);
             }}
             {...tipProps({

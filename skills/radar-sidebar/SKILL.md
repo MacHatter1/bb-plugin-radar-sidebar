@@ -61,6 +61,14 @@ is ready; loading/error snapshots preserve the saved choice. When using
 another navigation provider with `railNav` enabled, the list has its own
 clear-project button.
 
+In BB's macOS desktop app, right-click a project tile for **Open in Finder**.
+It opens the project's source on the viewing Mac, preferring its default local
+checkout. Projects without a source on that Mac report that no local folder is
+available. The action is absent in browser clients and other desktop platforms.
+The adapter in `components/radar/projectFinder.ts` uses the desktop preload's
+platform marker and BB's loopback helper `/status` and `/open-in-target`
+contracts, with project sources and helper ports read through the public SDK.
+
 Desktop hover/focus tooltips include shortcuts, accessories and project
 counts (including queued/background work). Arrow keys wrap between enabled
 controls; Home/End focus the first/last. Right-click destinations for Move to

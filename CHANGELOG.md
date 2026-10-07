@@ -23,6 +23,9 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Added
 
+- **Open in Finder** in the rail's project right-click menu when using BB's
+  macOS desktop app. It opens the project's checkout on the viewing Mac and
+  reports when that project has no local folder.
 - Badges on the rail's project tiles: an amber count with a pulsing halo for
   threads that need you, a green count in a spinning ring for work in
   progress, and a count of unread threads. A thread counts once between

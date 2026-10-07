@@ -10,6 +10,8 @@ import { resetRailScope, setRailScope, useRailScope } from "./railScope";
 import { projectRailState } from "./RadarRailNavigation";
 import { seedSettings } from "./settingsStore";
 import type { RailLiveStatus } from "@/lib/settings";
+import { toast } from "sonner";
+import * as projectFinder from "./projectFinder";
 
 const host = vi.hoisted(() => ({
   items: null as ExperimentalSidebarNavigationItem[] | null,
@@ -594,6 +596,40 @@ describe("project scope tiles", () => {
     const newThread: ExperimentalSidebarNavigationItem = { ...destination("new", "New thread"), id: "__bb__/new-thread", action: { kind: "new-thread" }, pluginId: null };
     return renderSlot(wrapped, { ...props, isCompactViewport }, { sidebarNavigation: { items: [newThread, destination("board", "Board")] }, sidebarThreads: { threads, projects } });
   }
+
+  it.each([false, true])("opens a project's Finder menu on the macOS desktop without changing scope (compact=%s)", async (compact) => {
+    vi.stubGlobal("bbDesktop", { platform: "macos" });
+    const openFinder = vi.spyOn(projectFinder, "openProjectInFinder").mockResolvedValue();
+    mountWithThreads(compact);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }), { clientX: 50, clientY: 100 });
+    expect(screen.getByRole("menu", { name: "Project actions" })).toBeTruthy();
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Finder" }));
+    await act(async () => {});
+    expect(openFinder).toHaveBeenCalledWith(expect.anything(), "proj_b");
+    expect(screen.queryByRole("menu", { name: "Project actions" })).toBeNull();
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+  });
+
+  it.each([undefined, { platform: "linux" }, { platform: "windows" }])("omits the Finder menu outside the macOS desktop (%s)", (desktop) => {
+    vi.stubGlobal("bbDesktop", desktop);
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X)");
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    expect(screen.queryByRole("menuitem", { name: "Open in Finder" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Project actions" })).toBeNull();
+  });
+
+  it("reports when the project's folder cannot be opened", async () => {
+    vi.stubGlobal("bbDesktop", { platform: "macos" });
+    vi.spyOn(projectFinder, "openProjectInFinder").mockRejectedValue(new Error("This project has no folder on this Mac."));
+    const error = vi.spyOn(toast, "error");
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Finder" }));
+    await act(async () => {});
+    expect(error).toHaveBeenCalledWith("Couldn’t open project in Finder", { description: "This project has no folder on this Mac." });
+  });
 
   it("orders project tiles by activity rather than recent reads", () => {
     host.sidebarThreads = {

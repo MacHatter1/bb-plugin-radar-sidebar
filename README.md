@@ -220,6 +220,10 @@ also show live accessories, clipped to the host's 4rem by 1.25rem slot.
 <details>
 <summary><b>Project scope, tooltips, keyboard and more</b></summary>
 
+- **Open in Finder.** In BB's macOS desktop app, right-click a project tile
+  and choose **Open in Finder** to open its checkout on that Mac. The action
+  uses the project's local source, preferring its default local checkout.
+  Projects without a folder on that Mac show an explanatory message.
 - **Project scope.** Below the destinations, every project with an active
   thread gets a coloured monogram tile, most recently active first (a project
   with a thread waiting on you stays on top until you've dealt with it), with

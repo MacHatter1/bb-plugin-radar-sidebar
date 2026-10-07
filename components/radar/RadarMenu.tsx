@@ -28,12 +28,14 @@ export function RadarMenu({
   items,
   onSelect,
   onClose,
+  label = "Thread actions",
 }: {
   x: number;
   y: number;
   items: RadarMenuItem[];
   onSelect: (id: string) => void;
   onClose: () => void;
+  label?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -99,7 +101,7 @@ export function RadarMenu({
       ref={ref}
       role="menu"
       tabIndex={-1}
-      aria-label="Thread actions"
+      aria-label={label}
       className="radar-menu"
       style={{ left, top, width }}
       onKeyDown={(event) => {
