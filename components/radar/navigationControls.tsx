@@ -110,8 +110,9 @@ export function NavigationButton({
 
 /**
  * The "More" overflow popover: fixed to the side of the trigger (like BB's
- * stock popover), scrollable, closes on selection, Escape, resize, or an
- * outside pointer-down. All listeners are removed on unmount.
+ * stock popover), scrollable, closes on selection, Escape, resize, an
+ * outside pointer-down, or scrolling an ancestor of its trigger. All
+ * listeners are removed on unmount.
  */
 export function MorePopover({
   x,
@@ -160,8 +161,9 @@ export function MorePopover({
       if (event.key === "Escape") onClose();
     };
     const onScroll = (event: Event) => {
-      if (ref.current && ref.current.contains(event.target as Node)) return;
-      onClose();
+      // Thread and chat updates can scroll other panes without moving the
+      // trigger. Only dismiss when its own scroll container moves it.
+      if ((event.target as Node).contains(triggerRef.current)) onClose();
     };
     const onResize = () => onClose();
     document.addEventListener("pointerdown", onPointerDown, true);

@@ -369,6 +369,44 @@ describe("host navigation arrangement", () => {
 });
 
 describe("rail ergonomics", () => {
+  it.each([false, true])("keeps More open through thread updates and thread-list scrolling (compact=%s)", (compact) => {
+    const thread = makeThread({ id: "working" });
+    host.sidebarThreads = { projects: [makeProject({ id: thread.projectId })], threads: [thread] };
+    const slot = mount([destination("hidden", "Hidden", false)], compact);
+    const threadList = document.createElement("div");
+    slot.container.append(threadList);
+    fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
+    const popover = screen.getByRole("group", { name: "More navigation" });
+    const hidden = screen.getByRole("button", { name: "Hidden" });
+
+    host.sidebarThreads = { ...host.sidebarThreads, threads: [{ ...thread, status: "active", indicator: "runtime" }] };
+    slot.rerender(createElement(navigation.component, { ...props, isCompactViewport: compact }));
+    expect(screen.getByRole("group", { name: "More navigation" })).toBe(popover);
+    // A changing thread list can adjust its scroll position independently
+    // of the rail; that must not dismiss the rail's open menu.
+    fireEvent.scroll(threadList);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBe(popover);
+    expect(document.activeElement).toBe(hidden);
+    fireEvent.click(hidden);
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([
+      { method: "activate", itemId: "alpha/hidden", openInSplit: false },
+    ]);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+  });
+
+  it.each([false, true])("keeps More open when its list scrolls and closes when its trigger's container scrolls (rail=%s)", (railNav) => {
+    seedSettings({ railNav });
+    mount([destination("hidden", "Hidden", false)]);
+    const trigger = screen.getByRole("button", { name: "More navigation, 1 items" });
+    fireEvent.click(trigger);
+    const popover = screen.getByRole("group", { name: "More navigation" });
+    fireEvent.scroll(popover.querySelector(".radar-nav-more-list")!);
+    expect(screen.getByRole("group", { name: "More navigation" })).toBe(popover);
+    fireEvent.scroll(trigger.parentElement!);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it.each([false, true])("toggles More closed with a complete pointer click (rail=%s)", (railNav) => {
     seedSettings({ railNav });
     mount([destination("hidden", "Hidden", false)]);
