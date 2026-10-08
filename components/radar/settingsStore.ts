@@ -10,6 +10,7 @@ import {
   type SettingValues,
 } from "@/lib/settings";
 import { parseSettingsSnapshot, SETTINGS_CHANNEL, SETTINGS_RPC, type SettingsSnapshot } from "@/lib/settingsRpc";
+import { changeProjectOrganisation, EMPTY_PROJECT_ORGANISATION, orderedProjectPins, projectOrganisationChangeSchema, type ProjectOrganisationChange } from "@/lib/projectOrganisation";
 
 /** Authoritative server choices, with pending local edits layered on top.
  * Revisions order fetches, pushes and save replies across windows. Local
@@ -50,9 +51,16 @@ function sameSaved(a: SavedSettings, b: SavedSettings): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<SettingKey>;
   for (const key of keys) {
     if (a[key] === b[key]) continue;
-    if (key !== "railLiveStatus" || !a.railLiveStatus || !b.railLiveStatus) return false;
-    const ids = new Set([...Object.keys(a.railLiveStatus), ...Object.keys(b.railLiveStatus)]);
-    for (const id of ids) if (a.railLiveStatus[id] !== b.railLiveStatus[id]) return false;
+    if (key === "projectOrganisation") {
+      if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return false;
+      continue;
+    }
+    if (key !== "railLiveStatus" && key !== "pinnedProjects") return false;
+    const left = a[key];
+    const right = b[key];
+    if (!left || !right) return false;
+    const ids = new Set([...Object.keys(left), ...Object.keys(right)]);
+    for (const id of ids) if (left[id] !== right[id]) return false;
   }
   return true;
 }
@@ -199,6 +207,40 @@ export function useSetRailLiveStatus(): (itemId: string, mode: RailLiveStatus) =
     return enqueue(
       (base) => ({ ...base, railLiveStatus: { ...base.railLiveStatus, [itemId]: mode } }),
       () => rpc.call("setRailLiveStatus", { itemId, mode }),
+    );
+  }, [rpc]);
+}
+
+/** Patch one project pin without overwriting another window's pins. */
+export function useSetProjectPinned(): (projectId: string, pinned: boolean) => Promise<boolean> {
+  const rpc = useRpc<typeof SETTINGS_RPC>();
+  return useCallback(async (projectId, pinned) => {
+    if (!isValidSettingValue("pinnedProjects", { [projectId]: pinned })) return false;
+    return enqueue(
+      (base) => {
+        const pinnedProjects = { ...base.pinnedProjects, [projectId]: pinned };
+        if (!pinned) delete pinnedProjects[projectId];
+        const organisation = base.projectOrganisation ?? EMPTY_PROJECT_ORGANISATION;
+        return { ...base, pinnedProjects, projectOrganisation: { ...organisation, pinOrder: orderedProjectPins(pinnedProjects, organisation.pinOrder) } };
+      },
+      () => rpc.call("setProjectPinned", { projectId, pinned }),
+    );
+  }, [rpc]);
+}
+
+/** Rebase a single layout intent over remote changes while its save is pending. */
+export function useChangeProjectOrganisation(): (change: ProjectOrganisationChange) => Promise<boolean> {
+  const rpc = useRpc<typeof SETTINGS_RPC>();
+  return useCallback(async (change) => {
+    const parsed = projectOrganisationChangeSchema.safeParse(change);
+    if (!parsed.success) return false;
+    return enqueue(
+      (base) => {
+        try {
+          return { ...base, projectOrganisation: changeProjectOrganisation(base.projectOrganisation ?? EMPTY_PROJECT_ORGANISATION, base.pinnedProjects ?? {}, parsed.data) };
+        } catch { return base; }
+      },
+      () => rpc.call("changeProjectOrganisation", parsed.data),
     );
   }, [rpc]);
 }

@@ -220,6 +220,26 @@ also show live accessories, clipped to the host's 4rem by 1.25rem slot.
 <details>
 <summary><b>Project scope, tooltips, keyboard and more</b></summary>
 
+- **Pinned projects.** Right-click a project tile and choose **Pin project**
+  to keep it at the top of the rail, even when it has no visible threads.
+  A small pin marks it. Choose **Unpin project** to return it to the usual
+  activity order. Drag pinned tiles to choose their order; with a keyboard,
+  press Space, use the arrow keys, then Space to drop (Escape cancels).
+  **Move pin up / down** in the menu also works. Pins and their order are
+  saved across reloads and shared across devices.
+- **Project collections.** Choose **Move to collection…** in a project's
+  right-click menu to create or select a collection. Click its header to
+  collapse or expand it; right-click the header to rename or remove it.
+  Collected projects remain visible without active threads. Pins stay above
+  collections and return to their collection when unpinned. Removing a
+  collection returns its projects to the normal rail.
+- **Project quick actions.** **New thread in project** starts a thread in
+  that project without changing your current rail filter. In the desktop
+  app, the menu discovers installed editor and terminal apps and offers
+  **Open in…** actions for the project's checkout on the viewing computer.
+- **Mark project as read.** Clears the chosen project's currently unread
+  threads, leaving other projects and later incoming updates alone. Partial
+  failures are reported so you can retry.
 - **Open in Finder.** In BB's macOS desktop app, right-click a project tile
   and choose **Open in Finder** to open its checkout on that Mac. The action
   uses the project's local source, preferring its default local checkout.
@@ -370,6 +390,8 @@ actions need Swipe actions) are greyed out with a note until that one is on.
 | Setting | Default | |
 | --- | --- | --- |
 | `railNav` | `false` | Navigation rail with project filters beside the thread list. |
+| `pinnedProjects` | `{}` | Projects kept at the top of the rail, chosen with Pin project / Unpin project in a project's right-click menu; shared across devices. |
+| `projectOrganisation` | Empty order and collections | Saved pin order, named collections, collapse state and project membership; edited in the rail and shared across devices. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav`. |
 | `railLiveStatus` | `{}` | Per-item live accessory placement (`off`, `badge`, `icon`), chosen by right-clicking a rail destination or More row. |
 | `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and projects that need you kept on top; requires `railNav`. |

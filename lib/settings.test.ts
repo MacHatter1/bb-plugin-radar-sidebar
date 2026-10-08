@@ -13,9 +13,9 @@ import {
 const keys = Object.keys(SETTINGS) as SettingKey[];
 
 describe("settings definitions", () => {
-  it("puts every setting in exactly one group", () => {
+  it("puts every scalar setting in exactly one group", () => {
     const grouped = SETTING_GROUPS.flatMap((group) => [...group.keys]);
-    expect([...grouped].sort()).toEqual(keys.filter(key => SETTINGS[key].type !== "live-status-map").sort());
+    expect([...grouped].sort()).toEqual(keys.filter(key => SETTINGS[key].type === "boolean" || SETTINGS[key].type === "select").sort());
   });
 
   it("has a short hint for every setting", () => {
@@ -29,6 +29,21 @@ describe("settings definitions", () => {
       expect(group.keys.indexOf(requires)).toBeGreaterThanOrEqual(0);
       expect(group.keys.indexOf(requires)).toBeLessThan(group.keys.indexOf(key));
     }
+  });
+});
+
+describe("project pin settings", () => {
+  it("defaults to no pins and copies saved project choices", () => {
+    expect(DEFAULT_SETTINGS.pinnedProjects).toEqual({});
+    const map = { proj_a: true, proj_b: false };
+    const saved = sanitizeSaved({ pinnedProjects: map, railNav: true });
+    expect(saved).toEqual({ pinnedProjects: map, railNav: true });
+    expect(saved.pinnedProjects).not.toBe(map);
+  });
+
+  it.each([null, [], true, { "": true }, { constructor: true }, { proj_a: "yes" }, JSON.parse('{"__proto__":true}'), { ["x".repeat(129)]: true }])("rejects invalid project pins %j", (value) => {
+    expect(isValidSettingValue("pinnedProjects", value)).toBe(false);
+    expect(sanitizeSaved({ pinnedProjects: value, railNav: true })).toEqual({ railNav: true });
   });
 });
 

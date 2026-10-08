@@ -61,13 +61,41 @@ is ready; loading/error snapshots preserve the saved choice. When using
 another navigation provider with `railNav` enabled, the list has its own
 clear-project button.
 
-In BB's macOS desktop app, right-click a project tile for **Open in Finder**.
+Right-click a project tile for **Pin project / Unpin project** on every
+platform. Pinned projects come first and stay in the rail even with no visible
+threads; a small pin icon and the tile's accessible description mark them.
+Pins live in the shared `pinnedProjects` setting and use atomic per-project
+`setProjectPinned` edits, so concurrent windows preserve each other's pins.
+Drag pins to reorder them, or use **Move pin up / down** in the menu. Keyboard
+dragging uses Space, arrow keys, Space to drop and Escape to cancel. Pins retain
+their chosen order as thread activity changes. Deleted projects are omitted.
+
+**Move to collection…** opens a dialog to select or create a named collection.
+Click a collection header to collapse/expand it; right-click to rename/remove.
+Pins stay above collections; membership is retained when pinned. Collected
+projects stay visible with no threads. Removing a collection returns projects
+to the ungrouped rail. `projectOrganisation` stores order, collections,
+collapse state and membership. Atomic `changeProjectOrganisation` intents are
+serialized with pin/settings saves and rebased over remote snapshots.
+
+Project menus also offer **New thread in project** (without changing scope)
+and **Mark project as read**. Mark-read snapshots the chosen project's unread,
+non-hidden threads from the sidebar, deduplicates them and sends at most eight
+`threads.markRead` requests at once. Partial failures are reported; newer
+unread arrivals and other projects remain unaffected.
+
+In BB's macOS desktop app, the same menu also offers **Open in Finder**.
 It opens the project's source on the viewing Mac, preferring its default local
 checkout. Projects without a source on that Mac report that no local folder is
 available. The action is absent in browser clients and other desktop platforms.
-The adapter in `components/radar/projectFinder.ts` uses the desktop preload's
-platform marker and BB's loopback helper `/status` and `/open-in-target`
-contracts, with project sources and helper ports read through the public SDK.
+Desktop clients also discover installed editor and terminal apps with the
+loopback helper's `/workspace-open-targets`, and offer directory-capable
+targets in the menu. `components/radar/projectDesktop.ts` uses the desktop
+preload's platform marker and BB's loopback helper `/status` and
+`/open-in-target` contracts, with project sources and helper ports read through
+the public SDK. It resolves sources on the viewing computer on macOS, Linux
+and Windows. The Finder wrapper remains macOS-only. Menu closure/switching
+cancels discovery and ignores stale replies; launch failures show feedback.
 
 Desktop hover/focus tooltips include shortcuts, accessories and project
 counts (including queued/background work). Arrow keys wrap between enabled

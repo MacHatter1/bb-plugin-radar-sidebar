@@ -5,6 +5,16 @@ const validate = (schema: { "~standard": { validate: (value: unknown) => unknown
   schema["~standard"].validate(value) as { value?: unknown; issues?: { message: string }[] };
 
 describe("settings RPC schemas", () => {
+  it("validates atomic project pin changes", () => {
+    for (const pinned of [true, false]) {
+      expect(validate(SETTINGS_RPC.setProjectPinned.input, { projectId: "proj_a", pinned }).value)
+        .toEqual({ projectId: "proj_a", pinned });
+    }
+    for (const input of [null, {}, { projectId: "", pinned: true }, { projectId: "constructor", pinned: true }, { projectId: "proj_a", pinned: "true" }]) {
+      expect(validate(SETTINGS_RPC.setProjectPinned.input, input).issues?.[0]?.message).toBe("Invalid project or pin choice.");
+    }
+  });
+
   it("accepts a change a setting can take", () => {
     expect(validate(SETTINGS_RPC.setSetting.input, { key: "railNav", value: true }).value).toEqual({ key: "railNav", value: true });
     expect(validate(SETTINGS_RPC.setSetting.input, { key: "swipeLeft", value: "Pin / unpin" }).issues).toBeUndefined();

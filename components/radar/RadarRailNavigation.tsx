@@ -12,6 +12,8 @@ import Home01Icon from "@hugeicons/core-free-icons/Home01Icon";
 import ArrowLeftDoubleIcon from "@hugeicons/core-free-icons/ArrowLeftDoubleIcon";
 import ArrowRightDoubleIcon from "@hugeicons/core-free-icons/ArrowRightDoubleIcon";
 import { toast } from "sonner";
+import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   experimental_Icon as HostIcon,
   experimental_useSidebarNavigation,
@@ -40,9 +42,14 @@ import {
 import { RailTooltip, moveRailFocus, type RailTip } from "./railTooltip";
 import { useRailHostStructure, useRailMeasurements } from "./railLayout";
 import { railHostCss } from "./railHostStyles";
-import { useSetRailLiveStatus, useSettingValues } from "./settingsStore";
+import { useChangeProjectOrganisation, useSetProjectPinned, useSetRailLiveStatus, useSettingValues } from "./settingsStore";
 import { isRailLiveStatus } from "@/lib/settings";
 import { isMacosDesktop, openProjectInFinder } from "./projectFinder";
+import { desktopPlatform, discoverProjectOpenTargets, openProjectTarget, type LocalProjectFolder, type ProjectOpenTarget } from "./projectDesktop";
+import { markProjectRead } from "./projectRead";
+import { orderedProjectPins, type ProjectOrganisation, type ProjectOrganisationChange } from "@/lib/projectOrganisation";
+import { RadarRailProjectButton } from "./RadarRailProjectButton";
+import { RadarProjectCollectionDialog, type CollectionDialogTarget } from "./RadarProjectCollectionDialog";
 
 export type RailProject = {
   id: string;
@@ -77,31 +84,31 @@ function sameRailProjects(
   );
 }
 
-/** Projects with at least one visible thread: needs-you first, then most recently active. */
-function useRailProjects(pinNeedsYou: boolean) {
+/** Pins and collected projects stay visible; other projects need a visible thread. */
+function useRailProjects(pinNeedsYou: boolean, pinnedProjects: Record<string, boolean>, organisation: ProjectOrganisation) {
   const { threads, projects, status } = experimental_useSidebarThreads();
   const previous = useRef<RailProject[]>([]);
   const railProjects = useMemo(() => {
     const now = Date.now();
     const byId = new Map<string, RailProject>();
+    const knownProjects = new Map(projects.map((project) => [project.id, project]));
+    const emptyProject = (project: (typeof projects)[number]): RailProject => ({
+      id: project.id,
+      name: project.isPersonal ? "Personal" : project.name,
+      threads: 0,
+      live: 0,
+      active: 0,
+      waiting: 0,
+      unread: 0,
+      latest: 0,
+    });
     for (const thread of threads) {
       if (thread.isHidden || thread.isArchived) continue;
       let entry = byId.get(thread.projectId);
       if (!entry) {
-        const project = projects.find(
-          (candidate) => candidate.id === thread.projectId,
-        );
+        const project = knownProjects.get(thread.projectId);
         if (!project) continue;
-        entry = {
-          id: project.id,
-          name: project.isPersonal ? "Personal" : project.name,
-          threads: 0,
-          live: 0,
-          active: 0,
-          waiting: 0,
-          unread: 0,
-          latest: 0,
-        };
+        entry = emptyProject(project);
         byId.set(project.id, entry);
       }
       entry.threads += 1;
@@ -113,20 +120,27 @@ function useRailProjects(pinNeedsYou: boolean) {
       if (thread.isUnread) entry.unread += 1;
       entry.latest = Math.max(entry.latest, activityTime(thread, now));
     }
-    // With badges on, a project that needs you stays on top until that's
-    // resolved; the rest (and ties among those that need you) follow recent
-    // activity.
+    for (const project of projects) {
+      if ((pinnedProjects[project.id] === true || organisation.projectCollections[project.id]) && !byId.has(project.id)) {
+        byId.set(project.id, emptyProject(project));
+      }
+    }
+    const pinPositions = new Map(orderedProjectPins(pinnedProjects, organisation.pinOrder).map((id, index) => [id, index]));
+    // Pins keep the chosen order as activity changes; other projects retain
+    // needs-you/activity sorting. Empty collected projects break ties by name.
     const next = [...byId.values()].sort(
       (a, b) =>
+        Number(pinnedProjects[b.id] === true) - Number(pinnedProjects[a.id] === true) ||
+        (pinnedProjects[a.id] === true ? pinPositions.get(a.id)! - pinPositions.get(b.id)! : 0) ||
         (pinNeedsYou ? Number(b.waiting > 0) - Number(a.waiting > 0) : 0) ||
-        b.latest - a.latest,
+        b.latest - a.latest || (a.threads === 0 && b.threads === 0 ? a.name.localeCompare(b.name) || a.id.localeCompare(b.id) : 0),
     );
     // Every thread update lands here. Keep the previous list when nothing
     // the tiles show moved, so they skip rendering.
     return sameRailProjects(previous.current, next) ? previous.current : next;
-  }, [threads, projects, pinNeedsYou]);
+  }, [threads, projects, pinNeedsYou, pinnedProjects, organisation]);
   previous.current = railProjects;
-  return { railProjects, projects, status };
+  return { railProjects, projects, threads, status };
 }
 
 function projectTally(project: RailProject): string {
@@ -254,8 +268,15 @@ function RailNavigationBody({
   const threadActions = experimental_useSidebarThreadActions();
   const sdk = useSdk();
   const canOpenFinder = isMacosDesktop();
-  const { wideRail, projectBadges, projectStyle, railLiveStatus } = useSettingValues();
+  const { wideRail, projectBadges, projectStyle, railLiveStatus, pinnedProjects, projectOrganisation } = useSettingValues();
   const saveLiveStatus = useSetRailLiveStatus();
+  const saveProjectPin = useSetProjectPinned();
+  const changeOrganisation = useChangeProjectOrganisation();
+  const saveOrganisation = useCallback(async (change: ProjectOrganisationChange) => {
+    const ok = await changeOrganisation(change);
+    if (!ok) toast.error("Couldn’t save project organisation", { description: "Please try again." });
+    return ok;
+  }, [changeOrganisation]);
   // The rail is the layout on every viewport; compact only changes what
   // rides on it (no hover tooltips, no wide mode) and the gutter width.
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
@@ -269,14 +290,40 @@ function RailNavigationBody({
     y: number;
     projectId: string;
   } | null>(null);
+  const [collectionMenu, setCollectionMenu] = useState<{ x: number; y: number; collectionId: string } | null>(null);
+  const [collectionDialog, setCollectionDialog] = useState<CollectionDialogTarget | null>(null);
+  const [desktopApps, setDesktopApps] = useState<{ projectId: string; folder?: LocalProjectFolder; targets: ProjectOpenTarget[]; error?: string } | null>(null);
+  const readingProjects = useRef(new Set<string>());
+  const [readingIds, setReadingIds] = useState<ReadonlySet<string>>(new Set());
+  const draggingProject = useRef<string | null>(null);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const projectMenuTriggerRef = useRef<HTMLElement | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
   const [wideChoice, setWide] = useState(readRailWide);
   const {
     railProjects,
     projects,
+    threads,
     status: projectStatus,
-  } = useRailProjects(projectBadges);
+  } = useRailProjects(projectBadges, pinnedProjects, projectOrganisation);
+  const visiblePins = useMemo(() => railProjects.filter(project => pinnedProjects[project.id] === true).map(project => project.id), [railProjects, pinnedProjects]);
+  const menuProjectId = projectMenu?.projectId;
+  useEffect(() => {
+    if (!menuProjectId || !desktopPlatform()) { setDesktopApps(null); return; }
+    const controller = new AbortController();
+    setDesktopApps({ projectId: menuProjectId, targets: [] });
+    void discoverProjectOpenTargets(sdk, menuProjectId, controller.signal).then(result => {
+      if (!controller.signal.aborted) setDesktopApps({ projectId: menuProjectId, ...result });
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setDesktopApps({ projectId: menuProjectId, targets: [], error: error instanceof Error ? error.message : "Local apps unavailable" });
+    });
+    return () => controller.abort();
+  }, [menuProjectId, sdk]);
   const scope = useValidatedRailScope({ projects, status: projectStatus });
   const project = scope
     ? projects.find((candidate) => candidate.id === scope)
@@ -349,6 +396,7 @@ function RailNavigationBody({
       setMoreAt(null);
       setMenu(null);
       setProjectMenu(null);
+      setCollectionMenu(null);
       actions.activate(item.id, { openInSplit });
     },
     [actions, hideTip],
@@ -367,6 +415,7 @@ function RailNavigationBody({
       setMoreAt(null);
       setMenu(null);
       setProjectMenu(null);
+      setCollectionMenu(null);
       threadActions.openNewThread({
         projectId: scopedProjectId,
         focusPrompt: true,
@@ -396,18 +445,64 @@ function RailNavigationBody({
     (clientX: number, clientY: number, item: ExperimentalSidebarNavigationItem) => {
       hideTip();
       setProjectMenu(null);
+      setCollectionMenu(null);
       setMenu({ x: clientX, y: clientY, itemId: item.id });
     },
     [hideTip],
   );
 
-  const openProjectMenu = useCallback((clientX: number, clientY: number, projectId: string) => {
+  const openProjectMenu = useCallback((clientX: number, clientY: number, projectId: string, trigger: HTMLElement) => {
     hideTip();
     setMoreAt(null);
     setMenu(null);
+    setCollectionMenu(null);
+    projectMenuTriggerRef.current = trigger;
     setProjectMenu({ x: clientX, y: clientY, projectId });
   }, [hideTip]);
   const projectMenuItem = projectMenu ? projects.find((candidate) => candidate.id === projectMenu.projectId) : null;
+  const openCollectionMenu = useCallback((clientX: number, clientY: number, collectionId: string, trigger: HTMLElement) => {
+    hideTip();
+    setMoreAt(null);
+    setMenu(null);
+    setProjectMenu(null);
+    projectMenuTriggerRef.current = trigger;
+    setCollectionMenu({ x: clientX, y: clientY, collectionId });
+  }, [hideTip]);
+  const selectedCollection = collectionMenu ? projectOrganisation.collections[collectionMenu.collectionId] : null;
+  const menuPinIndex = projectMenuItem ? visiblePins.indexOf(projectMenuItem.id) : -1;
+  const projectMenuItems = useMemo<RadarMenuItem[]>(() => {
+    if (!projectMenuItem) return [];
+    const pinned = pinnedProjects[projectMenuItem.id] === true;
+    const unread = threads.some(thread => thread.projectId === projectMenuItem.id && thread.isUnread && !thread.isHidden);
+    const list: RadarMenuItem[] = [
+      { kind: "header", label: projectMenuItem.isPersonal ? "Personal" : projectMenuItem.name },
+      { kind: "item", id: "new-thread", label: "New thread in project", icon: "Plus" },
+      { kind: "item", id: "mark-read", label: "Mark project as read", icon: "Check", disabled: !unread || readingIds.has(projectMenuItem.id) },
+      { kind: "separator" },
+      { kind: "item", id: "toggle-pin", label: pinned ? "Unpin project" : "Pin project", icon: pinned ? "PinOff" : "Pin" },
+    ];
+    if (pinned) list.push(
+      { kind: "item", id: "pin-up", label: "Move pin up", icon: "ArrowUp", disabled: menuPinIndex <= 0 },
+      { kind: "item", id: "pin-down", label: "Move pin down", icon: "ArrowDown", disabled: menuPinIndex < 0 || menuPinIndex === visiblePins.length - 1 },
+    );
+    list.push({ kind: "item", id: "collection", label: "Move to collection…", icon: "Folder" });
+    if (canOpenFinder) list.push({ kind: "separator" }, { kind: "item", id: "open-finder", label: "Open in Finder", icon: "Folder" });
+    if (desktopPlatform()) {
+      list.push({ kind: "header", label: "Open folder in" });
+      if (desktopApps?.projectId === projectMenuItem.id && desktopApps.folder) {
+        for (const target of desktopApps.targets) list.push({ kind: "item", id: `open-target:${target.id}`, label: `Open in ${target.label}`, icon: target.kind === "terminal" ? "Terminal" : "Code" });
+        if (desktopApps.targets.length === 0) list.push({ kind: "item", id: "no-apps", label: "No editor or terminal apps found", disabled: true });
+      } else list.push({ kind: "item", id: "loading-apps", label: desktopApps?.projectId === projectMenuItem.id && desktopApps.error ? desktopApps.error : "Finding local apps…", disabled: true });
+    }
+    return list;
+  }, [projectMenuItem, pinnedProjects, threads, readingIds, menuPinIndex, visiblePins.length, canOpenFinder, desktopApps]);
+
+  const movePin = useCallback((projectId: string, toIndex: number) => {
+    const from = visiblePins.indexOf(projectId);
+    if (from < 0 || toIndex < 0 || toIndex >= visiblePins.length || from === toIndex) return;
+    const next = arrayMove(visiblePins, from, toIndex);
+    void saveOrganisation({ kind: "move-pin", projectId, beforeProjectId: next[toIndex + 1] ?? null });
+  }, [visiblePins, saveOrganisation]);
 
   // Tooltip wiring for one rail control. Hover waits briefly so sweeping the
   // pointer down the rail doesn't flicker; keyboard focus shows at once.
@@ -512,6 +607,7 @@ function RailNavigationBody({
   const openMore = (event: MouseEvent<HTMLButtonElement>) => {
     hideTip();
     setProjectMenu(null);
+    setCollectionMenu(null);
     const rect = event.currentTarget.getBoundingClientRect();
     const width = 248;
     const x =
@@ -596,19 +692,42 @@ function RailNavigationBody({
           onClose={() => setMenu(null)}
         />
       ) : null}
-      {canOpenFinder && projectMenu && projectMenuItem ? (
+      {projectMenu && projectMenuItem ? (
         <RadarMenu
           x={projectMenu.x}
           y={projectMenu.y}
           label="Project actions"
-          items={[
-            { kind: "header", label: projectMenuItem.isPersonal ? "Personal" : projectMenuItem.name },
-            { kind: "item", id: "open-finder", label: "Open in Finder", icon: "Folder" },
-          ]}
-          onSelect={() => {
+          triggerRef={projectMenuTriggerRef}
+          items={projectMenuItems}
+          onSelect={(id) => {
             const projectId = projectMenu.projectId;
             setProjectMenu(null);
-            void openProjectInFinder(sdk, projectId).catch((error: unknown) => {
+            if (id === "toggle-pin") {
+              void saveProjectPin(projectId, pinnedProjects[projectId] !== true).then((ok) => {
+                if (!ok) toast.error("Couldn’t save project pin", { description: "Please try again." });
+              });
+            } else if (id === "pin-up" || id === "pin-down") {
+              movePin(projectId, menuPinIndex + (id === "pin-up" ? -1 : 1));
+            } else if (id === "new-thread") {
+              threadActions.openNewThread({ projectId, focusPrompt: true });
+            } else if (id === "collection") {
+              setCollectionDialog({ kind: "move", projectId });
+            } else if (id === "mark-read" && !readingProjects.current.has(projectId)) {
+              readingProjects.current.add(projectId);
+              setReadingIds(new Set(readingProjects.current));
+              void markProjectRead(threads, projectId, threadId => sdk.threads.markRead({ threadId })).then(({ read, failed }) => {
+                if (failed > 0) toast.error("Some threads couldn’t be marked as read", { description: `${read} marked as read; ${failed} failed. Please try again.` });
+                else toast.success("Project marked as read");
+              }).finally(() => {
+                readingProjects.current.delete(projectId);
+                setReadingIds(new Set(readingProjects.current));
+              });
+            } else if (id.startsWith("open-target:") && desktopApps?.projectId === projectId && desktopApps.folder) {
+              const target = desktopApps.targets.find(target => id === `open-target:${target.id}`);
+              if (target) void openProjectTarget(desktopApps.folder, target.id).catch((error: unknown) => {
+                toast.error(`Couldn’t open project in ${target.label}`, { description: error instanceof Error ? error.message : undefined });
+              });
+            } else if (id === "open-finder") void openProjectInFinder(sdk, projectId).catch((error: unknown) => {
               toast.error("Couldn’t open project in Finder", {
                 description: error instanceof Error ? error.message : undefined,
               });
@@ -617,7 +736,27 @@ function RailNavigationBody({
           onClose={() => setProjectMenu(null)}
         />
       ) : null}
-      {!isCompactViewport && tip && !moreAt && !menu && !projectMenu ? <RailTooltip tip={tip} /> : null}
+      {collectionMenu && selectedCollection ? <RadarMenu
+        x={collectionMenu.x} y={collectionMenu.y} label="Collection actions" triggerRef={projectMenuTriggerRef}
+        items={[
+          { kind: "header", label: selectedCollection.name },
+          { kind: "item", id: "rename", label: "Rename collection", icon: "Pencil" },
+          { kind: "item", id: "remove", label: "Remove collection", icon: "Trash2", danger: true },
+        ]}
+        onSelect={id => {
+          const collectionId = collectionMenu.collectionId;
+          setCollectionMenu(null);
+          if (id === "rename") setCollectionDialog({ kind: "rename", collectionId });
+          else if (id === "remove") void saveOrganisation({ kind: "delete-collection", collectionId });
+        }}
+        onClose={() => setCollectionMenu(null)}
+      /> : null}
+      {collectionDialog ? <RadarProjectCollectionDialog
+        key={collectionDialog.kind === "move" ? collectionDialog.projectId : collectionDialog.collectionId}
+        target={collectionDialog} organisation={projectOrganisation} save={saveOrganisation}
+        onClose={() => setCollectionDialog(null)} triggerRef={projectMenuTriggerRef}
+      /> : null}
+      {!isCompactViewport && tip && !moreAt && !menu && !projectMenu && !collectionMenu && !collectionDialog ? <RailTooltip tip={tip} /> : null}
     </>
   );
 
@@ -675,58 +814,76 @@ function RailNavigationBody({
     ],
   );
 
-  const projectTiles = useMemo(
-    () =>
-      railProjects.length > 0 ? (
+  const projectTiles = useMemo(() => {
+    const renderProject = (project: RailProject) => {
+      const isScoped = project.id === scope;
+      const pinned = pinnedProjects[project.id] === true;
+      return <RadarRailProjectButton
+        key={project.id} projectId={project.id} pinned={pinned}
+        type="button" aria-pressed={isScoped}
+        aria-label={`${project.name}: ${isScoped ? "show every project" : "show only this project"}`}
+        aria-description={`${pinned ? "Pinned · " : ""}${projectTally(project)}`}
+        className={cn(
+          "radar-nav-icon-button radar-rail-project",
+          projectStyle === "Rings" && "radar-rail-style-rings",
+          projectStyle === "Chips" && "radar-rail-style-chips",
+          `radar-rail-state-${projectRailState(project)}`,
+          isScoped && "radar-rail-project-active",
+        )}
+        style={{ "--radar-project-hue": projectHue(project.id) } as React.CSSProperties}
+        onClick={() => {
+          if (draggingProject.current) return;
+          hideTip();
+          setRailScope(isScoped ? null : project.id);
+        }}
+        onContextMenu={event => {
+          event.preventDefault();
+          openProjectMenu(event.clientX, event.clientY, project.id, event.currentTarget);
+        }}
+        {...tipProps({
+          key: `project:${project.id}`, label: project.name, shortcut: null,
+          hint: `${pinned ? "Pinned · Drag to reorder · " : ""}${projectTally(project)}${isScoped ? " — click to clear" : ""} · Right-click for project actions`,
+          Accessory: null,
+        })}
+      >
+        <ProjectGlyph project={project} style={projectStyle} />
+        {pinned ? <span className="radar-rail-project-pin" aria-hidden="true"><HostIcon name="Pin" /></span> : null}
+        <span className="radar-rail-label">{project.name}</span>
+        {projectBadges ? <ProjectBadges project={project} /> : null}
+      </RadarRailProjectButton>;
+    };
+    const collections = Object.entries(projectOrganisation.collections);
+    if (railProjects.length === 0 && collections.length === 0) return null;
+    const unpinned = railProjects.filter(project => pinnedProjects[project.id] !== true);
+    const ungrouped = unpinned.filter(project => !projectOrganisation.projectCollections[project.id]);
+    return (
         <div role="group" aria-label="Projects" className="radar-rail-projects">
           <span className="radar-rail-divider" aria-hidden="true" />
-          {railProjects.map((project) => {
-            const isScoped = project.id === scope;
-            return (
-              <button
-                key={project.id}
-                type="button"
-                aria-pressed={isScoped}
-                aria-label={`${project.name}: ${isScoped ? "show every project" : "show only this project"}`}
-                aria-description={projectTally(project)}
-                className={cn(
-                  "radar-nav-icon-button radar-rail-project",
-                  projectStyle === "Rings" && "radar-rail-style-rings",
-                  projectStyle === "Chips" && "radar-rail-style-chips",
-                  `radar-rail-state-${projectRailState(project)}`,
-                  isScoped && "radar-rail-project-active",
-                )}
-                style={
-                  {
-                    "--radar-project-hue": projectHue(project.id),
-                  } as React.CSSProperties
-                }
-                onClick={() => {
-                  hideTip();
-                  setRailScope(isScoped ? null : project.id);
-                }}
-                onContextMenu={canOpenFinder ? (event) => {
-                  event.preventDefault();
-                  openProjectMenu(event.clientX, event.clientY, project.id);
-                } : undefined}
-                {...tipProps({
-                  key: `project:${project.id}`,
-                  label: project.name,
-                  shortcut: null,
-                  hint: `${projectTally(project)}${isScoped ? " — click to clear" : ""}`,
-                  Accessory: null,
-                })}
-              >
-                <ProjectGlyph project={project} style={projectStyle} />
-                <span className="radar-rail-label">{project.name}</span>
-                {projectBadges ? <ProjectBadges project={project} /> : null}
+          <SortableContext items={visiblePins} strategy={verticalListSortingStrategy}>
+            {railProjects.filter(project => pinnedProjects[project.id] === true).map(renderProject)}
+          </SortableContext>
+          {collections.map(([id, collection]) => {
+            const members = unpinned.filter(project => projectOrganisation.projectCollections[project.id] === id);
+            return <div key={id} role="group" aria-label={`${collection.name} collection`} className="radar-rail-collection">
+              <button type="button" className="radar-rail-collection-header" aria-expanded={!collection.collapsed}
+                aria-label={`${collection.collapsed ? "Expand" : "Collapse"} ${collection.name} collection, ${members.length} projects`}
+                title={isCompactViewport ? collection.name : undefined}
+                onClick={() => { hideTip(); void saveOrganisation({ kind: "collapse-collection", collectionId: id, collapsed: !collection.collapsed }); }}
+                onContextMenu={event => { event.preventDefault(); openCollectionMenu(event.clientX, event.clientY, id, event.currentTarget); }}
+                {...tipProps({ key: `collection:${id}`, label: collection.name, shortcut: null, hint: `${members.length} projects · Click to ${collection.collapsed ? "expand" : "collapse"} · Right-click to rename or remove`, Accessory: null })}>
+                <HostIcon name={collection.collapsed ? "ChevronRight" : "ChevronDown"} aria-hidden="true" />
+                <span className="radar-rail-collection-mono" aria-hidden="true">{monogram(collection.name)}</span>
+                <span className="radar-rail-label">{collection.name}</span>
+                <span className="radar-rail-collection-count" aria-hidden="true">{members.length}</span>
               </button>
-            );
+              {!collection.collapsed ? members.map(renderProject) : null}
+            </div>;
           })}
+          {collections.length > 0 && ungrouped.length > 0 ? <span className="radar-rail-divider" aria-hidden="true" /> : null}
+          {ungrouped.map(renderProject)}
         </div>
-      ) : null,
-    [railProjects, scope, hideTip, tipProps, projectBadges, projectStyle, canOpenFinder, openProjectMenu],
-  );
+    );
+  }, [railProjects, scope, hideTip, tipProps, projectBadges, projectStyle, pinnedProjects, projectOrganisation, visiblePins, openProjectMenu, openCollectionMenu, saveOrganisation]);
 
   return (
     <div
@@ -740,7 +897,7 @@ function RailNavigationBody({
         ref={railRef}
         aria-label="Primary"
         className={cn("radar-nav radar-nav-compact", "radar-double-rail")}
-        onKeyDown={moveRailFocus}
+        onKeyDown={event => { if (!draggingProject.current) moveRailFocus(event); }}
       >
         <div className={"radar-double-rail-items"}>
           <button
@@ -754,6 +911,7 @@ function RailNavigationBody({
               setMoreAt(null);
               setMenu(null);
               setProjectMenu(null);
+              setCollectionMenu(null);
               setRailScope(null);
             }}
             {...tipProps({
@@ -769,7 +927,16 @@ function RailNavigationBody({
           </button>
           {destinationButtons}
           {renderMoreRow()}
-          {projectTiles}
+          <DndContext sensors={sensors} collisionDetection={closestCenter}
+            accessibility={{ screenReaderInstructions: { draggable: "To reorder a pinned project, press Space, use the arrow keys, then press Space again. Press Escape to cancel." } }}
+            onDragStart={event => { draggingProject.current = String(event.active.id); hideTip(); setProjectMenu(null); setCollectionMenu(null); setMoreAt(null); setMenu(null); }}
+            onDragCancel={() => { draggingProject.current = null; }}
+            onDragEnd={event => {
+              draggingProject.current = null;
+              if (event.over) movePin(String(event.active.id), visiblePins.indexOf(String(event.over.id)));
+            }}>
+            {projectTiles}
+          </DndContext>
         </div>
         <div className="radar-double-rail-footer">
           <span className="radar-rail-divider" aria-hidden="true" />

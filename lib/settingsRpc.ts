@@ -1,7 +1,8 @@
 // The RPC the settings travel over: the frontend asks the plugin's server for
 // the saved choices and sends each change. Hand-rolled Standard Schema
-// validators keep the contract free of a validation library.
+// validators share the same validation as the saved settings.
 import type { StandardSchemaV1 } from "@get-bb/plugin-sdk";
+import { projectOrganisationChangeSchema, type ProjectOrganisationChange } from "./projectOrganisation";
 import {
   SETTINGS,
   isValidSettingValue,
@@ -50,6 +51,16 @@ export interface SettingChange {
 }
 
 export type RailLiveStatusChange = { itemId: string; mode: RailLiveStatus };
+export type ProjectPinChange = { projectId: string; pinned: boolean };
+const projectPinChange = schema<ProjectPinChange>((input) => {
+  const projectId = (input as ProjectPinChange | null)?.projectId;
+  const pinned = (input as ProjectPinChange | null)?.pinned;
+  if (typeof projectId !== "string" || !isValidSettingValue("pinnedProjects", { [projectId]: pinned })) {
+    return { ok: false, message: "Invalid project or pin choice." };
+  }
+  return { ok: true, value: { projectId, pinned: pinned as boolean } };
+});
+
 const liveStatusChange = schema<RailLiveStatusChange>((input) => {
   const itemId = (input as RailLiveStatusChange | null)?.itemId;
   const mode = (input as RailLiveStatusChange | null)?.mode;
@@ -64,6 +75,11 @@ const noInput = schema<null>((value) =>
     ? { ok: true, value: null }
     : { ok: false, message: "Takes no input." },
 );
+
+const organisationChange = schema<ProjectOrganisationChange>((value) => {
+  const parsed = projectOrganisationChangeSchema.safeParse(value);
+  return parsed.success ? { ok: true, value: parsed.data } : { ok: false, message: "Invalid project organisation change." };
+});
 
 const change = schema<SettingChange>((value) => {
   const { key, value: next } = (value ?? {}) as Record<string, unknown>;
@@ -86,4 +102,6 @@ export const SETTINGS_RPC = {
   getSettings: { input: noInput, output: saved },
   setSetting: { input: change, output: saved },
   setRailLiveStatus: { input: liveStatusChange, output: saved },
+  setProjectPinned: { input: projectPinChange, output: saved },
+  changeProjectOrganisation: { input: organisationChange, output: saved },
 } as const;

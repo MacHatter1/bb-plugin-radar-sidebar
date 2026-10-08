@@ -7,7 +7,8 @@
 // the only place to change them. Only the choices someone changed are stored;
 // a change is published so every open window and device picks it up.
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
-import { sanitizeSaved, type SavedSettings } from "./lib/settings";
+import { changeProjectOrganisation, EMPTY_PROJECT_ORGANISATION, orderedProjectPins } from "./lib/projectOrganisation";
+import { isValidSettingValue, sanitizeSaved, type SavedSettings } from "./lib/settings";
 import { parseSettingsSnapshot, SETTINGS_CHANNEL, SETTINGS_RPC, type SettingsSnapshot } from "./lib/settingsRpc";
 
 const STORAGE_KEY = "settings";
@@ -40,6 +41,17 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(SETTINGS_RPC, {
     getSettings: read,
     setSetting: ({ key, value }) => update((current) => ({ ...current, [key]: value })),
+    setProjectPinned: ({ projectId, pinned }) => update((current) => {
+      const pinnedProjects = { ...current.pinnedProjects, [projectId]: pinned };
+      if (!pinned) delete pinnedProjects[projectId];
+      if (!isValidSettingValue("pinnedProjects", pinnedProjects)) throw new Error("Too many pinned projects.");
+      const organisation = current.projectOrganisation ?? EMPTY_PROJECT_ORGANISATION;
+      return { ...current, pinnedProjects, projectOrganisation: { ...organisation, pinOrder: orderedProjectPins(pinnedProjects, organisation.pinOrder) } };
+    }),
+    changeProjectOrganisation: (change) => update((current) => ({
+      ...current,
+      projectOrganisation: changeProjectOrganisation(current.projectOrganisation ?? EMPTY_PROJECT_ORGANISATION, current.pinnedProjects ?? {}, change),
+    })),
     // Patch only this item against the latest map, inside the same write queue.
     setRailLiveStatus: ({ itemId, mode }) => update((current) => ({
       ...current, railLiveStatus: { ...current.railLiveStatus, [itemId]: mode },

@@ -23,6 +23,19 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Added
 
+- Drag pinned projects to reorder them, with keyboard dragging and Move pin
+  up/down menu alternatives. The chosen order persists across devices and
+  stays fixed as thread activity changes.
+- Named, collapsible project collections. Move projects into a new or existing
+  collection, rename or remove collections, and keep pins visible above them.
+  Organisation edits are atomic and preserve concurrent changes.
+- Project quick actions for starting a new thread and opening the local
+  checkout in detected desktop editor and terminal apps.
+- Mark project as read, with bounded requests, project-scoped unread snapshots
+  and feedback when any thread fails to update.
+- **Pin project / Unpin project** in the rail's project right-click menu on
+  every platform. Pinned projects appear first, remain visible without active
+  threads, and are remembered across reloads and devices.
 - **Open in Finder** in the rail's project right-click menu when using BB's
   macOS desktop app. It opens the project's checkout on the viewing Mac and
   reports when that project has no local folder.
@@ -38,6 +51,9 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Fixed
 
+- Keep collection dialogs centered in the window. Temporarily hide visible
+  native browser panes in the viewing desktop while the form is open, then
+  restore them without stealing focus when it closes.
 - Keep pending settings edits visible while earlier saves finish; apply newer
   remote snapshots without letting stale replies or fetches overwrite them.
   Reconcile missed changes after realtime reconnects or the sidebar remounts.

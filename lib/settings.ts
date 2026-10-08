@@ -9,8 +9,11 @@ import {
   DEFAULT_SWIPE_RIGHT,
   SWIPE_ACTION_OPTION_LABELS,
 } from "./swipe";
+import { EMPTY_PROJECT_ORGANISATION, projectOrganisationSchema, type ProjectOrganisation } from "./projectOrganisation";
 
 type SettingDescriptor =
+  | { type: "project-organisation"; label: string; description: string; default: ProjectOrganisation }
+  | { type: "project-pin-map"; label: string; description: string; default: Record<string, boolean> }
   | { type: "live-status-map"; label: string; description: string; default: Record<string, RailLiveStatus> }
   | { type: "boolean"; label: string; description: string; default: boolean }
   | {
@@ -22,6 +25,18 @@ type SettingDescriptor =
     };
 
 export const SETTINGS = {
+  projectOrganisation: {
+    type: "project-organisation",
+    label: "Project organisation",
+    description: "Saved pin order, collections and their collapsed state, arranged directly from the rail.",
+    default: EMPTY_PROJECT_ORGANISATION,
+  },
+  pinnedProjects: {
+    type: "project-pin-map",
+    label: "Pinned projects",
+    description: "Projects kept at the top of the rail, chosen from each project's right-click menu.",
+    default: {},
+  },
   railLiveStatus: {
     type: "live-status-map",
     label: "Live status",
@@ -133,11 +148,15 @@ export type SettingKey = keyof typeof SETTINGS;
 
 /** The value each setting holds: a switch is a boolean, a select is its option text. */
 export type SettingValues = {
-  [K in SettingKey]: (typeof SETTINGS)[K] extends { type: "boolean" }
+  [K in SettingKey]: (typeof SETTINGS)[K] extends { type: "project-organisation" }
+    ? ProjectOrganisation
+    : (typeof SETTINGS)[K] extends { type: "boolean" }
     ? boolean
     : (typeof SETTINGS)[K] extends { type: "live-status-map" }
       ? Record<string, RailLiveStatus>
-      : string;
+      : (typeof SETTINGS)[K] extends { type: "project-pin-map" }
+        ? Record<string, boolean>
+        : string;
 };
 
 export type RailLiveStatus = "off" | "badge" | "icon";
@@ -157,6 +176,14 @@ export type SavedSettings = Partial<{ [K in SettingKey]: SettingValues[K] }>;
 /** Whether `value` is something this setting can hold. */
 export function isValidSettingValue(key: SettingKey, value: unknown): boolean {
   const descriptor: SettingDescriptor = SETTINGS[key];
+  if (descriptor.type === "project-organisation") return projectOrganisationSchema.safeParse(value).success;
+  if (descriptor.type === "project-pin-map") {
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+      && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+      && Object.keys(value).length <= 512
+      && Object.entries(value).every(([id, pinned]) => id.length > 0 && id.length <= 128
+        && !["__proto__", "constructor", "prototype"].includes(id) && typeof pinned === "boolean");
+  }
   if (descriptor.type === "live-status-map") {
     return value !== null && typeof value === "object" && !Array.isArray(value)
       && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
@@ -214,6 +241,8 @@ export const SETTING_REQUIRES: Partial<Record<SettingKey, SettingKey>> = {
 /** One short line per setting for the Settings section; the descriptor's
  *  longer description stays on hover and in BB's generated list. */
 export const SETTING_HINTS: Record<SettingKey, string> = {
+  projectOrganisation: "Drag pinned projects to reorder; right-click projects and collection headers to organise them.",
+  pinnedProjects: "Right-click a project to pin or unpin it in the rail.",
   railLiveStatus: "Right-click a plugin destination with live status to choose Off, As a badge or Instead of the icon.",
   railNav: "Destinations and project filters in a rail beside the list.",
   wideRail: "Widen the rail to show labels. Experimental.",
@@ -238,8 +267,13 @@ export function sanitizeSaved(raw: unknown): SavedSettings {
   if (raw === null || typeof raw !== "object") return saved as SavedSettings;
   for (const key of Object.keys(SETTINGS) as SettingKey[]) {
     const value = (raw as Record<string, unknown>)[key];
-    if (isValidSettingValue(key, value)) saved[key] = key === "railLiveStatus"
-      ? { ...(value as Record<string, RailLiveStatus>) }
+    if (key === "projectOrganisation") {
+      const parsed = projectOrganisationSchema.safeParse(value);
+      if (parsed.success) saved[key] = parsed.data;
+      continue;
+    }
+    if (isValidSettingValue(key, value)) saved[key] = key === "railLiveStatus" || key === "pinnedProjects"
+      ? { ...(value as Record<string, unknown>) }
       : value;
   }
   return saved as SavedSettings;
