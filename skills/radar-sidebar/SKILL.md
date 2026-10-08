@@ -6,7 +6,7 @@ description: Use the Radar Sidebar plugin's thread list and navigation. Use when
 # Radar Sidebar
 
 Replaces BB's sidebar thread list and the navigation above it. There is no
-CLI and no server state: everything below is UI in the BB app, and thread mutations go
+CLI; plugin settings are stored on the server. Everything below is UI in the BB app, and thread mutations go
 through BB's own flows (pins, reads, renames, archives, deletes).
 
 ## Surfaces
@@ -43,13 +43,59 @@ remembered rail project filter. Turning it back on restores that choice.
 The rail sits beside the list on desktop (60px) and in the mobile drawer
 (56px). BB still supplies destination order, visibility and actions. Search
 stays on the rail; **Home** only clears the project filter and never creates
-or opens a thread. **New thread** remains BB's action in the list heading.
-Project tiles show visible, unarchived threads, newest project first; click a
+or opens a thread. **New thread** in the list heading starts in the scoped
+project, or BB's own action when no project is scoped (Option-click opens a
+split without the project preset).
+Project tiles show visible, unarchived threads, newest project first (projects
+with a needs-you thread stay on top until it is resolved), with
+count badges: amber halo-pulse needs-you, green spinner-ring working (blocked threads are
+counted as needs-you, not working), and primary-coloured unread. The
+`projectBadges` setting (default `true`, needs `railNav`) turns the badges and
+the needs-you ordering off. `projectStyle` (default `"Tiles"`, needs
+`railNav`) redraws them as `Rings` (amber glow / working arc in the ring,
+unread count only) or `Chips` (pill edged by the loudest state, waiting
+count only); the labelled rail keeps the full end counts in every style. Click a
 tile to filter, click it again or Home/the heading to clear. A project with
 only archives keeps its scope. A deleted project clears once the directory
 is ready; loading/error snapshots preserve the saved choice. When using
 another navigation provider with `railNav` enabled, the list has its own
 clear-project button.
+
+Right-click a project tile for **Pin project / Unpin project** on every
+platform. Pinned projects come first and stay in the rail even with no visible
+threads; a small pin icon and the tile's accessible description mark them.
+Pins live in the shared `pinnedProjects` setting and use atomic per-project
+`setProjectPinned` edits, so concurrent windows preserve each other's pins.
+Drag pins to reorder them, or use **Move pin up / down** in the menu. Keyboard
+dragging uses Space, arrow keys, Space to drop and Escape to cancel. Pins retain
+their chosen order as thread activity changes. Deleted projects are omitted.
+
+**Move to collection…** opens a dialog to select or create a named collection.
+Click a collection header to collapse/expand it; right-click to rename/remove.
+Pins stay above collections; membership is retained when pinned. Collected
+projects stay visible with no threads. Removing a collection returns projects
+to the ungrouped rail. `projectOrganisation` stores order, collections,
+collapse state and membership. Atomic `changeProjectOrganisation` intents are
+serialized with pin/settings saves and rebased over remote snapshots.
+
+Project menus also offer **New thread in project** (without changing scope)
+and **Mark project as read**. Mark-read snapshots the chosen project's unread,
+non-hidden threads from the sidebar, deduplicates them and sends at most eight
+`threads.markRead` requests at once. Partial failures are reported; newer
+unread arrivals and other projects remain unaffected.
+
+In BB's macOS desktop app, the same menu also offers **Open in Finder**.
+It opens the project's source on the viewing Mac, preferring its default local
+checkout. Projects without a source on that Mac report that no local folder is
+available. The action is absent in browser clients and other desktop platforms.
+Desktop clients also discover installed editor and terminal apps with the
+loopback helper's `/workspace-open-targets`, and offer directory-capable
+targets in the menu. `components/radar/projectDesktop.ts` uses the desktop
+preload's platform marker and BB's loopback helper `/status` and
+`/open-in-target` contracts, with project sources and helper ports read through
+the public SDK. It resolves sources on the viewing computer on macOS, Linux
+and Windows. The Finder wrapper remains macOS-only. Menu closure/switching
+cancels discovery and ignores stale replies; launch failures show feedback.
 
 Desktop hover/focus tooltips include shortcuts, accessories and project
 counts (including queued/background work). Arrow keys wrap between enabled
@@ -62,15 +108,33 @@ editor. Narrow lists fold status chips at 284px while keeping accessible labels.
 Show labels / Hide labels control on desktop. The 168px rail expands the
 sidebar by its extra width so the thread list keeps its room. It probes the
 host sidebar/footer/width structure and hides the toggle when unavailable.
-The gutter, footer stacking and Customize layout use host `data-sidebar`
+The gutter, footer surface and Customize layout use host `data-sidebar`
 selectors in `components/radar/railHostStyles.ts`. The rail renders them
-as `<style>` elements in its own markup, by state (wide, compact, scoped),
-plus a small `<style>` for the measured footer reserve and scroll thumb.
-Disabling the rail unmounts them and releases those styles. It never
+as a `<style>` element in its own markup, by state (wide, compact, scoped).
+BB's footer keeps its default bar under the thread list. Disabling the rail
+unmounts the style and releases those overrides. It never
 writes to BB's elements, and it avoids `:has()` on the page or sidebar,
 which restyled the whole page on every DOM change.
 A BB shell update can require selector adjustments. Wide mode and tooltips
 are desktop-only; safe-area padding and reduced motion are respected.
+
+
+## Live plugin status on the rail
+
+For a navigation item with `experimental_Accessory`, right-click its rail button
+(or its row in More) and choose under **Live status**: **Off (dot indicator)**,
+**As a badge**, or **Instead of the icon**. Off is the default for every item.
+The plugin persists these choices by item id in its `railLiveStatus` settings
+map (`off`, `badge`, `icon`), shared across devices. Do not change other entries
+when setting one item's mode. Items without accessories have no Live status menu.
+
+The icon replacement slot is 28×28px; the badge is 16×16px at the icon's bottom
+trailing corner. Both clip their contents. Accessories are no-props decorative
+components, made inert inside the button. Every accessory placement has its
+own error boundary; a failed replacement shows the static icon, and failed
+badges/row accessories leave the existing icon. Standard navigation, More and
+tooltips use a trailing slot capped at 4rem by 1.25rem. If a plugin's accessory
+doesn't adapt to the rail slot, report the dimensions to its owner.
 
 ## Organisation tools
 
@@ -263,16 +327,29 @@ back to BB's list automatically.
 
 ## Settings
 
-`bb plugin config radar-sidebar`, or Settings → Installed plugins → Radar
-Sidebar. The frontend reads them through `useSettings()`, and every value
-has a default, so the list never waits on them. Until they load,
-`defaultDensity` and `twoLineTitles` use the value this client last saw, so
-rows paint at their final height.
+Settings → Installed plugins → Radar Sidebar. The plugin keeps its own
+settings in its server KV storage (`getSettings` and `setSetting` over RPC;
+`setRailLiveStatus` patches just one accessory item), shared by every device.
+RPC replies and the `settings` realtime channel carry the full saved choices
+with a monotonically increasing `revision`. The frontend keeps pending edits
+visible without discarding remote changes, and refetches after reconnecting or
+returning to a previously unmounted sidebar. Earlier unversioned saved choices
+remain readable.
+BB's plugin settings are not used, so there is no `bb plugin config` for them
+and BB draws no flat list. The frontend reads them from `useSettingValues()`;
+every value has a default, and the last values this browser saw are cached so
+the first paint is right and the list never waits on the server.
+
+The settings page shows these as four cards (Navigation rail, Thread rows,
+Attention and feedback, Swipe actions) with live previews, and greys out
+settings whose requirement is off. The keys and defaults below are unchanged.
 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `railNav` | `false` | Navigation rail beside the list, with project filters; off keeps navigation above the list. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav` and a recognised host shell. |
+| `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and needs-you projects kept on top; requires `railNav`. |
+| `projectStyle` | `"Tiles"` | How rail projects look: `Tiles`, `Rings` or `Chips`; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed; off under `prefers-reduced-motion` regardless. |

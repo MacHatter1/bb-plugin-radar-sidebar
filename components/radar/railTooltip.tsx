@@ -1,5 +1,6 @@
-import type { ComponentType, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { ComponentType, ReactNode, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { SidebarAccessory } from "./SidebarAccessory";
 
 export type RailTip = {
   key: string;
@@ -7,6 +8,7 @@ export type RailTip = {
   shortcut: string | null;
   hint: string | null;
   Accessory: ComponentType | null;
+  accessoryFallback?: ReactNode;
   top: number;
   left: number;
 };
@@ -28,7 +30,7 @@ export function RailTooltip({ tip }: { tip: RailTip }) {
         <span className="radar-rail-tip-label">{tip.label}</span>
         {tip.Accessory ? (
           <span className="radar-rail-tip-accessory">
-            <tip.Accessory />
+            <SidebarAccessory key={tip.key} Accessory={tip.Accessory} fallback={tip.accessoryFallback} />
           </span>
         ) : null}
         {tip.shortcut ? <kbd className="radar-kbd">{tip.shortcut}</kbd> : null}

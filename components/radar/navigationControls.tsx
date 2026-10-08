@@ -7,6 +7,33 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { moveRailFocus } from "./railTooltip";
+import { SidebarAccessory } from "./SidebarAccessory";
+import type { RailLiveStatus } from "@/lib/settings";
+
+export function RailItemIcon({ item, mode }: {
+  item: ExperimentalSidebarNavigationItem;
+  mode: RailLiveStatus;
+}) {
+  const Accessory = item.experimental_Accessory;
+  const icon = <RowIcon item={item} />;
+  if (!Accessory || mode === "off") return <>{icon}{Accessory ? <span className="radar-rail-dot" aria-hidden="true" /> : null}</>;
+  return (
+    <span className="radar-rail-icon-slot" aria-hidden="true">
+      {mode === "badge" ? icon : null}
+      <span className={`radar-rail-accessory radar-rail-accessory-${mode}`} inert>
+        <SidebarAccessory key={mode} Accessory={Accessory} fallback={mode === "icon" ? icon : null} />
+      </span>
+    </span>
+  );
+}
+
+export function RowAccessory({ item }: { item: ExperimentalSidebarNavigationItem }) {
+  return item.experimental_Accessory ? (
+    <span className="radar-nav-accessory" aria-hidden="true" inert>
+      <SidebarAccessory Accessory={item.experimental_Accessory} />
+    </span>
+  ) : null;
+}
 
 export function hintFor(item: ExperimentalSidebarNavigationItem): string {
   const parts = [item.label];
@@ -83,8 +110,9 @@ export function NavigationButton({
 
 /**
  * The "More" overflow popover: fixed to the side of the trigger (like BB's
- * stock popover), scrollable, closes on selection, Escape, resize, or an
- * outside pointer-down. All listeners are removed on unmount.
+ * stock popover), scrollable, closes on selection, Escape, resize, an
+ * outside pointer-down, or scrolling an ancestor of its trigger. All
+ * listeners are removed on unmount.
  */
 export function MorePopover({
   x,
@@ -123,7 +151,9 @@ export function MorePopover({
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (ref.current && !ref.current.contains(target) && !triggerRef.current?.contains(target)) {
+        // Let the trigger's click toggle it once; closing here would reopen it.
         onClose();
       }
     };
@@ -131,8 +161,9 @@ export function MorePopover({
       if (event.key === "Escape") onClose();
     };
     const onScroll = (event: Event) => {
-      if (ref.current && ref.current.contains(event.target as Node)) return;
-      onClose();
+      // Thread and chat updates can scroll other panes without moving the
+      // trigger. Only dismiss when its own scroll container moves it.
+      if ((event.target as Node).contains(triggerRef.current)) onClose();
     };
     const onResize = () => onClose();
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -145,7 +176,7 @@ export function MorePopover({
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   useEffect(() => {
     const firstItem = ref.current?.querySelector<HTMLButtonElement>(
@@ -174,7 +205,6 @@ export function MorePopover({
       <div className="radar-nav-more-list">
         {items.map((item) => {
           const isActive = item.id === activeItemId;
-          const Accessory = item.experimental_Accessory;
           return (
             <NavigationButton
               key={item.id}
@@ -195,11 +225,7 @@ export function MorePopover({
             >
               <RowIcon item={item} className="radar-nav-icon" />
               <span className="radar-nav-label">{item.label}</span>
-              {Accessory ? (
-                <span className="radar-nav-accessory">
-                  <Accessory />
-                </span>
-              ) : null}
+              <RowAccessory item={item} />
               {item.shortcut ? (
                 <kbd className="radar-kbd">{item.shortcut.label}</kbd>
               ) : null}

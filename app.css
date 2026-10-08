@@ -88,8 +88,7 @@
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
-/* A plugin accessory exists but can't fit the 42px cap; hint with a dot and
-   show the real accessory in the tooltip. */
+/* Off keeps the original indicator; live modes fit within the icon square. */
 .radar-rail-dot {
   position: absolute;
   top: 8px;
@@ -99,6 +98,38 @@
   border-radius: 9999px;
   background: var(--primary);
   box-shadow: 0 0 0 2px var(--sidebar, var(--background));
+}
+.radar-rail-icon-slot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  overflow: hidden;
+}
+.radar-rail-accessory {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.radar-rail-accessory-icon { width: 28px; height: 28px; }
+.radar-rail-accessory-badge {
+  position: absolute;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 16px;
+  height: 16px;
+}
+/* Rail icon rules must not resize a plugin's own SVG artwork. */
+.radar-double-rail .radar-nav-icon-button .radar-rail-accessory svg {
+  width: 100%;
+  height: 100%;
+  transition: none;
+  transform: none;
 }
 .radar-double-rail .radar-nav-icon-button .radar-nav-count {
   right: 4px;
@@ -207,7 +238,7 @@
   white-space: nowrap;
 }
 .radar-rail-tip-label { font-weight: 600; }
-.radar-rail-tip-accessory { display: inline-flex; align-items: center; }
+.radar-rail-tip-accessory { display: inline-flex; align-items: center; max-width: 4rem; max-height: 1.25rem; overflow: hidden; }
 .radar-rail-tip-hint { color: var(--muted-foreground); font-size: 11px; }
 @keyframes radar-rail-tip-in {
   from { opacity: 0; transform: translateY(-50%) translateX(-4px); }
@@ -1860,6 +1891,11 @@
   margin-top: 0;
 }
 
+.radar-kids-pill [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
 .radar-kids-line {
   display: flex;
   align-items: center;
@@ -2569,6 +2605,10 @@ a.radar-row-main:hover {
   color: var(--primary);
 }
 
+.radar-dot-scheduled {
+  background: var(--primary);
+}
+
 /* Status dots read the host status tokens; unknown indicators draw nothing. */
 
 .radar-dot {
@@ -3267,6 +3307,19 @@ a.radar-row-main:hover {
   max-height: 1.25rem;
   overflow: hidden;
 }
+/* Compact standard navigation has icon buttons, so keep live status out of
+   their grid flow and at the trailing edge. */
+.radar-nav-compact .radar-nav-accessory {
+  position: absolute;
+  bottom: 0;
+  inset-inline-end: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  width: 20px;
+  height: 20px;
+  max-width: 20px;
+}
 
 .radar-nav-primary-in-pop {
   margin: 2px;
@@ -3781,6 +3834,77 @@ a.radar-row-main:hover {
   margin: 4px 0 6px;
   background: var(--border);
 }
+.radar-rail-project-sortable { cursor: grab; touch-action: manipulation; }
+.radar-rail-project-dragging { cursor: grabbing; z-index: 2; opacity: 0.8; }
+.radar-rail-collection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.radar-rail-collection-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 40px;
+  min-height: 30px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  cursor: pointer;
+}
+.radar-rail-collection-header:hover { background: var(--muted); color: var(--foreground); }
+.radar-rail-collection-header:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.radar-rail-collection-header svg { width: 12px; height: 12px; flex-shrink: 0; }
+.radar-rail-collection-mono { font-weight: 600; }
+.radar-rail-collection-count { display: none; }
+.radar-double-navigation-wide .radar-rail-projects,
+.radar-double-navigation-wide .radar-rail-collection { align-items: stretch; }
+.radar-double-navigation-wide .radar-rail-divider { align-self: center; }
+.radar-double-navigation-wide .radar-rail-collection-header { width: 100%; gap: 6px; padding: 4px 10px; }
+.radar-double-navigation-wide .radar-rail-collection-header .radar-rail-label { font-size: 11px; }
+.radar-double-navigation-wide .radar-rail-collection-mono { display: none; }
+.radar-double-navigation-wide .radar-rail-collection-count { display: block; font-size: 10px; }
+.radar-collection-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+.radar-collection-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 101;
+  box-sizing: border-box;
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 16px 48px color-mix(in srgb, var(--foreground) 15%, transparent);
+}
+.radar-collection-dialog h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.radar-collection-dialog p { margin: 0 0 16px; font-size: 13px; color: var(--muted-foreground); }
+.radar-collection-dialog form { display: flex; flex-direction: column; gap: 16px; }
+.radar-collection-dialog label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.radar-collection-dialog select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+}
+.radar-collection-dialog p[role="alert"] { color: var(--destructive); margin: 0; }
+.radar-collection-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .radar-rail-monogram {
   display: inline-grid;
   place-items: center;
@@ -3811,6 +3935,20 @@ a.radar-row-main:hover {
   background: oklch(0.32 0.06 var(--radar-project-hue));
 }
 .radar-double-rail .radar-rail-project { color: var(--muted-foreground); }
+.radar-rail-project-pin {
+  position: absolute;
+  bottom: 1px;
+  left: 1px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  color: var(--foreground);
+  background: var(--sidebar, var(--background));
+  pointer-events: none;
+}
+.radar-double-rail .radar-nav-icon-button .radar-rail-project-pin svg { width: 10px; height: 10px; }
 .radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-monogram {
   border-radius: 7px;
   transform: scale(1.08);
@@ -3828,15 +3966,135 @@ a.radar-row-main:hover {
   border-radius: 9px;
   transform: none;
 }
-.radar-rail-project-dot {
+/* Badges: needs you (top right), working (top left), unread (bottom right).
+   Each thread counts once between needs-you and working. */
+.radar-rail-badges {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
+  inset: 0;
+  pointer-events: none;
+}
+@property --radar-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes radar-ring-spin {
+  to { --radar-spin: 360deg; }
+}
+.radar-rail-badge {
+  box-sizing: border-box;
+  position: absolute;
+  min-width: 15px;
+  padding: 0 3px;
   border-radius: 9999px;
-  background: var(--warning, #b98533);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-foreground, #fff);
   box-shadow: 0 0 0 2px var(--sidebar, var(--background));
+  animation: radar-badge-in 200ms ease-out;
+}
+/* Needs you: a solid amber count with a ripple that radiates out, the same
+   language as the amber glow on waiting rows in the list. The pill is its own
+   stacking context so the ripple sits behind the number. */
+.radar-rail-badge-waiting {
+  top: 1px;
+  right: 1px;
+  isolation: isolate;
+  background: var(--warning, #b98533);
+  color: #fff;
+}
+.radar-rail-badge-waiting::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--warning, #b98533);
+  animation: radar-badge-halo 1.8s ease-out infinite;
+}
+@keyframes radar-badge-halo {
+  from {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+/* Working: the count sits in a ring whose arc turns. The gradient spins, not
+   the pill, so the number stays upright and wider counts keep their shape. */
+.radar-rail-badge-active {
+  --radar-ring: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+  top: 1px;
+  left: 1px;
+  padding: 0 2px;
+  border: 2px solid transparent;
+  line-height: 11px;
+  color: var(--radar-ring);
+  background:
+    linear-gradient(var(--sidebar, var(--background)), var(--sidebar, var(--background))) padding-box,
+    conic-gradient(
+      from var(--radar-spin),
+      var(--radar-ring) 0 28%,
+      color-mix(in srgb, var(--radar-ring) 22%, transparent) 28% 100%
+    ) border-box;
+  animation:
+    radar-badge-in 200ms ease-out,
+    radar-ring-spin 1s linear infinite;
+}
+.radar-rail-badge-unread {
+  right: 1px;
+  bottom: 1px;
+  background: var(--primary);
+}
+
+/* Future work is a static clock; waiting takes this corner in narrow mode. */
+.radar-rail-badge-scheduled {
+  top: 1px;
+  right: 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  animation: none;
+}
+.radar-double-rail .radar-rail-badge-scheduled svg { width: 10px; height: 10px; }
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-waiting .radar-rail-badge-scheduled {
+  display: none;
+}
+
+/* A compact clock leaves room for the active count, including 99+.
+   Grid spacing keeps their outlines apart as the active badge grows. */
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-scheduled-count {
+  display: none;
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-scheduled:not(.radar-rail-badges-has-waiting) {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  column-gap: 5px;
+  justify-content: space-between;
+  align-content: start;
+  inset: 1px;
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-scheduled:not(.radar-rail-badges-has-waiting) .radar-rail-badge-active {
+  position: static;
+  grid-column: 1;
+  grid-row: 1;
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-scheduled:not(.radar-rail-badges-has-waiting) .radar-rail-badge-scheduled {
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  justify-content: center;
 }
 
 /* Wide mode: tiles become rows with the monogram as the leading glyph. */
@@ -3851,7 +4109,170 @@ a.radar-row-main:hover {
   color: var(--foreground);
   font-weight: 600;
 }
-.radar-double-navigation-wide .radar-rail-project-dot { top: 50%; right: 10px; transform: translateY(-50%); }
+.radar-double-navigation-wide .radar-rail-badges {
+  position: static;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.radar-double-navigation-wide .radar-rail-badge {
+  position: static;
+  min-width: 18px;
+  font-size: 10px;
+  line-height: 18px;
+  box-shadow: none;
+}
+.radar-double-navigation-wide .radar-rail-badge-waiting { position: relative; }
+.radar-double-navigation-wide .radar-rail-badge-active { line-height: 14px; }
+
+/* ---- Project style: Rings. State lives in the ring: an amber halo when
+   it needs you, a turning green arc while working. Narrow shows the unread
+   count only; wide rows reuse the full end counts. */
+.radar-rail-ring {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--muted);
+  color: oklch(0.42 0.11 var(--radar-project-hue));
+  border: 2.5px solid oklch(0.65 0.14 var(--radar-project-hue));
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-color-scheme: dark) {
+  .radar-rail-ring,
+  .radar-rail-ringcore {
+    color: oklch(0.88 0.08 var(--radar-project-hue));
+  }
+}
+.dark .radar-rail-ring,
+.dark .radar-rail-ringcore,
+[data-theme="dark"] .radar-rail-ring,
+[data-theme="dark"] .radar-rail-ringcore {
+  color: oklch(0.88 0.08 var(--radar-project-hue));
+}
+.radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-ring {
+  transform: scale(1.08);
+}
+.radar-rail-ring-waiting {
+  position: relative;
+  isolation: isolate;
+  border-color: var(--warning, #b98533);
+}
+.radar-rail-ring-scheduled { border-color: var(--primary); }
+.radar-rail-ring-waiting::after {
+  content: "";
+  position: absolute;
+  inset: -2.5px;
+  z-index: -1;
+  border-radius: inherit;
+  border: 2.5px solid var(--warning, #b98533);
+  animation: radar-badge-halo 1.8s ease-out infinite;
+}
+.radar-rail-ringwrap {
+  position: relative;
+  width: 30px;
+  height: 30px;
+}
+.radar-rail-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(
+    color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground)) 0 32%,
+    var(--border) 32% 100%
+  );
+  animation: radar-ring-rotate 1.2s linear infinite;
+}
+@keyframes radar-ring-rotate {
+  to { transform: rotate(360deg); }
+}
+.radar-rail-ringcore {
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 9999px;
+  background: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: oklch(0.42 0.11 var(--radar-project-hue));
+}
+.radar-double-rail .radar-rail-project-active.radar-rail-style-rings .radar-rail-ring,
+.radar-double-rail .radar-rail-project-active.radar-rail-style-rings .radar-rail-ringcore {
+  color: #fff;
+  background: oklch(0.55 0.16 var(--radar-project-hue));
+  border-color: oklch(0.55 0.16 var(--radar-project-hue));
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-rings .radar-rail-badge-waiting,
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-rings .radar-rail-badge-active {
+  display: none;
+}
+
+/* ---- Project style: Chips. A dot-plus-monogram pill edged by the loudest
+   state; wide rows stretch the pill across with the counts at the end. */
+.radar-rail-style-chips .radar-rail-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 48px;
+  height: 30px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.radar-rail-chipdot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  flex: none;
+  background: oklch(0.62 0.15 var(--radar-project-hue));
+}
+.radar-rail-state-waiting.radar-rail-style-chips .radar-rail-chip {
+  border-color: var(--warning, #b98533);
+}
+.radar-rail-state-working.radar-rail-style-chips .radar-rail-chip {
+  border-color: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+}
+.radar-rail-state-unread.radar-rail-style-chips .radar-rail-chip {
+  border-color: var(--primary);
+}
+.radar-rail-state-scheduled.radar-rail-style-chips .radar-rail-chip { border-color: var(--primary); }
+.radar-double-rail .radar-rail-project-active.radar-rail-style-chips .radar-rail-chip {
+  background: color-mix(in srgb, oklch(0.55 0.16 var(--radar-project-hue)) 12%, transparent);
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-chips .radar-rail-badge-active,
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-chips .radar-rail-badge-unread {
+  display: none;
+}
+.radar-double-navigation-wide .radar-rail-style-chips {
+  border: 1.5px solid var(--border);
+}
+.radar-double-navigation-wide .radar-rail-state-waiting.radar-rail-style-chips {
+  border-color: var(--warning, #b98533);
+}
+.radar-double-navigation-wide .radar-rail-state-working.radar-rail-style-chips {
+  border-color: color-mix(in srgb, var(--success, #3f9a6b) 72%, var(--foreground));
+}
+.radar-double-navigation-wide .radar-rail-state-unread.radar-rail-style-chips {
+  border-color: var(--primary);
+}
+.radar-double-navigation-wide .radar-rail-state-scheduled.radar-rail-style-chips { border-color: var(--primary); }
+.radar-double-navigation-wide .radar-rail-style-chips .radar-rail-chip {
+  border: 0;
+  width: auto;
+  height: auto;
+  background: transparent;
+}
+.radar-double-navigation-wide .radar-rail-style-chips .radar-rail-chipmono {
+  display: none;
+}
 
 /* Heading: when scoped, the title becomes the project with a clear affordance. */
 .radar-double-heading-scope {
@@ -3886,14 +4307,19 @@ a.radar-row-main:hover {
 @media (prefers-reduced-motion: reduce) {
   .radar-rail-monogram { transition: none; }
   .radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-monogram { transform: none; }
+  .radar-rail-badge { animation: none; }
+  .radar-rail-badge-waiting::after { display: none; }
+  .radar-rail-ring { transition: none; }
+  .radar-double-rail .radar-rail-project:hover:not(:disabled) .radar-rail-ring { transform: none; }
+  .radar-rail-ring-waiting::after { display: none; }
+  .radar-rail-arc { animation: none; }
 }
 /* Scoped heading needs the room: New thread drops to its icon. */
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread { padding: 0; width: 28px; }
 .radar-double-heading:has(.radar-double-heading-scope) .radar-double-new-thread > span { display: none; }
 
-/* Both stacks retain their full control width. A visible scroll thumb in
-   the rail's edge tracks the viewport without fading the final item or
-   changing BB's footer overflow measurements. Wheel/touch scroll normally. */
+/* A visible scroll thumb in the rail's edge tracks the viewport without
+   fading the final item. Wheel/touch scroll normally. */
 .radar-double-navigation[data-rail-overflow] .radar-double-rail::after {
   content: "";
   position: absolute;
@@ -3926,4 +4352,230 @@ a.radar-row-main:hover {
   .radar-double-navigation-compact .radar-double-heading { min-height: 44px; padding-top: 4px; }
   .radar-double-navigation-compact .radar-double-heading-scope { min-height: 44px; }
   .radar-double-navigation-compact .radar-double-new-thread { min-width: 44px; height: 44px; flex: none; }
+}
+
+/* ---- Settings section: grouped cards, each with a live picture. ---- */
+
+.radar-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.radar-settings-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card, var(--background));
+  overflow: hidden;
+}
+.radar-settings-card-head { padding: 12px 16px 0; }
+.radar-settings-card-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.radar-settings-card-head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.radar-settings-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  margin: 12px 16px 4px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+.radar-settings-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px 6px;
+}
+.radar-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.radar-setting:first-child { border-top: 0; }
+.radar-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.radar-setting-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.radar-setting-hint {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+.radar-setting-needs {
+  font-size: 11px;
+  color: var(--warning, #b98533);
+}
+.radar-setting-disabled .radar-setting-label,
+.radar-setting-disabled .radar-setting-hint { opacity: 0.55; }
+.radar-setting-control { flex: none; }
+.radar-settings-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--destructive, #d43d3d);
+}
+
+.radar-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 38%, transparent);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.radar-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.radar-switch-on { background: var(--primary); }
+.radar-switch-on .radar-switch-thumb { transform: translateX(14px); }
+.radar-select {
+  max-width: 190px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+.radar-switch:focus-visible,
+.radar-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.radar-switch:disabled,
+.radar-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Pictures. The rail and rows are the real ones; only the frame is new. */
+.radar-settings-railrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+}
+.radar-settings-rail { position: relative; flex: none; }
+.radar-settings-rail .radar-double-rail {
+  position: static;
+  height: auto;
+  padding: 8px 7px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: none;
+}
+.radar-settings-rail .radar-rail-project { cursor: default; }
+.radar-settings-lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+}
+.radar-settings-lines i,
+.radar-settings-above i,
+.radar-settings-swipe-row i {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+}
+.radar-settings-lines i:nth-child(2) { width: 70%; }
+.radar-settings-lines i:nth-child(3) { width: 45%; }
+.radar-settings-above {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.radar-settings-above-nav { display: flex; gap: 6px; }
+.radar-settings-above-nav span {
+  width: 26px;
+  height: 22px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--muted-foreground) 26%, transparent);
+}
+.radar-settings-above i:nth-of-type(2) { width: 70%; }
+.radar-settings-above i:nth-of-type(3) { width: 45%; }
+.radar-settings-above em {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--muted-foreground);
+}
+.radar-settings-list {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  pointer-events: none;
+}
+.radar-settings-swipe {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  transition: opacity 140ms ease;
+}
+.radar-settings-swipe-off { opacity: 0.4; }
+.radar-settings-swipe-row {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+.radar-settings-swipe-row i:last-child { width: 55%; }
+.radar-settings-swipe-chip {
+  flex: none;
+  max-width: 34%;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar-settings-swipe-left {
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 16%, transparent);
+  color: color-mix(in srgb, var(--destructive, #d43d3d) 80%, var(--foreground));
+}
+.radar-settings-swipe-right {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: color-mix(in srgb, var(--primary) 80%, var(--foreground));
 }

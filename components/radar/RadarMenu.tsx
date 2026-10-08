@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
@@ -28,12 +28,16 @@ export function RadarMenu({
   items,
   onSelect,
   onClose,
+  label = "Thread actions",
+  triggerRef,
 }: {
   x: number;
   y: number;
   items: RadarMenuItem[];
   onSelect: (id: string) => void;
   onClose: () => void;
+  label?: string;
+  triggerRef?: RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -53,7 +57,9 @@ export function RadarMenu({
     };
     const onScroll = (event: Event) => {
       if (ref.current && ref.current.contains(event.target as Node)) return;
-      onClose();
+      // An anchored rail menu only moves when its trigger's container scrolls.
+      // Chat updates can scroll another pane while someone is choosing an item.
+      if (!triggerRef || (event.target as Node).contains(triggerRef.current)) onClose();
     };
     const onResize = () => onClose();
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -66,7 +72,7 @@ export function RadarMenu({
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   useEffect(() => {
     ref.current?.focus();
@@ -99,7 +105,7 @@ export function RadarMenu({
       ref={ref}
       role="menu"
       tabIndex={-1}
-      aria-label="Thread actions"
+      aria-label={label}
       className="radar-menu"
       style={{ left, top, width }}
       onKeyDown={(event) => {

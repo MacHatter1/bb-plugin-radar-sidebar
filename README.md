@@ -77,6 +77,12 @@ breathe a slow glow; finished-but-unseen threads get a green wash, accent bar
 and bold title. Motion is reserved for things that need action, so movement
 always means something.
 
+Queued messages scheduled for a future time show a calm clock and **Scheduled**,
+with the local run time in the tooltip. Folded families and group headers keep
+that distinction. Threads with immediate queued work still show **Queued**.
+The project rail uses a static clock badge for scheduled work, excluding it
+from the pulsing waiting count and the spinning working count.
+
 </td>
 </tr>
 <tr>
@@ -146,7 +152,7 @@ to mark it read or archive it; each direction's action is a setting.
 </tr>
 <tr>
 <td align="center"><img src="docs/screenshots/nav-more.png" alt="Radar navigation with Skills and Automations moved into More" width="440"><br><sub><b>Navigation with More</b></sub></td>
-<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page with the plugin settings" width="440"><br><sub><b>Plugin settings</b></sub></td>
+<td align="center"><img src="docs/screenshots/settings.png" alt="Radar Sidebar settings page: the Navigation rail and Thread rows cards, each with a live preview above its switches" width="440"><br><sub><b>Plugin settings</b></sub></td>
 </tr>
 </table>
 </div>
@@ -200,23 +206,67 @@ On desktop a 60px icon rail sits beside the thread list. It follows BB's
 saved navigation order and visibility: visible destinations inline, hidden
 ones in **More** (with a count on the icon), **Customize sidebar** at the
 foot. BB's own footer controls (Settings, Mobile apps, usage, Report a bug,
-updates, account) stack at the bottom of the same column; their disclosures
-open beside the rail. Below 768px the same rail (56px) runs down the left of
+updates, account) keep their default bottom bar under the thread list, to
+the right of the rail, on a tonal bar with the rail's exact control
+metrics (42px boxes, 20px icons, matching hover). Below 768px the same rail (56px) runs down the left of
 BB's mobile drawer with the thread list beside it, like a chat app's
-server rail; BB's footer keeps its mobile row layout next to it. Tooltips
+server rail. Tooltips
 and the labelled rail are desktop-only. Resize the sidebar with BB's normal
 handle to give the thread list more room.
+
+Right-click a plugin destination with a live accessory to choose **Live status**:
+**Off (dot indicator)** keeps the static icon and status dot (the default),
+**As a badge** shows the accessory in a clipped 16×16px box at the icon's bottom
+trailing corner, and **Instead of the icon** centres it in a clipped 28×28px
+square. The choice is saved per navigation item in `railLiveStatus` and shared
+across devices. Accessories are decorative and isolated by error boundaries;
+if one fails, its static icon remains. Tooltips, More and standard navigation
+also show live accessories, clipped to the host's 4rem by 1.25rem slot.
 
 <details>
 <summary><b>Project scope, tooltips, keyboard and more</b></summary>
 
+- **Pinned projects.** Right-click a project tile and choose **Pin project**
+  to keep it at the top of the rail, even when it has no visible threads.
+  A small pin marks it. Choose **Unpin project** to return it to the usual
+  activity order. Drag pinned tiles to choose their order; with a keyboard,
+  press Space, use the arrow keys, then Space to drop (Escape cancels).
+  **Move pin up / down** in the menu also works. Pins and their order are
+  saved across reloads and shared across devices.
+- **Project collections.** Choose **Move to collection…** in a project's
+  right-click menu to create or select a collection. Click its header to
+  collapse or expand it; right-click the header to rename or remove it.
+  Collected projects remain visible without active threads. Pins stay above
+  collections and return to their collection when unpinned. Removing a
+  collection returns its projects to the normal rail.
+- **Project quick actions.** **New thread in project** starts a thread in
+  that project without changing your current rail filter. In the desktop
+  app, the menu discovers installed editor and terminal apps and offers
+  **Open in…** actions for the project's checkout on the viewing computer.
+- **Mark project as read.** Clears the chosen project's currently unread
+  threads, leaving other projects and later incoming updates alone. Partial
+  failures are reported so you can retry.
+- **Open in Finder.** In BB's macOS desktop app, right-click a project tile
+  and choose **Open in Finder** to open its checkout on that Mac. The action
+  uses the project's local source, preferring its default local checkout.
+  Projects without a folder on that Mac show an explanatory message.
 - **Project scope.** Below the destinations, every project with an active
-  thread gets a coloured monogram tile, most recently active first; an
-  amber dot marks a project with a thread waiting on you. Click a tile and
-  the thread list shows only that project, its heading becomes the project
-  name, and the tile fills with its colour. Click it again, the heading, or
+  thread gets a coloured monogram tile, most recently active first (a project
+  with a thread waiting on you stays on top until you've dealt with it), with
+  count badges: a solid amber count with a pulsing halo for threads waiting
+  on you (top right), a green count in a spinning ring for work in progress
+  (top left), and the theme's primary colour for unread (bottom right). Wide
+  mode lines them up at the end of the row. Turn the badges, and the
+  needs-you ordering, off with **Project badges** (`projectBadges`, on by
+  default with the rail). **Project style** (`projectStyle`, Tiles by default)
+  redraws the projects as Rings (state in the ring: amber glow, working arc)
+  or Chips (pills edged by the loudest state); wide rows keep the full end
+  counts in every style. Click a tile and the thread list shows only that
+  project, its heading becomes the project name, and the tile fills with its
+  colour. Click it again, the heading, or
   Home to see every project. Home only clears the filter; **New thread** in
-  the heading remains BB’s create-thread action. Tooltips carry the tally ("4 threads ·
+  the heading starts the thread in the scoped project (Option-click opens a
+  split instead, without the project preset). Tooltips carry the tally ("4 threads ·
   1 waiting · 2 live"). Live and waiting counts follow the thread list's
   rules, including background and queued work. Remembered per client. A
   project with only archived threads keeps its scope and clear heading;
@@ -238,10 +288,9 @@ handle to give the thread list more room.
 - **Customize beside the rail.** BB's arrangement editor opens as a panel
   next to the rail with the rail still visible, so reordering and hiding
   items is reflected live where they sit.
-- **Short windows.** The rail reserves the height it needs; BB's footer
-  stack takes what is left and scrolls internally, so destinations and
-  Customize stay visible on small screens. Visible position indicators
-  show when either stack scrolls, without fading the last item.
+- **Short windows.** The rail scrolls internally with a position indicator,
+  so destinations stay reachable on small screens while Customize stays
+  pinned at the foot.
 - **Status chips fold** to glyph and count when the list is 284px or less,
   so the filter row stays on one line.
 - **Mobile heading controls** keep 44px touch targets, and the scoped
@@ -249,19 +298,18 @@ handle to give the thread list more room.
 
 </details>
 
-<p align="center"><img src="docs/screenshots/rail-desktop.png" width="360" alt="Radar Sidebar with Navigation rail enabled: destinations, project tiles with waiting dots, and BB's footer controls in the rail beside the thread list"></p>
+<p align="center"><img src="docs/screenshots/rail-desktop.png" width="360" alt="Radar Sidebar with Navigation rail enabled: destination icons and project tiles with needs-you, working and unread badges beside the thread list, with the project that needs you on top"></p>
 
 ### Labelled rail (experimental, off by default)
 
 Settings → Installed plugins → Radar Sidebar → **Labelled rail**
 (`wideRail`) requires Navigation rail and adds a double-chevron toggle at the foot of the rail. On, the rail widens to 168px
 with labels, the sidebar grows by the same amount so the thread list keeps
-its width, and BB's footer actions become labelled rows too. The choice is
+its width. The choice is
 remembered per client.
 
-This restyles BB's sidebar markup (its `data-sidebar` attributes, the
-sidebar width variable, and the screen-reader labels inside footer
-buttons), which is why it ships off: a BB update that changes that markup
+This restyles BB's sidebar markup (its `data-sidebar` attributes and the
+sidebar width variable), which is why it ships off: a BB update that changes that markup
 can break it. The plugin checks for the structure it needs and hides the
 toggle when it is missing, so the worst case is a narrow rail, not a broken
 sidebar. This integration was live-checked on BB 0.45.1 nightly, with tests
@@ -271,21 +319,21 @@ on BB 0.44.1 and 0.45.0; those runtimes have not been rerun for this integration
 <div align="center">
 <table>
 <tr>
-<td align="center"><img src="docs/screenshots/rail-wide.png" width="440" alt="The optional labelled rail, with labelled destinations, project rows and BB’s footer actions"><br><sub><b>Labelled rail</b></sub></td>
-<td align="center"><img src="docs/screenshots/rail-mobile.png" width="240" alt="The project rail beside the thread list in the mobile drawer"><br><sub><b>Mobile drawer</b></sub></td>
+<td align="center"><img src="docs/screenshots/rail-wide.png" width="440" alt="The optional labelled rail, with labelled destinations and project rows that carry their badges"><br><sub><b>Labelled rail</b></sub></td>
+<td align="center"><img src="docs/screenshots/rail-mobile.png" width="240" alt="The project rail with its badges beside the thread list in the mobile drawer"><br><sub><b>Mobile drawer</b></sub></td>
 </tr>
 </table>
 </div>
 
 ## Compatibility notes
 
-The gutter, footer stacking and updates tile use BB's `data-sidebar` DOM
-attributes. The rail renders those overrides as `<style>` elements in its
+The gutter, footer surface and Customize editor use BB's `data-sidebar` DOM
+attributes. The rail renders those overrides as a `<style>` element in its
 own markup (`components/radar/railHostStyles.ts`), so they exist only
 while it is mounted and it never writes to BB's elements. It doesn't use
 `:has()`: anchored on the page or the sidebar, it made the browser restyle
 the whole page on every DOM change in BB. If a future BB shell changes
-those attributes, the rail still renders but the footer may need a
+those attributes, the rail still renders but the gutter may need a
 selector update. Nothing here touches BB's data: thread operations go through the
 public SDK, navigation order through `setOrder`/`setVisible`, and client
 state lives under `radar-sidebar:*` localStorage keys.
@@ -323,15 +371,24 @@ flowchart LR
 
 ## Privacy
 
-- 🛰️ **Nothing leaves the machine.** Radar makes no network requests of its own;
-  every read and write goes to your BB server through the plugin SDK.
-- 🧾 **No storage of its own.** No database, no files. Preferences live in
-  browser `localStorage`, except nav placement, which is BB's own synced state.
+- 🛰️ **No third-party requests.** Radar sends reads and writes only to your BB
+  server through the plugin SDK; it contacts no external service.
+- 🧾 **Preferences only.** Shared plugin settings live in BB's plugin KV storage.
+  Browser `localStorage` holds a first-paint cache and per-client view choices;
+  nav placement is BB's own synced state. Radar creates no separate database.
 - 🔒 **No secrets.** The plugin defines no secret settings and reads none.
 
 ## Settings
 
-`bb plugin config radar-sidebar`, or **Settings → Installed plugins → Radar Sidebar**.
+Open **Settings → Installed plugins → Radar Sidebar**. The plugin keeps its own
+settings, shared by every device you use, so they don't appear in
+`bb plugin config`.
+
+The settings page groups everything into four cards: Navigation rail, Thread
+rows, Attention and feedback, and Swipe actions. Each card has a small live
+picture that changes as you flip its switches, and options that depend on
+another (Labelled rail and Project badges need Navigation rail; the swipe
+actions need Swipe actions) are greyed out with a note until that one is on.
 
 <details>
 <summary><b>All settings</b></summary>
@@ -339,7 +396,12 @@ flowchart LR
 | Setting | Default | |
 | --- | --- | --- |
 | `railNav` | `false` | Navigation rail with project filters beside the thread list. |
+| `pinnedProjects` | `{}` | Projects kept at the top of the rail, chosen with Pin project / Unpin project in a project's right-click menu; shared across devices. |
+| `projectOrganisation` | Empty order and collections | Saved pin order, named collections, collapse state and project membership; edited in the rail and shared across devices. |
 | `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav`. |
+| `railLiveStatus` | `{}` | Per-item live accessory placement (`off`, `badge`, `icon`), chosen by right-clicking a rail destination or More row. |
+| `projectBadges` | `true` | Needs-you, working and unread badges on the rail's project tiles, and projects that need you kept on top; requires `railNav`. |
+| `projectStyle` | `"Tiles"` | How rail projects look: `Tiles`, `Rings` or `Chips`; requires `railNav`. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed. Also respects `prefers-reduced-motion`. |
@@ -386,13 +448,14 @@ bb plugin dev                      # rebuild and reload on every save
 ```
 
 ```
-server.ts               the settings the frontend reads; no storage, no CLI
+server.ts               shared settings in plugin KV storage; RPC and realtime, no CLI
 app.tsx                 registers the thread-list and navigation slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, nav, menus, peek card and smart views
 components/radar/*.ts   grouping hook, time bucketing, nav placement, model cache,
                         and the styles the rail applies to BB's sidebar while mounted
-lib/swipe.ts            swipe actions and gesture math, shared with server.ts
+lib/settingsRpc.ts      versioned settings snapshots and atomic per-item edits
+lib/swipe.ts            swipe actions and gesture math
 components/storage.ts   one-time migration of codex-sidebar: preferences
 components/ui/          vendored BB UI primitives
 skills/                 the bundled agent skill
@@ -404,7 +467,10 @@ docs/                   logo and screenshots
 rendered list through BB's plugin test harness (`renderSlot` with seeded
 sidebar threads), saved-view validation, preference migration, execution-cache
 refreshes, completion timers, and render counts, so a sidebar update re-renders
-only the rows that changed. Static guards over `app.css` and the rail's host
+only the rows that changed. Settings tests cover pending edits, stale snapshots,
+reconnection and concurrent accessory changes; interaction regressions cover
+complete pointer clicks, IME composition and folded queued work.
+Static guards over `app.css` and the rail's host
 stylesheet cover cascade mistakes jsdom cannot reproduce.
 The test setup uses jsdom's `localStorage` explicitly, including on Node 26,
 whose native storage global otherwise shadows it without a backing file.

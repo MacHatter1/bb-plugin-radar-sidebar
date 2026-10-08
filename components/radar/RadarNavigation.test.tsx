@@ -1,15 +1,22 @@
 import { createElement } from "react";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import { railHostCss } from "./railHostStyles";
-import type { ExperimentalSidebarNavigationItem, ExperimentalSidebarNavigationProps, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
+import type { ExperimentalSidebarNavigationItem, ExperimentalSidebarNavigationProps, PluginSidebarThreadsState, PluginBrowserBbSdk } from "@get-bb/plugin-sdk/app";
 import { DAY, makeProject, makeThread, NOW } from "./fixtures";
 import { resetRailScope, setRailScope, useRailScope } from "./railScope";
+import { projectRailState } from "./RadarRailNavigation";
+import { seedSettings } from "./settingsStore";
+import type { RailLiveStatus } from "@/lib/settings";
+import { toast } from "sonner";
+import * as projectFinder from "./projectFinder";
+import * as projectDesktop from "./projectDesktop";
+import { changeProjectOrganisation, EMPTY_PROJECT_ORGANISATION, type ProjectOrganisationChange } from "@/lib/projectOrganisation";
+import type { SettingsSnapshot } from "@/lib/settingsRpc";
 
 const host = vi.hoisted(() => ({
-  railNav: true,
   items: null as ExperimentalSidebarNavigationItem[] | null,
   sidebarThreads: null as Partial<PluginSidebarThreadsState> | null,
 }));
@@ -17,7 +24,6 @@ vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@get-bb/plugin-sdk/app")>();
   return {
     ...actual,
-    useSettings: () => { const state = actual.useSettings(); return { ...state, values: { ...state.values, railNav: host.railNav } }; },
     experimental_useSidebarThreads: (...args: Parameters<typeof actual.experimental_useSidebarThreads>) => ({
       ...actual.experimental_useSidebarThreads(...args),
       ...host.sidebarThreads,
@@ -46,7 +52,134 @@ function railHostStyles(): HTMLStyleElement[] {
 function mount(items: ExperimentalSidebarNavigationItem[], isCompactViewport = false) {
   return renderSlot(navigation, { ...props, isCompactViewport }, { sidebarNavigation: { items } });
 }
-afterEach(() => { cleanup(); host.items = null; host.railNav = true; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => { seedSettings({ railNav: true }); });
+afterEach(() => { cleanup(); host.items = null; host.sidebarThreads = null; resetRailScope(); localStorage.clear(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+describe("live rail accessories", () => {
+  const Accessory = () => <span data-testid="mascot">working</span>;
+  const dot = () => ({ ...destination("dot", "Dot"), experimental_Accessory: Accessory });
+  const staticIcon = (button: HTMLElement) => button.querySelector('[data-sidebar-navigation-icon]');
+
+  it("offers Live status only when an item has an accessory", () => {
+    mount([dot(), destination("plain", "Plain")]);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Plain" }));
+    expect(screen.queryByText("Live status")).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
+    expect(screen.getByText("Live status")).toBeTruthy();
+    for (const name of ["Off (dot indicator)", "As a badge", "Instead of the icon"])
+      expect(screen.getByRole("menuitem", { name })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Off (dot indicator)" }).querySelector(".radar-menu-check")).not.toBeNull();
+  });
+
+  it.each(["off", "badge", "icon"] as RailLiveStatus[])("renders %s without changing activation, accessible name or shortcuts", (mode) => {
+    const item = { ...dot(), shortcut: { label: "⌘1", ariaKeyShortcuts: "Meta+1" } };
+    seedSettings({ railLiveStatus: { [item.id]: mode } });
+    const slot = mount([item]);
+    const button = screen.getByRole("button", { name: "Dot (⌘1)" });
+    expect(button.getAttribute("aria-keyshortcuts")).toBe("Meta+1");
+    expect(Boolean(button.querySelector(".radar-rail-dot"))).toBe(mode === "off");
+    expect(Boolean(within(button).queryByTestId("mascot"))).toBe(mode !== "off");
+    expect(Boolean(staticIcon(button))).toBe(mode !== "icon");
+    if (mode !== "off") {
+      expect(button.querySelector(`.radar-rail-accessory-${mode}`)?.hasAttribute("inert")).toBe(true);
+      expect(button.querySelector(".radar-rail-icon-slot")?.getAttribute("aria-hidden")).toBe("true");
+    }
+    fireEvent.click(button, { altKey: true });
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([{ method: "activate", itemId: item.id, openInSplit: true }]);
+    fireEvent.focus(button);
+    expect(screen.getByRole("tooltip").textContent).toContain("working");
+  });
+
+  it("saves only the chosen item and preserves all other settings", async () => {
+    const item = dot();
+    const saved = { railNav: true, motion: false, railLiveStatus: { "other/nav": "badge" } };
+    seedSettings(saved);
+    const setRailLiveStatus = vi.fn(({ itemId, mode }) => ({
+      ...saved, railLiveStatus: { ...saved.railLiveStatus, [itemId]: mode }, revision: 1,
+    }));
+    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => ({ ...saved, revision: 0 }), setRailLiveStatus } });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Instead of the icon" }));
+    await act(async () => {});
+    expect(setRailLiveStatus).toHaveBeenCalledWith({ itemId: item.id, mode: "icon" });
+    expect(screen.getByRole("button", { name: "Dot" }).querySelector(".radar-rail-accessory-icon")).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!).motion).toBe(false);
+  });
+
+  it("preserves a newer remote accessory edit while the local item's reply is pending", async () => {
+    const item = dot();
+    const other = { ...destination("other", "Other"), experimental_Accessory: Accessory };
+    let release!: (value: unknown) => void;
+    const mounted = renderSlot(navigation, props, {
+      sidebarNavigation: { items: [item, other] },
+      rpc: {
+        getSettings: async () => ({ railNav: true, revision: 0 }),
+        setRailLiveStatus: () => new Promise((resolve) => { release = resolve; }),
+      },
+    });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Dot" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Instead of the icon" }));
+    expect(screen.getByRole("button", { name: "Dot" }).querySelector(".radar-rail-accessory-icon")).not.toBeNull();
+    await mounted.emitRealtime("settings", {
+      railNav: true, railLiveStatus: { [item.id]: "icon", [other.id]: "badge" }, revision: 2,
+    });
+    await act(async () => release({ railNav: true, railLiveStatus: { [item.id]: "icon" }, revision: 1 }));
+    expect(screen.getByRole("button", { name: "Other" }).querySelector(".radar-rail-accessory-badge")).not.toBeNull();
+  });
+
+  it("allows choosing a live rail mode from More", async () => {
+    const item = { ...dot(), isVisible: false };
+    const saved = { railNav: true };
+    const setRailLiveStatus = vi.fn(({ itemId, mode }) => ({ ...saved, railLiveStatus: { [itemId]: mode }, revision: 1 }));
+    renderSlot(navigation, props, { sidebarNavigation: { items: [item] }, rpc: { getSettings: () => ({ ...saved, revision: 0 }), setRailLiveStatus } });
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(button.querySelector(".radar-nav-accessory")?.textContent).toBe("working");
+    fireEvent.contextMenu(button);
+    fireEvent.click(screen.getByRole("menuitem", { name: "As a badge" }));
+    await act(async () => {});
+    expect(setRailLiveStatus).toHaveBeenCalledWith({ itemId: item.id, mode: "badge" });
+  });
+
+  it.each(["off", "badge", "icon"] as RailLiveStatus[])("isolates a throwing accessory in %s and in its tooltip and popover", (mode) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const Broken = () => { throw new Error("broken accessory"); };
+    const item = { ...dot(), experimental_Accessory: Broken };
+    seedSettings({ railLiveStatus: { [item.id]: mode } });
+    const slot = mount([item, { ...item, id: "alpha/hidden", label: "Hidden", isVisible: false }]);
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(staticIcon(button)).not.toBeNull();
+    fireEvent.focus(button);
+    expect(staticIcon(screen.getByRole("tooltip"))).not.toBeNull();
+    fireEvent.click(button);
+    expect(slot.inspection.sidebarNavigationCalls).toContainEqual({ method: "activate", itemId: item.id, openInSplit: false });
+    fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
+    expect(staticIcon(screen.getByRole("button", { name: "Hidden" }))).not.toBeNull();
+  });
+
+  it.each([false, true])("shows a trailing accessory in standard navigation (compact=%s)", (compact) => {
+    seedSettings({ railNav: false });
+    mount([dot()], compact);
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(button.querySelector(".radar-nav-accessory")?.textContent).toBe("working");
+    expect(staticIcon(button)).not.toBeNull();
+  });
+
+  it("keeps standard navigation usable when a trailing accessory throws", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    seedSettings({ railNav: false });
+    const item = { ...dot(), experimental_Accessory: () => { throw new Error("broken accessory"); } };
+    const slot = mount([item]);
+    const button = screen.getByRole("button", { name: "Dot" });
+    expect(staticIcon(button)).not.toBeNull();
+    fireEvent.click(button);
+    expect(slot.inspection.sidebarNavigationCalls).toHaveLength(1);
+  });
+});
 
 describe("host navigation arrangement", () => {
   it.each([false, true])("renders host order and visibility immediately (compact=%s)", (compact) => {
@@ -137,22 +270,7 @@ describe("host navigation arrangement", () => {
     expect(screen.getByRole("button", { name: "Customize sidebar" })).toBeTruthy();
   });
 
-  it("reserves changing host footer height and releases its observer on mobile", () => {
-    let footerHeight = 180;
-    // Two observers exist: the footer-height one under test and the rail's
-    // own reserve/overflow one. Fan callbacks out to all of them.
-    const callbacks: Array<() => void> = [];
-    const resize = () => callbacks.forEach((callback) => callback());
-    const disconnect = vi.fn();
-    const observe = vi.fn();
-    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
-      return this.getAttribute("data-sidebar") === "footer" ? footerHeight : 0;
-    });
-    vi.stubGlobal("ResizeObserver", class {
-      constructor(callback: () => void) { callbacks.push(callback); }
-      observe = observe;
-      disconnect = disconnect;
-    });
+  it("runs the rail full height beside BB's footer bar", () => {
     const wrapped = {
       ...navigation,
       component: (p: ExperimentalSidebarNavigationProps) => createElement(
@@ -162,82 +280,54 @@ describe("host navigation arrangement", () => {
       ),
     };
     const slot = renderSlot(wrapped, props, { sidebarNavigation: { items: [destination("board", "Board")] } });
-    expect(observe).toHaveBeenCalledWith(document.querySelector('[data-sidebar="footer"]'));
-    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("180px");
-    footerHeight = 280;
-    act(() => resize());
-    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("280px");
-    slot.rerender(createElement(wrapped.component, { ...props, isCompactViewport: true }));
-    // The footer observer is released; the rail stays, running full height.
-    expect(disconnect).toHaveBeenCalled();
-    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("0px");
+    // No inline bottom: the rail's CSS runs it the full sidebar height,
+    // and BB's footer keeps its default bar under the thread list.
+    expect((document.querySelector(".radar-double-rail") as HTMLElement).style.bottom).toBe("");
     slot.lifecycle.unmount();
   });
 
-  it("tracks scroll position in both stacks and releases cues and listeners on unmount", () => {
+  it("tracks the rail's scroll position and releases cues and listeners on unmount", () => {
     let overflowing = true;
-    const callbacks: Array<() => void> = [];
+    const callbacks: Array<(entries: ResizeObserverEntry[]) => void> = [];
     const frames: FrameRequestCallback[] = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
     vi.stubGlobal("cancelAnimationFrame", () => {});
     vi.stubGlobal("ResizeObserver", class {
-      constructor(callback: () => void) { callbacks.push(callback); }
+      constructor(callback: (entries: ResizeObserverEntry[]) => void) { callbacks.push(callback); }
       observe() {}
       disconnect() {}
     });
-    const isStack = (element: HTMLElement) => element.classList.contains("radar-double-rail-items")
-      || element.getAttribute("data-sidebar") === "menu";
+    const isStack = (element: HTMLElement) => element.classList.contains("radar-double-rail-items");
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
       return isStack(this) ? 100 : 0;
     });
     vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
       return isStack(this) ? (overflowing ? 200 : 100) : 0;
     });
-    const wrapped = {
-      ...navigation,
-      component: (p: ExperimentalSidebarNavigationProps) => createElement(
-        "div", { "data-sidebar": "sidebar" },
-        createElement(navigation.component, p),
-        createElement("div", { "data-sidebar": "footer" },
-          createElement("div", { "data-sidebar": "menu" })),
-      ),
-    };
-    const slot = renderSlot(wrapped, props, { sidebarNavigation: { items: [destination("board", "Board")] } });
+    const slot = mount([destination("board", "Board")]);
     const nav = document.querySelector(".radar-double-navigation")!;
-    const sidebar = document.querySelector<HTMLElement>('[data-sidebar="sidebar"]')!;
     const rail = document.querySelector<HTMLElement>(".radar-double-rail")!;
-    const footer = document.querySelector<HTMLElement>('[data-sidebar="footer"]')!;
-    const stacks = [document.querySelector<HTMLElement>(".radar-double-rail-items")!,
-      document.querySelector<HTMLElement>('[data-sidebar="menu"]')!];
-    // BB's footer thumb and the height reserve are rules in the rail's own
-    // <style>; BB's elements are never written to.
-    const hostValues = nav.querySelectorAll<HTMLStyleElement>(":scope > style")[1]!;
-    const value = (name: string) => hostValues.textContent?.match(new RegExp(`${name}: ([^;]+);`))?.[1] ?? "";
-    const thumbs = (name: string) => [rail.style.getPropertyValue(name), value(name)];
+    const stack = document.querySelector<HTMLElement>(".radar-double-rail-items")!;
     expect(nav.hasAttribute("data-rail-overflow")).toBe(true);
-    expect(value("--radar-rail-reserve")).not.toBe("");
-    expect(thumbs("--radar-scroll-height")).toEqual(["50px", "50px"]);
-    expect(thumbs("--radar-scroll-top")).toEqual(["0px", "0px"]);
-    for (const element of [document.documentElement, sidebar, footer]) expect(element.getAttribute("style")).toBeNull();
+    expect(rail.style.getPropertyValue("--radar-scroll-height")).toBe("50px");
+    expect(rail.style.getPropertyValue("--radar-scroll-top")).toBe("0px");
     // A burst of scroll events waits for one frame instead of reading
     // layout per event.
-    stacks.forEach((stack) => { stack.scrollTop = 100; fireEvent.scroll(stack); fireEvent.scroll(stack); });
-    expect(thumbs("--radar-scroll-top")).toEqual(["0px", "0px"]);
+    stack.scrollTop = 100;
+    fireEvent.scroll(stack);
+    fireEvent.scroll(stack);
+    expect(rail.style.getPropertyValue("--radar-scroll-top")).toBe("0px");
     expect(frames).toHaveLength(1);
     frames.splice(0).forEach((frame) => frame(0));
-    expect(thumbs("--radar-scroll-top")).toEqual(["50px", "50px"]);
+    expect(rail.style.getPropertyValue("--radar-scroll-top")).toBe("50px");
     overflowing = false;
-    act(() => callbacks.forEach((callback) => callback()));
+    act(() => callbacks.forEach((callback) => callback([])));
     expect(nav.hasAttribute("data-rail-overflow")).toBe(false);
-    expect(thumbs("--radar-scroll-height")).toEqual(["", ""]);
-    expect(hostValues.textContent).not.toContain("::after");
-    overflowing = true;
-    act(() => callbacks.forEach((callback) => callback()));
+    expect(rail.style.getPropertyValue("--radar-scroll-height")).toBe("");
     slot.lifecycle.unmount();
-    stacks.forEach((stack) => fireEvent.scroll(stack));
+    fireEvent.scroll(stack);
     expect(frames).toHaveLength(0);
     expect(railHostStyles()).toEqual([]);
-    for (const element of [document.documentElement, sidebar, footer]) expect(element.getAttribute("style")).toBeNull();
   });
 
   it.each([false, true])("releases the rail when BB hides the app body for Settings and restores it on return (compact=%s)", async (compact) => {
@@ -284,6 +374,66 @@ describe("host navigation arrangement", () => {
 });
 
 describe("rail ergonomics", () => {
+  it.each([false, true])("keeps More open through thread updates and thread-list scrolling (compact=%s)", (compact) => {
+    const thread = makeThread({ id: "working" });
+    host.sidebarThreads = { projects: [makeProject({ id: thread.projectId })], threads: [thread] };
+    const slot = mount([destination("hidden", "Hidden", false)], compact);
+    const threadList = document.createElement("div");
+    slot.container.append(threadList);
+    fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
+    const popover = screen.getByRole("group", { name: "More navigation" });
+    const hidden = screen.getByRole("button", { name: "Hidden" });
+
+    host.sidebarThreads = { ...host.sidebarThreads, threads: [{ ...thread, status: "active", indicator: "runtime" }] };
+    slot.rerender(createElement(navigation.component, { ...props, isCompactViewport: compact }));
+    expect(screen.getByRole("group", { name: "More navigation" })).toBe(popover);
+    // A changing thread list can adjust its scroll position independently
+    // of the rail; that must not dismiss the rail's open menu.
+    fireEvent.scroll(threadList);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBe(popover);
+    expect(document.activeElement).toBe(hidden);
+    fireEvent.click(hidden);
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([
+      { method: "activate", itemId: "alpha/hidden", openInSplit: false },
+    ]);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+  });
+
+  it.each([false, true])("keeps More open when its list scrolls and closes when its trigger's container scrolls (rail=%s)", (railNav) => {
+    seedSettings({ railNav });
+    mount([destination("hidden", "Hidden", false)]);
+    const trigger = screen.getByRole("button", { name: "More navigation, 1 items" });
+    fireEvent.click(trigger);
+    const popover = screen.getByRole("group", { name: "More navigation" });
+    fireEvent.scroll(popover.querySelector(".radar-nav-more-list")!);
+    expect(screen.getByRole("group", { name: "More navigation" })).toBe(popover);
+    fireEvent.scroll(trigger.parentElement!);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it.each([false, true])("toggles More closed with a complete pointer click (rail=%s)", (railNav) => {
+    seedSettings({ railNav });
+    mount([destination("hidden", "Hidden", false)]);
+    const trigger = screen.getByRole("button", { name: "More navigation, 1 items" });
+    const clickTrigger = () => {
+      fireEvent.pointerDown(trigger.firstElementChild ?? trigger);
+      fireEvent.pointerUp(trigger.firstElementChild ?? trigger);
+      fireEvent.click(trigger.firstElementChild ?? trigger);
+    };
+    clickTrigger();
+    expect(screen.getByRole("group", { name: "More navigation" })).toBeTruthy();
+    clickTrigger();
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    clickTrigger();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Hidden" }));
+    expect(screen.getByRole("group", { name: "More navigation" })).toBeTruthy();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
+  });
+
   it("steps focus through the rail with arrow keys and wraps at the ends", () => {
     mount([destination("notes", "Notes"), destination("board", "Board")]);
     const notes = screen.getByRole("button", { name: "Notes" });
@@ -322,7 +472,7 @@ describe("rail ergonomics", () => {
   });
 
   it.each([false, true])("focuses the first enabled More item for immediate keyboard traversal (rail=%s)", (rail) => {
-    host.railNav = rail;
+    seedSettings({ railNav: rail });
     mount([
       { ...destination("disabled", "Disabled", false), isDisabled: true },
       destination("notes", "Notes", false),
@@ -442,11 +592,373 @@ describe("project scope tiles", () => {
     makeThread({ id: "t3", projectId: "proj_b", updatedAt: NOW - 5000, isArchived: true }),
   ];
   function Scope() { return createElement("span", { "data-testid": "scope" }, useRailScope() ?? "none"); }
-  function mountWithThreads(isCompactViewport = false) {
+  /** The tile's monogram and name, without its badges. */
+  const tileLabel = (tile: HTMLElement) => `${tile.querySelector(".radar-rail-monogram")?.textContent}${tile.querySelector(".radar-rail-label")?.textContent}`;
+  function mountWithThreads(isCompactViewport = false, rpc = {}, sdk?: NonNullable<Parameters<typeof renderSlot>[2]>["sdk"]) {
     const wrapped = { ...navigation, component: (p: ExperimentalSidebarNavigationProps) => createElement("div", null, createElement(navigation.component, p), createElement(Scope)) };
     const newThread: ExperimentalSidebarNavigationItem = { ...destination("new", "New thread"), id: "__bb__/new-thread", action: { kind: "new-thread" }, pluginId: null };
-    return renderSlot(wrapped, { ...props, isCompactViewport }, { sidebarNavigation: { items: [newThread, destination("board", "Board")] }, sidebarThreads: { threads, projects } });
+    return renderSlot(wrapped, { ...props, isCompactViewport }, { rpc, sdk, sidebarNavigation: { items: [newThread, destination("board", "Board")] }, sidebarThreads: { threads, projects } });
   }
+
+  const projectOrder = () => Array.from(document.querySelectorAll(".radar-rail-project")).map(tile => tile.getAttribute("aria-label")?.split(":")[0]);
+  function mountOrganised(compact = false, initial: SettingsSnapshot = { railNav: true, revision: 0 }) {
+    let saved = initial;
+    seedSettings(saved);
+    const change = vi.fn((operation: ProjectOrganisationChange) => {
+      saved = { ...saved, revision: saved.revision + 1, projectOrganisation: changeProjectOrganisation(saved.projectOrganisation ?? EMPTY_PROJECT_ORGANISATION, saved.pinnedProjects ?? {}, operation) };
+      return saved;
+    });
+    const slot = mountWithThreads(compact, { getSettings: () => saved, changeProjectOrganisation: change });
+    return { slot, change, saved: () => saved };
+  }
+
+  it.each([false, true])("reorders pins through the menu, persists it and keeps it through activity changes (compact=%s)", async compact => {
+    host.sidebarThreads = { status: "ready", projects, threads };
+    const { slot, change, saved } = mountOrganised(compact, { railNav: true, motion: false, revision: 0, pinnedProjects: { proj_a: true, proj_b: true, proj_c: true } });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Quiet: show only this project" }));
+    expect((screen.getByRole("menuitem", { name: "Move pin down" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move pin up" }));
+    await act(async () => {});
+    expect(projectOrder()).toEqual(["bb-appimage", "Quiet", "ERBareeq"]);
+    expect(change).toHaveBeenCalledWith({ kind: "move-pin", projectId: "proj_c", beforeProjectId: "proj_b" });
+    await slot.emitRealtime("settings", { ...saved(), revision: 2 });
+    host.sidebarThreads = { status: "ready", projects, threads: threads.map(thread => ({ ...thread, isUnread: true, updatedAt: NOW + DAY })) };
+    // Retain the wrapper instead of remounting its navigation component.
+    await slot.emitRealtime("settings", { ...saved(), revision: 3 });
+    expect(projectOrder()).toEqual(["bb-appimage", "Quiet", "ERBareeq"]);
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!).projectOrganisation.pinOrder).toEqual(["proj_a", "proj_c", "proj_b"]);
+    expect(saved().motion).toBe(false);
+  });
+
+  it("reorders pins using the real keyboard drag sensor without changing project scope", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const index = ["bb-appimage", "ERBareeq", "Quiet"].indexOf(this.getAttribute("aria-label")?.split(":")[0] ?? "");
+      return new DOMRect(0, index < 0 ? 0 : 100 + index * 50, 40, 40);
+    });
+    const { change } = mountOrganised(false, { railNav: true, revision: 0, pinnedProjects: { proj_a: true, proj_b: true, proj_c: true } });
+    await act(async () => {});
+    const tile = screen.getByRole("button", { name: "ERBareeq: show only this project" });
+    act(() => tile.focus());
+    fireEvent.keyDown(tile, { key: " ", code: "Space" });
+    await waitFor(() => expect(tile.classList.contains("radar-rail-project-dragging")).toBe(true));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    fireEvent.keyDown(tile, { key: "ArrowUp", code: "ArrowUp" });
+    fireEvent.keyDown(tile, { key: " ", code: "Space" });
+    await waitFor(() => expect(change).toHaveBeenCalledWith({ kind: "move-pin", projectId: "proj_b", beforeProjectId: "proj_a" }));
+    expect(projectOrder()).toEqual(["ERBareeq", "bb-appimage", "Quiet"]);
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+  });
+
+  it("reorders pins with a mouse drag and keeps a cancelled drag unsaved", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const index = ["bb-appimage", "ERBareeq", "Quiet"].indexOf(this.getAttribute("aria-label")?.split(":")[0] ?? "");
+      return new DOMRect(0, index < 0 ? 0 : 100 + index * 50, 40, 40);
+    });
+    const { change } = mountOrganised(false, { railNav: true, revision: 0, pinnedProjects: { proj_a: true, proj_b: true, proj_c: true } });
+    await act(async () => {});
+    const tile = screen.getByRole("button", { name: "ERBareeq: show only this project" });
+    fireEvent.mouseDown(tile, { button: 0, clientX: 20, clientY: 170 });
+    fireEvent.mouseMove(document, { clientX: 20, clientY: 160 });
+    await waitFor(() => expect(tile.classList.contains("radar-rail-project-dragging")).toBe(true));
+    fireEvent.mouseMove(document, { clientX: 20, clientY: 120 });
+    fireEvent.mouseUp(document);
+    await waitFor(() => expect(change).toHaveBeenCalledWith({ kind: "move-pin", projectId: "proj_b", beforeProjectId: "proj_a" }));
+    expect(projectOrder()).toEqual(["ERBareeq", "bb-appimage", "Quiet"]);
+    fireEvent.mouseDown(tile, { button: 0, clientX: 20, clientY: 170 });
+    fireEvent.mouseMove(document, { clientX: 20, clientY: 160 });
+    await waitFor(() => expect(tile.classList.contains("radar-rail-project-dragging")).toBe(true));
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+    expect(change).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+    // DndKit suppresses synthetic clicks for 50ms after a pointer drag.
+    // Let its document listener detach before the next test clicks a menu.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 60)); });
+  });
+
+  it("rolls back a failed reorder and preserves a newer remote collection", async () => {
+    const error = vi.spyOn(toast, "error");
+    let reject!: (error: Error) => void;
+    const initial = { railNav: true, pinnedProjects: { proj_a: true, proj_b: true }, revision: 0 };
+    seedSettings(initial);
+    const slot = mountWithThreads(false, { getSettings: () => initial, changeProjectOrganisation: () => new Promise((_resolve, fail) => { reject = fail; }) });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move pin up" }));
+    expect(projectOrder()).toEqual(["ERBareeq", "bb-appimage"]);
+    await slot.emitRealtime("settings", { ...initial, revision: 2, projectOrganisation: { pinOrder: ["proj_a", "proj_b"], collections: { work: { name: "Work", collapsed: true } }, projectCollections: { proj_c: "work" } } });
+    await act(async () => reject(new Error("offline")));
+    expect(projectOrder()).toEqual(["bb-appimage", "ERBareeq"]);
+    expect(screen.getByRole("button", { name: "Expand Work collection, 1 projects" })).toBeTruthy();
+    expect(error).toHaveBeenCalledWith("Couldn’t save project organisation", { description: "Please try again." });
+  });
+
+  it.each([false, true])("creates, collapses, renames and removes a collection (compact=%s)", async compact => {
+    const { change, saved } = mountOrganised(compact);
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to collection…" }));
+    const dialog = screen.getByRole("dialog", { name: "Move project to collection" });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "Collection" }), { target: { value: "new" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Collection name" }), { target: { value: "Work" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save collection" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(change).toHaveBeenCalledWith(expect.objectContaining({ kind: "create-collection", name: "Work", projectId: "proj_b" }));
+    expect(within(screen.getByRole("group", { name: "Work collection" })).getByRole("button", { name: "ERBareeq: show only this project" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Work collection, 1 projects" }));
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "ERBareeq: show only this project" })).toBeNull();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Expand Work collection, 1 projects" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename collection" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Collection name" }), { target: { value: "Clients" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("button", { name: "Expand Clients collection, 1 projects" })).toBeTruthy();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Expand Clients collection, 1 projects" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove collection" }));
+    await act(async () => {});
+    expect(screen.queryByRole("group", { name: "Clients collection" })).toBeNull();
+    expect(screen.getByRole("button", { name: "ERBareeq: show only this project" })).toBeTruthy();
+    expect(saved().projectOrganisation?.projectCollections).toEqual({});
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+  });
+
+  it("keeps collected idle projects visible and pins above collapsed collections", async () => {
+    const layout = { ...EMPTY_PROJECT_ORGANISATION, collections: { work: { name: "Work", collapsed: true } }, projectCollections: { proj_b: "work", proj_c: "work" } };
+    mountOrganised(false, { railNav: true, revision: 0, pinnedProjects: { proj_b: true }, projectOrganisation: layout });
+    await act(async () => {});
+    expect(projectOrder()).toEqual(["ERBareeq", "bb-appimage"]);
+    fireEvent.click(screen.getByRole("button", { name: "Expand Work collection, 1 projects" }));
+    await act(async () => {});
+    expect(projectOrder()).toEqual(["ERBareeq", "Quiet", "bb-appimage"]);
+    expect(screen.getByRole("button", { name: "Quiet: show only this project" }).getAttribute("aria-description")).toBe("0 threads");
+  });
+
+  it("keeps the collection form open when saving fails", async () => {
+    mountWithThreads(false, { getSettings: () => ({ railNav: true, revision: 0 }), changeProjectOrganisation: async () => { throw new Error("offline"); } });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to collection…" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Collection" }), { target: { value: "new" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Collection name" }), { target: { value: "Work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Couldn’t save"));
+    expect(screen.queryByRole("group", { name: "Work collection" })).toBeNull();
+  });
+
+  it("starts a thread in the right-clicked project while another project is scoped", () => {
+    setRailScope("proj_a");
+    const slot = mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "New thread in project" }));
+    expect(slot.inspection.sidebarActionCalls).toContainEqual({ method: "openNewThread", options: { projectId: "proj_b", focusPrompt: true } });
+    expect(screen.getByTestId("scope").textContent).toBe("proj_a");
+  });
+
+  it("marks only the chosen project's unread threads read and disables the action when there are none", async () => {
+    const markRead = vi.fn(async () => ({} as Awaited<ReturnType<PluginBrowserBbSdk["threads"]["markRead"]>>));
+    host.sidebarThreads = { status: "ready", projects, threads: [
+      makeThread({ id: "unread-a", projectId: "proj_a", isUnread: true }),
+      makeThread({ id: "unread-b", projectId: "proj_b", isUnread: true }),
+      makeThread({ id: "read-b", projectId: "proj_b", isUnread: false }),
+    ] };
+    mountWithThreads(false, {}, { threads: { markRead } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark project as read" }));
+    await act(async () => {});
+    expect(markRead.mock.calls).toEqual([[{ threadId: "unread-b" }]]);
+    host.sidebarThreads = { status: "ready", projects, threads: [makeThread({ id: "read-b", projectId: "proj_b", isUnread: false })] };
+    cleanup();
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    expect((screen.getByRole("menuitem", { name: "Mark project as read" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("offers detected desktop editors and terminals and opens the selected app", async () => {
+    vi.stubGlobal("bbDesktop", { platform: "macos" });
+    const folder = { port: 38887, path: "/Users/tom/project" };
+    const discover = vi.spyOn(projectDesktop, "discoverProjectOpenTargets").mockResolvedValue({ folder, targets: [
+      { id: "vscode", label: "Visual Studio Code", kind: "editor", capabilities: { openDirectory: true } },
+      { id: "terminal", label: "Terminal", kind: "terminal", capabilities: { openDirectory: true } },
+    ] });
+    const open = vi.spyOn(projectDesktop, "openProjectTarget").mockResolvedValue();
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Open in Terminal" })).toBeTruthy());
+    expect(discover).toHaveBeenCalledWith(expect.anything(), "proj_b", expect.any(AbortSignal));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Visual Studio Code" }));
+    expect(open).toHaveBeenCalledWith(folder, "vscode");
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+  });
+
+  it("ignores app discovery for a project whose menu has closed", async () => {
+    vi.stubGlobal("bbDesktop", { platform: "macos" });
+    let release!: (value: Awaited<ReturnType<typeof projectDesktop.discoverProjectOpenTargets>>) => void;
+    vi.spyOn(projectDesktop, "discoverProjectOpenTargets")
+      .mockImplementationOnce(() => new Promise(resolve => { release = resolve; }))
+      .mockResolvedValue({ folder: { port: 38887, path: "/a" }, targets: [{ id: "terminal", label: "Terminal", kind: "terminal", capabilities: { openDirectory: true } }] });
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Open in Terminal" })).toBeTruthy());
+    await act(async () => release({ folder: { port: 38887, path: "/b" }, targets: [{ id: "wrong", label: "Old app", kind: "editor", capabilities: { openDirectory: true } }] }));
+    expect(screen.queryByRole("menuitem", { name: "Open in Old app" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Open in Terminal" })).toBeTruthy();
+  });
+
+  it("reports partial mark-read failures and leaves the project scope intact", async () => {
+    const error = vi.spyOn(toast, "error");
+    host.sidebarThreads = { status: "ready", projects, threads: [makeThread({ id: "failed", projectId: "proj_b", isUnread: true })] };
+    setRailScope("proj_a");
+    mountWithThreads(false, {}, { threads: { markRead: async () => { throw new Error("offline"); } } });
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Mark project as read" }));
+    await act(async () => {});
+    expect(error).toHaveBeenCalledWith("Some threads couldn’t be marked as read", { description: "0 marked as read; 1 failed. Please try again." });
+    expect(screen.getByTestId("scope").textContent).toBe("proj_a");
+  });
+
+  it.each([false, true])("pins and unpins a project without changing scope, preserving other pins (compact=%s)", async (compact) => {
+    let saved = { railNav: true, motion: false, pinnedProjects: { proj_c: true } as Record<string, boolean>, revision: 0 };
+    seedSettings(saved);
+    const setProjectPinned = vi.fn(({ projectId, pinned }: { projectId: string; pinned: boolean }) => {
+      const pins = { ...saved.pinnedProjects, [projectId]: pinned };
+      if (!pinned) delete pins[projectId];
+      saved = { ...saved, pinnedProjects: pins, revision: saved.revision + 1 };
+      return saved;
+    });
+    mountWithThreads(compact, { getSettings: () => saved, setProjectPinned });
+    await act(async () => {});
+    let tile = screen.getByRole("button", { name: "ERBareeq: show only this project" });
+    fireEvent.contextMenu(tile);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin project" }));
+    tile = screen.getByRole("button", { name: "ERBareeq: show only this project" });
+    expect(tile.querySelector(".radar-rail-project-pin")).not.toBeNull();
+    expect(within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button")[1]).toBe(tile);
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+    expect(screen.queryByRole("menu", { name: "Project actions" })).toBeNull();
+    await act(async () => {});
+    expect(setProjectPinned).toHaveBeenCalledWith({ projectId: "proj_b", pinned: true });
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!).pinnedProjects).toEqual({ proj_b: true, proj_c: true });
+    fireEvent.contextMenu(tile);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unpin project" }));
+    await act(async () => {});
+    tile = screen.getByRole("button", { name: "ERBareeq: show only this project" });
+    expect(tile.querySelector(".radar-rail-project-pin")).toBeNull();
+    expect(saved.pinnedProjects).toEqual({ proj_c: true });
+    expect(saved.motion).toBe(false);
+  });
+
+  it("keeps pins visible with no visible threads and omits deleted projects", () => {
+    seedSettings({ pinnedProjects: { proj_b: true, proj_c: true, deleted: true } });
+    host.sidebarThreads = { status: "ready", projects, threads: threads.map(thread => ({ ...thread, isHidden: true })) };
+    const slot = mount([]);
+    expect(within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button").map(tile => tile.getAttribute("aria-label")))
+      .toEqual(["ERBareeq: show only this project", "Quiet: show only this project"]);
+    expect(screen.getByRole("button", { name: "Quiet: show only this project" }).getAttribute("aria-description")).toBe("Pinned · 0 threads");
+    host.sidebarThreads = { status: "ready", projects: projects.filter(project => project.id !== "proj_b"), threads: [] };
+    slot.rerender(createElement(navigation.component, props));
+    expect(screen.queryByRole("button", { name: "ERBareeq: show only this project" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Quiet: show only this project" })).toBeTruthy();
+  });
+
+  it("honours pins with project badges turned off", () => {
+    seedSettings({ pinnedProjects: { proj_c: true }, projectBadges: false });
+    mountWithThreads();
+    expect(within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button")[0].getAttribute("aria-label"))
+      .toBe("Quiet: show only this project");
+    expect(document.querySelector(".radar-rail-badges")).toBeNull();
+  });
+
+  it("rolls back a failed pin save and reports the failure", async () => {
+    const error = vi.spyOn(toast, "error");
+    mountWithThreads(false, { getSettings: () => ({ railNav: true, revision: 0 }), setProjectPinned: async () => { throw new Error("offline"); } });
+    await act(async () => {});
+    const tile = screen.getByRole("button", { name: "ERBareeq: show only this project" });
+    fireEvent.contextMenu(tile);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin project" }));
+    expect(screen.getByRole("button", { name: "ERBareeq: show only this project" }).querySelector(".radar-rail-project-pin")).not.toBeNull();
+    await act(async () => {});
+    expect(tile.querySelector(".radar-rail-project-pin")).toBeNull();
+    expect(error).toHaveBeenCalledWith("Couldn’t save project pin", { description: "Please try again." });
+  });
+
+  it("preserves a newer remote pin when an older save reply arrives", async () => {
+    let release!: (value: unknown) => void;
+    const slot = mountWithThreads(false, {
+      getSettings: () => ({ railNav: true, revision: 0 }),
+      setProjectPinned: () => new Promise(resolve => { release = resolve; }),
+    });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin project" }));
+    await slot.emitRealtime("settings", { railNav: true, pinnedProjects: { proj_b: true, proj_c: true }, revision: 2 });
+    await act(async () => release({ railNav: true, pinnedProjects: { proj_b: true }, revision: 1 }));
+    expect(screen.getByRole("button", { name: "Quiet: show only this project" }).querySelector(".radar-rail-project-pin")).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!).pinnedProjects).toEqual({ proj_b: true, proj_c: true });
+  });
+
+  it("removes an idle project tile when it is unpinned", async () => {
+    seedSettings({ pinnedProjects: { proj_c: true } });
+    mountWithThreads(false, {
+      getSettings: () => ({ railNav: true, pinnedProjects: { proj_c: true }, revision: 0 }),
+      setProjectPinned: () => ({ railNav: true, pinnedProjects: {}, revision: 1 }),
+    });
+    await act(async () => {});
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Quiet: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unpin project" }));
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Quiet: show only this project" })).toBeNull();
+  });
+
+  it.each([false, true])("keeps the project menu open through chat scrolls and thread updates (compact=%s)", (compact) => {
+    host.sidebarThreads = { status: "ready", projects, threads };
+    const slot = mount([], compact);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    const chat = document.createElement("div");
+    document.body.append(chat);
+    fireEvent.scroll(chat);
+    chat.remove();
+    host.sidebarThreads = { status: "ready", projects, threads: threads.map(thread => ({ ...thread, updatedAt: thread.updatedAt + 1 })) };
+    slot.rerender(createElement(navigation.component, { ...props, isCompactViewport: compact }));
+    expect(screen.getByRole("menuitem", { name: "Pin project" })).toBeTruthy();
+    fireEvent.scroll(screen.getByRole("group", { name: "Projects" }));
+    expect(screen.queryByRole("menu", { name: "Project actions" })).toBeNull();
+  });
+
+  it.each([false, true])("opens a project's Finder menu on the macOS desktop without changing scope (compact=%s)", async (compact) => {
+    vi.stubGlobal("bbDesktop", { platform: "macos" });
+    const openFinder = vi.spyOn(projectFinder, "openProjectInFinder").mockResolvedValue();
+    mountWithThreads(compact);
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }), { clientX: 50, clientY: 100 });
+    expect(screen.getByRole("menu", { name: "Project actions" })).toBeTruthy();
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Finder" }));
+    await act(async () => {});
+    expect(openFinder).toHaveBeenCalledWith(expect.anything(), "proj_b");
+    expect(screen.queryByRole("menu", { name: "Project actions" })).toBeNull();
+    expect(screen.getByTestId("scope").textContent).toBe("none");
+  });
+
+  it.each([undefined, { platform: "linux" }, { platform: "windows" }])("omits the Finder menu outside the macOS desktop (%s)", (desktop) => {
+    vi.stubGlobal("bbDesktop", desktop);
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X)");
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    expect(screen.queryByRole("menuitem", { name: "Open in Finder" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Pin project" })).toBeTruthy();
+  });
+
+  it("reports when the project's folder cannot be opened", async () => {
+    vi.stubGlobal("bbDesktop", { platform: "macos" });
+    vi.spyOn(projectFinder, "openProjectInFinder").mockRejectedValue(new Error("This project has no folder on this Mac."));
+    const error = vi.spyOn(toast, "error");
+    mountWithThreads();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "ERBareeq: show only this project" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open in Finder" }));
+    await act(async () => {});
+    expect(error).toHaveBeenCalledWith("Couldn’t open project in Finder", { description: "This project has no folder on this Mac." });
+  });
 
   it("orders project tiles by activity rather than recent reads", () => {
     host.sidebarThreads = {
@@ -483,7 +995,7 @@ describe("project scope tiles", () => {
     mountWithThreads();
     const group = screen.getByRole("group", { name: "Projects" });
     const tiles = within(group).getAllByRole("button");
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["BAbb-appimage", "ERERBareeq"]);
+    expect(tiles.map(tileLabel)).toEqual(["BAbb-appimage", "ERERBareeq"]);
     expect(screen.queryByText("Quiet")).toBeNull();
     fireEvent.click(tiles[0]!);
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
@@ -506,13 +1018,36 @@ describe("project scope tiles", () => {
     fireEvent.click(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
     fireEvent.click(screen.getByRole("button", { name: "New thread" }));
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([]);
+  });
+
+  it("starts the new thread in the scoped project", () => {
+    const slot = mountWithThreads();
+    fireEvent.click(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+    expect(slot.inspection.sidebarActionCalls).toEqual([{ method: "openNewThread", options: { projectId: "proj_a", focusPrompt: true } }]);
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([]);
+  });
+
+  it("uses the host's new thread when no project is scoped", () => {
+    const slot = mountWithThreads();
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
     expect(slot.inspection.sidebarNavigationCalls).toEqual([{ method: "activate", itemId: "__bb__/new-thread", openInSplit: false }]);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+  });
+
+  it("keeps the host's split behaviour for a modified click while scoped", () => {
+    const slot = mountWithThreads();
+    fireEvent.click(screen.getByRole("button", { name: "bb-appimage: show only this project" }));
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }), { altKey: true });
+    expect(slot.inspection.sidebarNavigationCalls).toEqual([{ method: "activate", itemId: "__bb__/new-thread", openInSplit: true }]);
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
   });
 
   it("explains the tally in the tile tooltip and marks waiting projects", () => {
     mountWithThreads();
     const tile = screen.getByRole("button", { name: "bb-appimage: show only this project" });
-    expect(tile.querySelector(".radar-rail-project-dot")).toBeTruthy();
+    expect(tile.querySelector(".radar-rail-badge-waiting")).toBeTruthy();
     fireEvent.focus(tile);
     expect(screen.getByRole("tooltip").textContent).toContain("1 thread · 1 waiting");
   });
@@ -521,7 +1056,7 @@ describe("project scope tiles", () => {
     mountWithThreads(true);
     const group = screen.getByRole("group", { name: "Projects" });
     const tiles = within(group).getAllByRole("button");
-    expect(tiles.map((tile) => tile.textContent)).toEqual(["BAbb-appimage", "ERERBareeq"]);
+    expect(tiles.map(tileLabel)).toEqual(["BAbb-appimage", "ERERBareeq"]);
     fireEvent.click(tiles[0]!);
     expect(screen.getByTestId("scope").textContent).toBe("proj_a");
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -567,7 +1102,7 @@ describe("railNav layout setting", () => {
   it.each([false, true])("keeps the published slot and normal navigation when off (compact=%s)", (compact) => {
     expect(navigation.id).toBe("radar");
     expect(app.experimentalSidebarNavigations).toHaveLength(1);
-    host.railNav = false;
+    seedSettings({ railNav: false });
     const newThread: ExperimentalSidebarNavigationItem = { ...destination("new", "New thread"), action: { kind: "new-thread" }, pluginId: null };
     const slot = mount([newThread, destination("notes", "Notes"), destination("hidden", "Hidden", false)], compact);
     expect(slot.container.querySelector(".radar-double-navigation")).toBeNull();
@@ -585,14 +1120,14 @@ describe("railNav layout setting", () => {
     fireEvent.pointerEnter(screen.getByRole("button", { name: "Notes" }));
     fireEvent.click(screen.getByRole("button", { name: "More navigation, 1 items" }));
     expect(screen.getByRole("group", { name: "More navigation" })).toBeTruthy();
-    host.railNav = false;
+    seedSettings({ railNav: false });
     slot.rerender(createElement(navigation.component, props));
     expect(slot.container.querySelector(".radar-double-navigation")).toBeNull();
     expect(screen.queryByRole("group", { name: "More navigation" })).toBeNull();
     expect(screen.queryByRole("tooltip")).toBeNull();
     expect(document.documentElement.style.getPropertyValue("--radar-rail-reserve")).toBe("");
     expect(railHostStyles()).toEqual([]);
-    host.railNav = true;
+    seedSettings({ railNav: true });
     slot.rerender(createElement(navigation.component, props));
     expect(screen.getByRole("button", { name: "Home" })).toBeTruthy();
     expect(railHostStyles().map((style) => style.textContent)).toEqual([railHostCss({ wide: false, compact: false, scoped: false })]);
@@ -600,7 +1135,7 @@ describe("railNav layout setting", () => {
   });
 
   it("ignores a saved wide choice and wideRail when railNav is off", () => {
-    host.railNav = false;
+    seedSettings({ railNav: false });
     localStorage.setItem("radar-sidebar:rail-wide:v1", "1");
     renderSlot(navigation, props, { sidebarNavigation: { items: [destination("notes", "Notes")] }, settings: { wideRail: true } });
     expect(document.querySelector(".radar-double-navigation-wide")).toBeNull();
@@ -663,6 +1198,155 @@ describe("host styles", () => {
     // A change the tiles do show still lands.
     host.sidebarThreads = { ...host.sidebarThreads, threads: [{ ...thread, indicator: "waiting-for-input" }] };
     slot.rerender(createElement(navigation.component, props));
-    expect(tile.querySelector(".radar-rail-project-dot")).not.toBeNull();
+    expect(tile.querySelector(".radar-rail-badge-waiting")).not.toBeNull();
+  });
+});
+
+describe("project badges", () => {
+  const projects = [makeProject({ id: "proj_a", name: "bb-appimage" })];
+  function tileFor(threads: ReturnType<typeof makeThread>[]) {
+    host.sidebarThreads = { status: "ready", projects, threads };
+    mount([]);
+    const tile = screen.getByRole("button", { name: "bb-appimage: show only this project" });
+    return { tile, badge: (kind: "waiting" | "active" | "unread") => tile.querySelector(`.radar-rail-badge-${kind}`)?.textContent ?? null };
+  }
+
+  it("counts what needs you, what is working, and what is unread", () => {
+    const { badge } = tileFor([
+      makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input" }),
+      makeThread({ id: "queued", queuedWork: "waiting", indicator: "queued-waiting" }),
+      makeThread({ id: "run-a", status: "active" }),
+      makeThread({ id: "run-b", status: "active", isUnread: true }),
+      makeThread({ id: "unread", isUnread: true }),
+      makeThread({ id: "quiet" }),
+    ]);
+    expect(badge("waiting")).toBe("2");
+    // Blocked and queued work is already under needs-you, not counted twice.
+    expect(badge("active")).toBe("2");
+    expect(badge("unread")).toBe("2");
+  });
+
+  it("draws only the badges a project has", () => {
+    const { tile, badge } = tileFor([makeThread({ id: "unread", isUnread: true })]);
+    expect(badge("unread")).toBe("1");
+    expect(badge("waiting")).toBeNull();
+    expect(badge("active")).toBeNull();
+    expect(tile.querySelectorAll(".radar-rail-badge")).toHaveLength(1);
+  });
+
+  it("draws none for a quiet project", () => {
+    const { tile } = tileFor([makeThread({ id: "quiet" })]);
+    expect(tile.querySelector(".radar-rail-badges")).toBeNull();
+  });
+
+  it("caps large counts", () => {
+    const { badge } = tileFor(Array.from({ length: 120 }, (_, index) => makeThread({ id: `u${index}`, isUnread: true })));
+    expect(badge("unread")).toBe("99+");
+  });
+
+  it("pins a project that needs you above busier ones until it is resolved", () => {
+    const pair = [makeProject({ id: "proj_a", name: "bb-appimage" }), makeProject({ id: "proj_b", name: "ERBareeq" })];
+    const running = makeThread({ id: "running", projectId: "proj_b", status: "active" });
+    const blocked = makeThread({ id: "blocked", projectId: "proj_a", updatedAt: NOW - 7 * DAY, latestAttentionAt: NOW - 7 * DAY, hasPendingInteraction: true, indicator: "waiting-for-input" });
+    const order = () => within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button").map((tile) => tile.getAttribute("aria-label"));
+    host.sidebarThreads = { status: "ready", projects: pair, threads: [running, blocked] };
+    const slot = mount([]);
+    expect(order()).toEqual(["bb-appimage: show only this project", "ERBareeq: show only this project"]);
+    // Answered: back to activity order.
+    host.sidebarThreads = { status: "ready", projects: pair, threads: [running, { ...blocked, hasPendingInteraction: false, indicator: "none" }] };
+    slot.rerender(createElement(navigation.component, props));
+    expect(order()).toEqual(["ERBareeq: show only this project", "bb-appimage: show only this project"]);
+  });
+
+  it("orders projects that need you by activity among themselves", () => {
+    const pair = [makeProject({ id: "proj_a", name: "bb-appimage" }), makeProject({ id: "proj_b", name: "ERBareeq" })];
+    host.sidebarThreads = {
+      status: "ready", projects: pair,
+      threads: [
+        makeThread({ id: "older", projectId: "proj_a", indicator: "waiting-for-input", updatedAt: NOW - 3 * DAY, latestAttentionAt: NOW - 3 * DAY }),
+        makeThread({ id: "newer", projectId: "proj_b", indicator: "waiting-for-input", updatedAt: NOW - DAY, latestAttentionAt: NOW - DAY }),
+      ],
+    };
+    mount([]);
+    const tiles = within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button");
+    expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual(["ERBareeq: show only this project", "bb-appimage: show only this project"]);
+  });
+
+  it("shows no badges when Project badges is off, but keeps the tally", () => {
+    host.sidebarThreads = { status: "ready", projects, threads: [makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input", isUnread: true })] };
+    renderSlot(navigation, props, { sidebarNavigation: { items: [] }, settings: { projectBadges: false } });
+    const tile = screen.getByRole("button", { name: "bb-appimage: show only this project" });
+    expect(tile.querySelector(".radar-rail-badges")).toBeNull();
+    expect(tile.getAttribute("aria-description")).toContain("1 waiting");
+  });
+
+  it("keeps activity order, without the needs-you pin, when Project badges is off", () => {
+    const pair = [makeProject({ id: "proj_a", name: "bb-appimage" }), makeProject({ id: "proj_b", name: "ERBareeq" })];
+    host.sidebarThreads = {
+      status: "ready", projects: pair,
+      threads: [
+        makeThread({ id: "running", projectId: "proj_b", status: "active" }),
+        makeThread({ id: "blocked", projectId: "proj_a", updatedAt: NOW - 7 * DAY, latestAttentionAt: NOW - 7 * DAY, hasPendingInteraction: true, indicator: "waiting-for-input" }),
+      ],
+    };
+    renderSlot(navigation, props, { sidebarNavigation: { items: [] }, settings: { projectBadges: false } });
+    const tiles = within(screen.getByRole("group", { name: "Projects" })).getAllByRole("button");
+    expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual(["ERBareeq: show only this project", "bb-appimage: show only this project"]);
+  });
+
+  it("describes the tally to assistive tech without renaming the tile", () => {
+    const { tile } = tileFor([makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input", isUnread: true })]);
+    expect(tile.getAttribute("aria-description")).toBe("1 thread · 1 waiting · 1 live · 1 unread");
+    expect(tile.querySelector(".radar-rail-badges")?.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+describe("project styles", () => {
+  const projects = [makeProject({ id: "proj_a", name: "bb-appimage" })];
+  function styledTile(style: string, thread = makeThread({ id: "blocked", hasPendingInteraction: true, indicator: "waiting-for-input" })) {
+    host.sidebarThreads = { status: "ready", projects, threads: [thread] };
+    renderSlot(navigation, props, { sidebarNavigation: { items: [] }, settings: { projectStyle: style } });
+    return screen.getByRole("button", { name: "bb-appimage: show only this project" });
+  }
+
+  it("names the loudest state waiting first, then working, then unread", () => {
+    expect(projectRailState({ waiting: 1, active: 2, unread: 3 })).toBe("waiting");
+    expect(projectRailState({ waiting: 0, active: 2, unread: 3 })).toBe("working");
+    expect(projectRailState({ waiting: 0, active: 0, unread: 3 })).toBe("unread");
+    expect(projectRailState({ waiting: 0, active: 0, unread: 0 })).toBe("quiet");
+  });
+
+  it("draws hue monograms with no style class for Tiles", () => {
+    const tile = styledTile("Tiles");
+    expect(tile.querySelector(".radar-rail-monogram")?.textContent).toBe("BA");
+    expect(tile.className).not.toContain("radar-rail-style-");
+    expect(tile.className).toContain("radar-rail-state-waiting");
+  });
+
+  it("draws a glowing ring while waiting and an arc while working for Rings", () => {
+    const waiting = styledTile("Rings");
+    expect(waiting.className).toContain("radar-rail-style-rings");
+    expect(waiting.querySelector(".radar-rail-ring-waiting")?.textContent).toBe("BA");
+    expect(waiting.querySelector(".radar-rail-ringwrap")).toBeNull();
+    cleanup();
+    host.sidebarThreads = null;
+    const working = styledTile("Rings", makeThread({ id: "run", status: "active" }));
+    expect(working.querySelector(".radar-rail-ringwrap .radar-rail-arc")).not.toBeNull();
+    expect(working.querySelector(".radar-rail-ringcore")?.textContent).toBe("BA");
+  });
+
+  it("draws a dot-plus-monogram pill edged by state for Chips", () => {
+    const tile = styledTile("Chips");
+    expect(tile.className).toContain("radar-rail-style-chips");
+    expect(tile.className).toContain("radar-rail-state-waiting");
+    expect(tile.querySelector(".radar-rail-chipdot")).not.toBeNull();
+    expect(tile.querySelector(".radar-rail-chipmono")?.textContent).toBe("BA");
+  });
+
+  it.each(["Tiles", "Rings", "Chips"])("keeps the full badge set in the %s tile for wide rows and assistive tech", (style) => {
+    const tile = styledTile(style);
+    // Narrow rings and chips show a subset via CSS; the tally stays whole.
+    expect(tile.querySelector(".radar-rail-badge-waiting")?.textContent).toBe("1");
+    expect(tile.getAttribute("aria-description")).toContain("1 waiting");
   });
 });

@@ -36,7 +36,7 @@ describe("app.css", () => {
     // they exist only while the rail is mounted and release with it.
     const selectors = rules().flatMap((rule) => rule.selector.split(/,(?![^()]*\))/));
     expect(selectors.filter((selector) => /\[data-sidebar=|\.group\.peer|\[data-testid=|\bhtml\b|data-radar-rail/.test(selector))).toEqual([]);
-    expect(rules(hostCss).length).toBeGreaterThan(40);
+    expect(rules(hostCss).length).toBeGreaterThan(15);
   });
 
   it("never anchors :has() on the page or on BB's sidebar for the rail", () => {
@@ -65,20 +65,19 @@ describe("app.css", () => {
     for (const selector of growth!.selector.split(",")) expect(selector).toContain('[data-state="expanded"]');
   });
 
-  it("keeps the desktop toggle and the updates chips inside the rail column", () => {
+  it("centers the desktop toggle on the rail and sizes BB's footer boxes like it", () => {
     const trigger = rules(hostCss).find((rule) => rule.selector.includes("app-desktop-sidebar-trigger") && /left:/.test(rule.body));
     expect(trigger?.body).toMatch(/left:\s*0/);
     expect(trigger?.body).toMatch(/var\(--radar-rail-narrow\)/);
-    const menu = rules(hostCss).find((rule) =>
-      rule.selector.endsWith('[data-sidebar="menu"]') && /flex-wrap:/.test(rule.body),
-    );
-    expect(menu?.body).toMatch(/flex-wrap:\s*nowrap/);
-    expect(hostCss).toContain('> li[aria-hidden="true"]');
-    const updates = rules(hostCss).find((rule) =>
-      rule.selector.includes('a:not([data-sidebar="menu-button"])') && /min-height:/.test(rule.body),
-    );
-    expect(updates?.body).toMatch(/min-height:\s*56px/);
-    expect(updates?.body).toMatch(/width:\s*46px/);
+    // The footer keeps BB's row layout and overflow; its controls use the
+    // rail's exact metrics (42px boxes, 20px icons, 8px gaps, rail hover).
+    expect(hostCss).toContain('[data-sidebar="footer"]');
+    expect(hostCss).toContain("width: 42px");
+    expect(hostCss).toContain("border-radius: 12px");
+    expect(hostCss).not.toContain("flex-direction: column");
+    const footerRules = rules(hostCss).filter((rule) => rule.selector.includes('[data-sidebar="footer"]'));
+    expect(footerRules.length).toBeGreaterThan(0);
+    for (const rule of footerRules) expect(rule.body).not.toMatch(/position:\s*absolute/);
   });
 
   it("separates the touch toolbar grid from the rail's vertical flex layout", () => {
@@ -169,6 +168,25 @@ describe("app.css", () => {
       .filter((rule) => /(^|[;{\s])margin:\s*0\s*[;]?\s*$/.test(rule.body));
 
     expect(offenders.map((rule) => rule.selector)).toEqual([]);
+  });
+
+  it("defines each project style for the narrow and wide rail", () => {
+    const selectors = rules().map((rule) => rule.selector);
+    for (const selector of [
+      ".radar-rail-ring",
+      ".radar-rail-ringwrap",
+      ".radar-rail-style-chips .radar-rail-chip",
+      ".radar-double-navigation-wide .radar-rail-style-chips",
+    ]) {
+      expect(selectors).toContain(selector);
+    }
+    // Narrow rings and chips narrow the badges; wide rows show them all.
+    for (const selector of [
+      ".radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-rings .radar-rail-badge-waiting",
+      ".radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-style-chips .radar-rail-badge-unread",
+    ]) {
+      expect(css).toContain(selector);
+    }
   });
 
   it("keeps the child indent defined", () => {

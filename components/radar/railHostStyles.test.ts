@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { railHostCss, railHostValuesCss } from "./railHostStyles";
+import { railHostCss } from "./railHostStyles";
 
 const base = { wide: false, compact: false, scoped: false };
 
@@ -24,17 +24,13 @@ describe("railHostCss", () => {
   it("aligns BB's toggle from its own expanded state, not a copy of it", () => {
     expect(railHostCss(base)).toContain('div.group.peer[data-state="expanded"] ~ [data-testid="app-desktop-sidebar-trigger"]');
   });
-});
 
-describe("railHostValuesCss", () => {
-  it("writes the reserve and BB's footer thumb as sidebar-scoped rules", () => {
-    expect(railHostValuesCss({ reserve: null, footerThumb: null, wide: false })).toBe("");
-    const css = railHostValuesCss({ reserve: 480, footerThumb: { top: 12, height: 40 }, wide: false });
-    expect(css).toContain('[data-sidebar="sidebar"] { --radar-rail-reserve: 480px; }');
-    expect(css).toMatch(/--radar-scroll-top: 12px;\s*--radar-scroll-height: 40px;/);
-    expect(css).toContain("left: 55px;");
-    expect(css).not.toContain("calc(var(--radar-rail-width) - 5px)");
-    expect(railHostValuesCss({ reserve: null, footerThumb: { top: 0, height: 18 }, wide: true }))
-      .toContain("left: calc(var(--radar-rail-width) - 5px)");
+  it("sizes BB's footer bar boxes like the rail without taking its layout", () => {
+    const css = railHostCss(base);
+    expect(css).toContain('[data-sidebar="footer"]');
+    expect(css).toContain("width: 42px");
+    expect(css).toContain("border-radius: 12px");
+    expect(css).toContain("94%, var(--foreground)");
+    expect(css).not.toContain("flex-direction: column");
   });
 });

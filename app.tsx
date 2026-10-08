@@ -7,6 +7,7 @@ import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { migrateLegacyPreferences } from "./components/storage";
 import { RadarThreadList } from "./components/radar/RadarThreadList";
 import { RadarNavigation } from "./components/radar/RadarNavigation";
+import { RadarSettings } from "./components/radar/RadarSettings";
 import "./app.css";
 
 // Runs before any slot renders, so preferences read below the rename are
@@ -26,5 +27,12 @@ export default definePluginApp((app) => {
     title: "Radar navigation",
     description: "Compact destination rows that follow BB's own sidebar setup.",
     component: RadarNavigation,
+  });
+  app.slots.settingsSection({
+    id: "radar",
+    title: "Radar Sidebar",
+    description:
+      "Pick what the thread list and rail show. Each card previews its choices.",
+    component: RadarSettings,
   });
 });

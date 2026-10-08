@@ -58,8 +58,8 @@ const sdk: Record<string, unknown> = {
   },
   providers: { models: async () => ({ models: [] }) },
 };
-function mount(threads: PluginSidebarThread[], settings: Record<string, boolean> = {}) {
-  return renderSlot(list, props, {
+function mount(threads: PluginSidebarThread[], settings: Record<string, boolean> = {}, onNavigate = () => {}) {
+  return renderSlot(list, { ...props, onNavigate }, {
     sdk, settings, sidebarThreads: { status: "ready", threads,
       projects: [makeProject({ id: "proj_a" })], sections: [] },
   });
@@ -69,13 +69,51 @@ afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unst
   probes.rowRenders = 0; probes.keyboardCoordinates = null; probes.onDragStart = null; probes.onDragEnd = null; });
 
 describe("sidebar behavior regressions", () => {
+  it.each([
+    { isComposing: true, keyCode: 13 },
+    { isComposing: false, keyCode: 229 },
+  ])("leaves search keys to the IME (%j)", (composition) => {
+    const onNavigate = vi.fn();
+    const slot = mount([makeThread({ id: "needle", displayTitle: "needle" })], {}, onNavigate);
+    const search = screen.getByRole("searchbox") as HTMLInputElement;
+    fireEvent.change(search, { target: { value: "needle" } });
+    act(() => search.focus());
+    fireEvent.compositionStart(search);
+    for (const key of ["ArrowDown", "Enter", "Escape"]) fireEvent.keyDown(search, { key, ...composition });
+    expect(document.activeElement).toBe(search);
+    expect(search.value).toBe("needle");
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(onNavigate).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(search);
+    fireEvent.keyDown(search, { key: "Enter", keyCode: 13 });
+    expect(slot.inspection.sidebarActionCalls).toContainEqual({ method: "open", threadId: "needle" });
+    expect(onNavigate).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { isComposing: true, keyCode: 13 },
+    { isComposing: false, keyCode: 229 },
+  ])("does not commit or cancel an inline rename during composition (%j)", (composition) => {
+    const slot = mount([makeThread({ id: "edit" })]);
+    fireEvent.doubleClick(slot.container.querySelector('[data-sidebar-thread-id="edit"]')!);
+    const input = screen.getByRole("textbox", { name: "Rename thread" });
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "renamed" } });
+    fireEvent.keyDown(input, { key: "Enter", ...composition });
+    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    fireEvent.keyDown(input, { key: "Escape", ...composition });
+    expect(screen.getByRole("textbox", { name: "Rename thread" })).toBe(input);
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
+    expect(slot.inspection.sidebarActionCalls).toEqual([{ method: "rename", threadId: "edit", title: "renamed" }]);
+  });
+
   it("applies an adaptiveCollapse setting change to already mounted rows", async () => {
-    const settings = { adaptiveCollapse: true };
-    const slot = mount([makeThread({ id: "quiet" })], settings);
+    const slot = mount([makeThread({ id: "quiet" })], { adaptiveCollapse: true });
     await act(async () => {});
     expect(slot.container.querySelector(".radar-row-collapsed")).not.toBeNull();
-    settings.adaptiveCollapse = false;
-    slot.rerender(createElement(list.component, { ...props, isCompactViewport: true }));
+    // The server reports the change, as it does when another device saves one.
+    await slot.emitRealtime("settings", { adaptiveCollapse: false });
     expect(slot.container.querySelector(".radar-row-collapsed")).toBeNull();
   });
 
@@ -90,6 +128,7 @@ describe("sidebar behavior regressions", () => {
     { indicator: "unread-error" as const, isUnread: true },
     { indicator: "waiting-for-input" as const, hasPendingInteraction: true },
     { indicator: "runtime" as const, status: "active" as const },
+    { indicator: "queued-waiting" as const, queuedWork: "waiting" as const },
   ])("excludes the parent from hidden-child status (%s)", (state) => {
     const slot = mount([
       makeThread({ id: "parent", ...state }),
@@ -104,6 +143,7 @@ describe("sidebar behavior regressions", () => {
     ["waiting-for-input" as const, "1 waiting for input"],
     ["unread-error" as const, "1 failed"],
     ["queued-failed" as const, "1 failed"],
+    ["queued-waiting" as const, "1 queued"],
   ])("prioritizes a child's attention over a running parent (%s)", (indicator, expected) => {
     const slot = mount([
       makeThread({ id: "parent", status: "active", indicator: "runtime" }),
@@ -122,6 +162,21 @@ describe("sidebar behavior regressions", () => {
     expect(hook.result.current.groups[0]).toMatchObject({ live: 0, needsUser: 3, failed: 3 });
     const slot = mount(threads);
     expect(slot.container.querySelector(".radar-group-status")?.getAttribute("aria-label")).toBe("3 failed");
+  });
+
+  it.each(["family", "group"])("keeps queued child work visible when its %s is folded", (fold) => {
+    const slot = mount([
+      makeThread({ id: "parent" }),
+      makeThread({ id: "queued", parentThreadId: "parent", indicator: "queued-waiting", queuedWork: "waiting" }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: fold === "family" ? "Collapse replies" : "Collapse all folders" }));
+    expect(screen.queryByRole("link", { name: "Thread queued" })).toBeNull();
+    expect(slot.container.querySelector(".radar-group-status")?.getAttribute("aria-label")).toBe("1 queued");
+    if (fold === "family") {
+      const parent = slot.container.querySelector('[data-sidebar-thread-id="parent"]')!;
+      expect(parent.querySelector(".radar-kids-pill .radar-dot-attention")).not.toBeNull();
+      expect(parent.querySelector(".radar-kids-pill")?.getAttribute("aria-label")).toContain("queued work");
+    }
   });
 
   it.each(["family", "group"])("prunes selected children after folding their %s", (fold) => {

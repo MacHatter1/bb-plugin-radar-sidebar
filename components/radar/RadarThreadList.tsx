@@ -35,7 +35,6 @@ import {
   experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
   useSdk,
-  useSettings,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -44,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { isComposingKey } from "@/lib/keyboard";
 import {
   DEFAULT_SWIPE_LEFT,
   DEFAULT_SWIPE_RIGHT,
@@ -51,14 +51,16 @@ import {
 } from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
 import { RadarThreadRow } from "./RadarThreadRow";
-import { activityTime, isRunningThread, timeAgo } from "./time";
+import { activityTime, isRunningThread, threadAttention, timeAgo } from "./time";
 import {
   GroupHeader,
   SortableGroupSection,
 } from "./RadarGroupHeader";
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
+import { useScheduledThreads } from "./useScheduledThreads";
 import { setRailScope, useValidatedRailScope } from "./railScope";
+import { useSettingValues } from "./settingsStore";
 import {
   useThreadGroups,
   type ThreadGroup,
@@ -87,8 +89,6 @@ const COLLAPSED_THREADS_KEY = "radar-sidebar:collapsed-threads:v1";
 const PROJECT_ORDER_KEY = "radar-sidebar:project-order:v1";
 const STATUS_FILTER_KEY = "radar-sidebar:status-filter:v1";
 const DENSITY_KEY = "radar-sidebar:density:v1";
-const LAST_DEFAULT_DENSITY_KEY = "radar-sidebar:last-default-density:v1";
-const LAST_TWO_LINE_TITLES_KEY = "radar-sidebar:last-two-line-titles:v1";
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set();
 
@@ -115,49 +115,25 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** Plugin settings, with the shipped defaults applied while they load. The two
- * that set row height fall back to the value this client last saw instead, so
- * a reload paints rows at their final size without holding the list back.
- * Swipe actions stay off until the settings arrive. */
+/** The plugin's settings, from this browser's store. They are there on the
+ * first render, so rows paint at their final size and swipes know their
+ * actions from the start. */
 function useSidebarSettings() {
-  const { values } = useSettings();
-  const flag = (key: string, fallback: boolean): boolean =>
-    typeof values?.[key] === "boolean" ? (values[key] as boolean) : fallback;
-  const [lastSeen] = useState(() => ({
-    defaultDensity: readStored<DensityMode>(
-      LAST_DEFAULT_DENSITY_KEY,
-      "comfortable",
-      ["comfortable", "compact"],
-    ),
-    wrapTitles: readStored(LAST_TWO_LINE_TITLES_KEY, "off", ["off", "on"]) === "on",
-  }));
-  const loaded = values !== undefined;
-  const defaultDensity: DensityMode = loaded
-    ? values.defaultDensity === "compact" ? "compact" : "comfortable"
-    : lastSeen.defaultDensity;
-  const wrapTitles = loaded ? flag("twoLineTitles", false) : lastSeen.wrapTitles;
-  // Swipes act on threads, so they wait for the saved choice rather than
-  // running on the defaults for someone who turned them off.
-  const swipeOn = loaded && flag("swipeActions", true);
-  useEffect(() => {
-    if (!loaded) return;
-    writeStored(LAST_DEFAULT_DENSITY_KEY, defaultDensity);
-    writeStored(LAST_TWO_LINE_TITLES_KEY, wrapTitles ? "on" : "off");
-  }, [loaded, defaultDensity, wrapTitles]);
+  const values = useSettingValues();
   return {
-    railNav: flag("railNav", false),
-    hoverCard: flag("hoverCard", true),
-    celebrate: flag("celebrate", true),
-    motion: flag("motion", true),
-    loudUnread: flag("loudUnread", true),
-    adaptiveCollapse: flag("adaptiveCollapse", true),
-    defaultDensity,
-    wrapTitles,
-    swipeRight: swipeOn
-      ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
+    railNav: values.railNav,
+    hoverCard: values.hoverCard,
+    celebrate: values.celebrate,
+    motion: values.motion,
+    loudUnread: values.loudUnread,
+    adaptiveCollapse: values.adaptiveCollapse,
+    defaultDensity: values.defaultDensity as DensityMode,
+    wrapTitles: values.twoLineTitles,
+    swipeRight: values.swipeActions
+      ? swipeActionFromSetting(values.swipeRight, DEFAULT_SWIPE_RIGHT)
       : "none",
-    swipeLeft: swipeOn
-      ? swipeActionFromSetting(values?.swipeLeft, DEFAULT_SWIPE_LEFT)
+    swipeLeft: values.swipeActions
+      ? swipeActionFromSetting(values.swipeLeft, DEFAULT_SWIPE_LEFT)
       : "none",
   };
 }
@@ -514,6 +490,7 @@ export function RadarThreadList({
   );
   const actions = experimental_useSidebarThreadActions();
   const sdk = useSdk();
+  const scheduledThreads = useScheduledThreads(threads, sdk);
   const { providers } = experimental_useProviders();
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
@@ -564,6 +541,7 @@ export function RadarThreadList({
     projects,
     sections,
     now,
+    scheduledThreads,
   });
 
   const activeGroup = useMemo(
@@ -845,7 +823,7 @@ export function RadarThreadList({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Another handler (a host menu, dialog or select) already owns this key.
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || isComposingKey(event)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
 
       if (target !== null && target === searchInputRef.current) {
@@ -1242,6 +1220,7 @@ export function RadarThreadList({
     ) => {
       const kidCount = (shownChildren.get(thread.id) ?? []).length;
       const counts = kidCount > 0 ? countSubtree(thread) : null;
+      const attention = threadAttention(thread, scheduledThreads.get(thread.id));
       const collapse =
         kidCount > 0 && counts
           ? {
@@ -1250,14 +1229,10 @@ export function RadarThreadList({
               hiddenUnread:
                 counts.unread - (thread.isUnread ? 1 : 0),
               hiddenLive: counts.live - Number(isRunningThread(thread)) > 0,
-              hiddenNeedsUser:
-                counts.needsUser -
-                  Number(thread.indicator === "waiting-for-input") > 0,
-              hiddenFailed:
-                counts.failed - Number(
-                  thread.indicator === "unread-error" ||
-                  thread.indicator === "queued-failed",
-                ) > 0,
+              hiddenNeedsUser: counts.needsUser - Number(attention === "needs-user") > 0,
+              hiddenQueued: counts.queued - Number(attention === "queued") > 0,
+              hiddenScheduled: counts.scheduled - Number(attention === "scheduled") > 0,
+              hiddenFailed: counts.failed - Number(attention === "failed") > 0,
               hiddenKids: counts.kids,
               onToggle: () => toggleThreadCollapse(thread.id),
             }
@@ -1267,6 +1242,7 @@ export function RadarThreadList({
         <RadarThreadRow
           key={thread.id}
           thread={thread}
+          scheduledFor={scheduledThreads.get(thread.id)}
           depth={depth}
           isLastChild={isLastChild}
           projectName={projectNameFor(thread)}
@@ -1317,6 +1293,7 @@ export function RadarThreadList({
       );
     },
     [
+      scheduledThreads,
       projectNameFor,
       sectionById,
       celebrateIds,

@@ -4,7 +4,7 @@ A thread list you can read at a glance, for BB.
 
 - **Optional navigation rail.** Enable `railNav` to place destinations and
   project filters beside the thread list on desktop and mobile. Home clears
-  the project filter; New thread keeps BB's own action. The experimental
+  the project filter; New thread starts in the scoped project. The experimental
   `wideRail` option adds desktop labels. Both settings default off, so
   existing installs keep navigation above the list.
 
@@ -37,10 +37,12 @@ A thread list you can read at a glance, for BB.
 
 ## How it works
 
-The plugin is frontend-only. It reads BB's live sidebar state and routes every
-mutation through BB's own flows, so pins, archives and deletions behave exactly
-as they do in the stock list, and nothing about your threads changes — only how
-the sidebar presents them. It makes no network requests of its own, keeps no
+The sidebar reads BB's live state and routes thread mutations through BB's own
+flows, so pins, archives and deletions behave exactly as they do in the stock
+list, and nothing about your threads changes — only how the sidebar presents
+them. A small backend stores shared plugin preferences in BB's plugin KV storage
+and syncs them over RPC and realtime. Browser storage holds a settings cache and
+per-client view choices. Radar makes no third-party requests, creates no separate
 database, and stores no secrets.
 
 Pick it under **Settings → Appearance → Sidebar** and **Navigation**; choosing

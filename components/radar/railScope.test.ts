@@ -11,7 +11,16 @@ import {
 
 describe("monogram", () => {
   it.each([
-    ["bb-plugin-radar-sidebar", "BP"],
+    ["bb-plugin-radar-sidebar", "RS"],
+    ["bb-plugin-radar", "RA"],
+    ["bb-plugin-agent-teams", "AT"],
+    ["BB-PLUGIN-Radar-Sidebar", "RS"],
+    ["  bb-plugin-radar-sidebar  ", "RS"],
+    ["bb_plugin_radar_sidebar", "RS"],
+    ["bb-plugin", "BP"],
+    ["bb-plugin---", "BP"],
+    ["bb-plugins-radar", "BP"],
+    ["my-bb-plugin-radar", "MB"],
     ["bb", "BB"],
     ["ERBareeq", "ER"],
     ["Personal", "PE"],

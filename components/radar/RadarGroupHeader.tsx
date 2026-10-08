@@ -13,6 +13,8 @@ export interface GroupHeaderData {
   unread: number;
   live: number;
   needsUser: number;
+  queued: number;
+  scheduled?: number;
   failed: number;
   projectId: string | null;
 }
@@ -59,6 +61,17 @@ function GroupStatus({ group }: { group: GroupHeaderData }) {
       </span>
     );
   }
+  if (group.queued > 0) {
+    return (
+      <span
+        className="radar-group-status"
+        title={plural(group.queued, "queued thread")}
+        aria-label={`${group.queued} queued`}
+      >
+        <span className="radar-dot radar-dot-attention" />
+      </span>
+    );
+  }
   if (group.live > 0) {
     return (
       <span
@@ -67,6 +80,15 @@ function GroupStatus({ group }: { group: GroupHeaderData }) {
         aria-label={`${group.live} running`}
       >
         <Icon name="Loading" aria-hidden="true" />
+      </span>
+    );
+  }
+  if (group.scheduled) {
+    return (
+      <span className="radar-group-status radar-tone-info"
+        title={plural(group.scheduled, "scheduled thread")}
+        aria-label={`${group.scheduled} scheduled`}>
+        <Icon name="Clock" aria-hidden="true" />
       </span>
     );
   }
