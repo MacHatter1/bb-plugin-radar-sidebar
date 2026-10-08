@@ -22,6 +22,7 @@ import {
   useSdk,
   type ExperimentalSidebarNavigationItem,
   type ExperimentalSidebarNavigationProps,
+  type PluginBrowserBbSdk,
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "@/lib/utils";
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
@@ -31,7 +32,8 @@ import {
   setRailScope,
   useValidatedRailScope,
 } from "./railScope";
-import { activityTime, isLiveThread, isWaitingThread } from "./time";
+import { activityTime, isLiveThread, isWaitingThread, threadAttention } from "./time";
+import { useScheduledThreads } from "./useScheduledThreads";
 import {
   hintFor,
   RowIcon,
@@ -59,6 +61,7 @@ export type RailProject = {
   /** Live work that isn't blocked on you; the badge's count, so no thread is in two badges. */
   active: number;
   waiting: number;
+  scheduled?: number;
   unread: number;
   latest: number;
 };
@@ -78,6 +81,7 @@ function sameRailProjects(
         project.live === other.live &&
         project.active === other.active &&
         project.waiting === other.waiting &&
+        project.scheduled === other.scheduled &&
         project.unread === other.unread
       );
     })
@@ -85,8 +89,9 @@ function sameRailProjects(
 }
 
 /** Pins and collected projects stay visible; other projects need a visible thread. */
-function useRailProjects(pinNeedsYou: boolean, pinnedProjects: Record<string, boolean>, organisation: ProjectOrganisation) {
+function useRailProjects(pinNeedsYou: boolean, pinnedProjects: Record<string, boolean>, organisation: ProjectOrganisation, sdk: PluginBrowserBbSdk) {
   const { threads, projects, status } = experimental_useSidebarThreads();
+  const scheduledThreads = useScheduledThreads(threads, sdk);
   const previous = useRef<RailProject[]>([]);
   const railProjects = useMemo(() => {
     const now = Date.now();
@@ -99,6 +104,7 @@ function useRailProjects(pinNeedsYou: boolean, pinnedProjects: Record<string, bo
       live: 0,
       active: 0,
       waiting: 0,
+      scheduled: 0,
       unread: 0,
       latest: 0,
     });
@@ -112,8 +118,10 @@ function useRailProjects(pinNeedsYou: boolean, pinnedProjects: Record<string, bo
         byId.set(project.id, entry);
       }
       entry.threads += 1;
-      const live = isLiveThread(thread);
-      const waiting = isWaitingThread(thread);
+      const scheduled = threadAttention(thread, scheduledThreads.get(thread.id)) === "scheduled";
+      const live = isLiveThread(thread) && !scheduled;
+      const waiting = isWaitingThread(thread) && !scheduled;
+      if (scheduled) entry.scheduled = (entry.scheduled ?? 0) + 1;
       if (live) entry.live += 1;
       if (waiting) entry.waiting += 1;
       if (live && !waiting && !thread.hasPendingInteraction) entry.active += 1;
@@ -138,7 +146,7 @@ function useRailProjects(pinNeedsYou: boolean, pinnedProjects: Record<string, bo
     // Every thread update lands here. Keep the previous list when nothing
     // the tiles show moved, so they skip rendering.
     return sameRailProjects(previous.current, next) ? previous.current : next;
-  }, [threads, projects, pinNeedsYou, pinnedProjects, organisation]);
+  }, [threads, projects, pinNeedsYou, pinnedProjects, organisation, scheduledThreads]);
   previous.current = railProjects;
   return { railProjects, projects, threads, status };
 }
@@ -147,6 +155,7 @@ function projectTally(project: RailProject): string {
   const parts = [
     `${project.threads} ${project.threads === 1 ? "thread" : "threads"}`,
     project.waiting > 0 ? `${project.waiting} waiting` : null,
+    project.scheduled ? `${project.scheduled} scheduled` : null,
     project.live > 0 ? `${project.live} live` : null,
     project.unread > 0 ? `${project.unread} unread` : null,
   ].filter((part): part is string => part !== null);
@@ -157,11 +166,12 @@ function badgeCount(count: number): string {
   return count > 99 ? "99+" : String(count);
 }
 
-/** Needs you, working, unread. Decorative: the tile's description carries the tally. */
+/** Waiting, working, scheduled and unread. The description carries the tally. */
 export function ProjectBadges({ project }: { project: RailProject }) {
-  if (project.waiting + project.active + project.unread === 0) return null;
+  const scheduled = project.scheduled ?? 0;
+  if (project.waiting + project.active + scheduled + project.unread === 0) return null;
   return (
-    <span className="radar-rail-badges" aria-hidden="true">
+    <span className={cn("radar-rail-badges", project.waiting > 0 && "radar-rail-badges-has-waiting", scheduled > 0 && "radar-rail-badges-has-scheduled")} aria-hidden="true">
       {project.waiting > 0 ? (
         <span className="radar-rail-badge radar-rail-badge-waiting">
           {badgeCount(project.waiting)}
@@ -170,6 +180,12 @@ export function ProjectBadges({ project }: { project: RailProject }) {
       {project.active > 0 ? (
         <span className="radar-rail-badge radar-rail-badge-active">
           {badgeCount(project.active)}
+        </span>
+      ) : null}
+      {scheduled > 0 ? (
+        <span className="radar-rail-badge radar-rail-badge-scheduled" title={`${scheduled} scheduled`}>
+          <HostIcon name="Clock" />
+          <span className="radar-rail-scheduled-count">{badgeCount(scheduled)}</span>
         </span>
       ) : null}
       {project.unread > 0 ? (
@@ -182,10 +198,11 @@ export function ProjectBadges({ project }: { project: RailProject }) {
 }
 
 /** The loudest thing a project tile shows: needs you beats working beats unread. */
-export function projectRailState(project: Pick<RailProject, "waiting" | "active" | "unread">): "waiting" | "working" | "unread" | "quiet" {
+export function projectRailState(project: Pick<RailProject, "waiting" | "active" | "unread" | "scheduled">): "waiting" | "working" | "unread" | "scheduled" | "quiet" {
   if (project.waiting > 0) return "waiting";
   if (project.active > 0) return "working";
   if (project.unread > 0) return "unread";
+  if (project.scheduled) return "scheduled";
   return "quiet";
 }
 
@@ -196,7 +213,7 @@ export function projectRailState(project: Pick<RailProject, "waiting" | "active"
  * Wide rows reuse the same end counts, so only the glyph and chrome vary.
  */
 export function ProjectGlyph({ project, style }: {
-  project: Pick<RailProject, "name" | "waiting" | "active" | "unread">;
+  project: Pick<RailProject, "name" | "waiting" | "active" | "unread" | "scheduled">;
   style: string;
 }) {
   const letters = monogram(project.name);
@@ -214,6 +231,7 @@ export function ProjectGlyph({ project, style }: {
         className={cn(
           "radar-rail-ring",
           projectRailState(project) === "waiting" && "radar-rail-ring-waiting",
+          projectRailState(project) === "scheduled" && "radar-rail-ring-scheduled",
         )}
         aria-hidden="true"
       >
@@ -310,7 +328,7 @@ function RailNavigationBody({
     projects,
     threads,
     status: projectStatus,
-  } = useRailProjects(projectBadges, pinnedProjects, projectOrganisation);
+  } = useRailProjects(projectBadges, pinnedProjects, projectOrganisation, sdk);
   const visiblePins = useMemo(() => railProjects.filter(project => pinnedProjects[project.id] === true).map(project => project.id), [railProjects, pinnedProjects]);
   const menuProjectId = projectMenu?.projectId;
   useEffect(() => {

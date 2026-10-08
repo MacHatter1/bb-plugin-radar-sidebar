@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { isComposingKey } from "@/lib/keyboard";
 import { toast } from "sonner";
 import { isLiveThread, threadAttention } from "./time";
+import { scheduledLabel } from "./useScheduledThreads";
 import {
   formatReasoningLevel,
   useModelDisplayName,
@@ -48,6 +49,7 @@ export interface RowCollapse {
   hiddenLive: boolean;
   hiddenNeedsUser: boolean;
   hiddenQueued: boolean;
+  hiddenScheduled?: boolean;
   hiddenFailed: boolean;
   hiddenKids: { id: string; title: string; dot: string | null }[];
   onToggle: () => void;
@@ -58,6 +60,7 @@ function hiddenRollupDotClass(collapse: RowCollapse): string | null {
   if (collapse.hiddenFailed) return "radar-dot-error";
   if (collapse.hiddenNeedsUser || collapse.hiddenQueued) return "radar-dot-attention";
   if (collapse.hiddenLive) return "radar-dot-running radar-dot-pulse";
+  if (collapse.hiddenScheduled) return "radar-dot-scheduled";
   return null;
 }
 
@@ -72,6 +75,7 @@ function hiddenSummary(collapse: RowCollapse): string {
     `${collapse.hiddenTotal} hidden`,
     collapse.hiddenUnread > 0 ? `${collapse.hiddenUnread} unread` : null,
     collapse.hiddenQueued ? "queued work" : null,
+    collapse.hiddenScheduled ? "scheduled work" : null,
   ].filter((part): part is string => !!part);
   return parts.join(", ");
 }
@@ -326,8 +330,10 @@ function RadarThreadRowImpl({
   listFiltersArchived = true,
   hasChildren = false,
   isShortcutTarget,
+  scheduledFor,
 }: {
   thread: PluginSidebarThread;
+  scheduledFor?: number;
   depth: number;
   isLastChild: boolean;
   projectName: string;
@@ -600,11 +606,16 @@ function RadarThreadRowImpl({
     onCommit: runSwipeAction,
   });
 
-  const visual: StatusVisual = statusVisualFor(thread.indicator);
+  const attention = threadAttention(thread, scheduledFor);
+  const isScheduled = attention === "scheduled";
+  const indicatorLabel = isScheduled && scheduledFor !== undefined
+    ? scheduledLabel(scheduledFor) : thread.indicatorLabel;
+  const visual: StatusVisual = isScheduled
+    ? { kind: "icon", name: "Clock", className: "radar-tone-info" }
+    : statusVisualFor(thread.indicator);
   // Action states get the full wash+bar+pulse treatment whether read or not:
   // they stay loud until resolved. Plain unread (FYI-done) keeps the green
   // wash only while unseen.
-  const attention = threadAttention(thread);
   const needsUser = attention === "needs-user";
   const failed = attention === "failed";
   // Motion is reserved for rows that need action — FYI-done stays static.
@@ -620,13 +631,15 @@ function RadarThreadRowImpl({
       : null;
   const rowLabel = [
     thread.displayTitle,
-    thread.indicatorLabel ?? null,
+    indicatorLabel ?? null,
     thread.isPinned ? "pinned" : null,
     foldedSummary,
   ]
     .filter((part): part is string => !!part)
     .join(" — ");
-  const statusWord = statusWordFor(thread.indicator);
+  const statusWord = isScheduled
+    ? { text: "Scheduled", tone: "radar-tone-info" }
+    : statusWordFor(thread.indicator);
   const prNeedsAttention =
     !!pullRequest &&
     !["none", "merged", "closed", "draft"].includes(pullRequest.attention);
@@ -926,7 +939,7 @@ function RadarThreadRowImpl({
         "radar-row-status-badge",
         celebrate && "radar-celebrate",
       )}
-      title={thread.indicatorLabel ?? undefined}
+      title={indicatorLabel ?? undefined}
     >
       {visual?.kind === "spinner" ? (
         <span key="spinner" className="radar-spinner radar-tone-success">
@@ -1129,7 +1142,9 @@ function RadarThreadRowImpl({
                       {collapse.hiddenUnread}
                     </>
                   ) : null}
-                  {dot ? (
+                  {dot === "radar-dot-scheduled" ? (
+                    <Icon name="Clock" className="radar-tone-info" aria-hidden="true" />
+                  ) : dot ? (
                     <span
                       className={cn("radar-dot", dot)}
                       aria-hidden="true"
@@ -1297,7 +1312,7 @@ function RadarThreadRowImpl({
                 projectName,
                 sectionName,
                 hostName,
-                timeText,
+                timeText: isScheduled ? (indicatorLabel ?? timeText) : timeText,
                 statusWord: statusWord?.text ?? null,
                 statusTone: statusWord?.tone ?? null,
                 hiddenKids: collapse?.hiddenKids ?? [],
@@ -1342,6 +1357,7 @@ function sameCollapse(a: RowCollapse | null, b: RowCollapse | null): boolean {
     a.hiddenLive === b.hiddenLive &&
     a.hiddenNeedsUser === b.hiddenNeedsUser &&
     a.hiddenQueued === b.hiddenQueued &&
+    a.hiddenScheduled === b.hiddenScheduled &&
     a.hiddenFailed === b.hiddenFailed &&
     a.hiddenKids.length === b.hiddenKids.length &&
     a.hiddenKids.every((kid, index) => {

@@ -111,4 +111,18 @@ describe("family derivation cache", () => {
     expect(hook.result.current.countSubtree(threads[0]).total).toBe(27);
     expect(hook.result.current.subtreeActivity(threads[0])).toBe(threads[26].latestAttentionAt);
   });
+
+  it("separates scheduled descendants and invalidates family summaries on rescheduling", () => {
+    const parent = makeThread({ id: "parent" });
+    const child = makeThread({ id: "scheduled", parentThreadId: "parent", queuedWork: "waiting", indicator: "queued-waiting" });
+    const args = { ...argsFor([parent, child]), scheduledThreads: new Map([[child.id, NOW + HOUR]]) };
+    const hook = renderHook((props: Args) => useThreadGroups(props), { initialProps: args });
+    const before = hook.result.current.countSubtree(parent);
+    expect(before).toMatchObject({ queued: 0, scheduled: 1, live: 0, needsUser: 0 });
+    expect(before.kids[0].dot).toBe("radar-dot-scheduled");
+    expect(hook.result.current.groups[0]).toMatchObject({ queued: 0, scheduled: 1 });
+    hook.rerender({ ...args, scheduledThreads: new Map() });
+    expect(hook.result.current.countSubtree(parent)).not.toBe(before);
+    expect(hook.result.current.countSubtree(parent)).toMatchObject({ queued: 1, scheduled: 0 });
+  });
 });

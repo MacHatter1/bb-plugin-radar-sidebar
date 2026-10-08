@@ -14,6 +14,7 @@ export interface GroupHeaderData {
   live: number;
   needsUser: number;
   queued: number;
+  scheduled?: number;
   failed: number;
   projectId: string | null;
 }
@@ -79,6 +80,15 @@ function GroupStatus({ group }: { group: GroupHeaderData }) {
         aria-label={`${group.live} running`}
       >
         <Icon name="Loading" aria-hidden="true" />
+      </span>
+    );
+  }
+  if (group.scheduled) {
+    return (
+      <span className="radar-group-status radar-tone-info"
+        title={plural(group.scheduled, "scheduled thread")}
+        aria-label={`${group.scheduled} scheduled`}>
+        <Icon name="Clock" aria-hidden="true" />
       </span>
     );
   }

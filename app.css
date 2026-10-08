@@ -1891,6 +1891,11 @@
   margin-top: 0;
 }
 
+.radar-kids-pill [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
 .radar-kids-line {
   display: flex;
   align-items: center;
@@ -2598,6 +2603,10 @@ a.radar-row-main:hover {
 
 .radar-tone-info {
   color: var(--primary);
+}
+
+.radar-dot-scheduled {
+  background: var(--primary);
 }
 
 /* Status dots read the host status tokens; unknown indicators draw nothing. */
@@ -4043,6 +4052,51 @@ a.radar-row-main:hover {
   background: var(--primary);
 }
 
+/* Future work is a static clock; waiting takes this corner in narrow mode. */
+.radar-rail-badge-scheduled {
+  top: 1px;
+  right: 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  animation: none;
+}
+.radar-double-rail .radar-rail-badge-scheduled svg { width: 10px; height: 10px; }
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-waiting .radar-rail-badge-scheduled {
+  display: none;
+}
+
+/* A compact clock leaves room for the active count, including 99+.
+   Grid spacing keeps their outlines apart as the active badge grows. */
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-scheduled-count {
+  display: none;
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-scheduled:not(.radar-rail-badges-has-waiting) {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  column-gap: 5px;
+  justify-content: space-between;
+  align-content: start;
+  inset: 1px;
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-scheduled:not(.radar-rail-badges-has-waiting) .radar-rail-badge-active {
+  position: static;
+  grid-column: 1;
+  grid-row: 1;
+}
+.radar-double-navigation:not(.radar-double-navigation-wide) .radar-rail-badges-has-scheduled:not(.radar-rail-badges-has-waiting) .radar-rail-badge-scheduled {
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  justify-content: center;
+}
+
 /* Wide mode: tiles become rows with the monogram as the leading glyph. */
 .radar-double-navigation-wide .radar-rail-projects { align-items: stretch; }
 .radar-double-navigation-wide .radar-rail-divider { width: auto; margin: 4px 10px 6px; }
@@ -4108,6 +4162,7 @@ a.radar-row-main:hover {
   isolation: isolate;
   border-color: var(--warning, #b98533);
 }
+.radar-rail-ring-scheduled { border-color: var(--primary); }
 .radar-rail-ring-waiting::after {
   content: "";
   position: absolute;
@@ -4188,6 +4243,7 @@ a.radar-row-main:hover {
 .radar-rail-state-unread.radar-rail-style-chips .radar-rail-chip {
   border-color: var(--primary);
 }
+.radar-rail-state-scheduled.radar-rail-style-chips .radar-rail-chip { border-color: var(--primary); }
 .radar-double-rail .radar-rail-project-active.radar-rail-style-chips .radar-rail-chip {
   background: color-mix(in srgb, oklch(0.55 0.16 var(--radar-project-hue)) 12%, transparent);
 }
@@ -4207,6 +4263,7 @@ a.radar-row-main:hover {
 .radar-double-navigation-wide .radar-rail-state-unread.radar-rail-style-chips {
   border-color: var(--primary);
 }
+.radar-double-navigation-wide .radar-rail-state-scheduled.radar-rail-style-chips { border-color: var(--primary); }
 .radar-double-navigation-wide .radar-rail-style-chips .radar-rail-chip {
   border: 0;
   width: auto;

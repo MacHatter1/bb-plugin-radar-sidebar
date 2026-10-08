@@ -58,6 +58,7 @@ import {
 } from "./RadarGroupHeader";
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
+import { useScheduledThreads } from "./useScheduledThreads";
 import { setRailScope, useValidatedRailScope } from "./railScope";
 import { useSettingValues } from "./settingsStore";
 import {
@@ -489,6 +490,7 @@ export function RadarThreadList({
   );
   const actions = experimental_useSidebarThreadActions();
   const sdk = useSdk();
+  const scheduledThreads = useScheduledThreads(threads, sdk);
   const { providers } = experimental_useProviders();
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
@@ -539,6 +541,7 @@ export function RadarThreadList({
     projects,
     sections,
     now,
+    scheduledThreads,
   });
 
   const activeGroup = useMemo(
@@ -1217,7 +1220,7 @@ export function RadarThreadList({
     ) => {
       const kidCount = (shownChildren.get(thread.id) ?? []).length;
       const counts = kidCount > 0 ? countSubtree(thread) : null;
-      const attention = threadAttention(thread);
+      const attention = threadAttention(thread, scheduledThreads.get(thread.id));
       const collapse =
         kidCount > 0 && counts
           ? {
@@ -1228,6 +1231,7 @@ export function RadarThreadList({
               hiddenLive: counts.live - Number(isRunningThread(thread)) > 0,
               hiddenNeedsUser: counts.needsUser - Number(attention === "needs-user") > 0,
               hiddenQueued: counts.queued - Number(attention === "queued") > 0,
+              hiddenScheduled: counts.scheduled - Number(attention === "scheduled") > 0,
               hiddenFailed: counts.failed - Number(attention === "failed") > 0,
               hiddenKids: counts.kids,
               onToggle: () => toggleThreadCollapse(thread.id),
@@ -1238,6 +1242,7 @@ export function RadarThreadList({
         <RadarThreadRow
           key={thread.id}
           thread={thread}
+          scheduledFor={scheduledThreads.get(thread.id)}
           depth={depth}
           isLastChild={isLastChild}
           projectName={projectNameFor(thread)}
@@ -1288,6 +1293,7 @@ export function RadarThreadList({
       );
     },
     [
+      scheduledThreads,
       projectNameFor,
       sectionById,
       celebrateIds,

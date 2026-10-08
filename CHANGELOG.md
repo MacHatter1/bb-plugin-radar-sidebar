@@ -23,6 +23,11 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Added
 
+- Show future scheduled queue work with a clock and Scheduled label, including
+  folded families and group headers. The tooltip gives its local run time;
+  immediate queued work keeps the existing amber indicator. Project rail badges
+  also show a static scheduled clock, without counting future work as waiting
+  or working.
 - Drag pinned projects to reorder them, with keyboard dragging and Move pin
   up/down menu alternatives. The chosen order persists across devices and
   stays fixed as thread activity changes.
@@ -51,6 +56,8 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ### Fixed
 
+- Keep the scheduled clock clear of the active badge in narrow project tiles.
+  Scheduled counts remain visible in the wide rail and project tooltip.
 - Keep collection dialogs centered in the window. Temporarily hide visible
   native browser panes in the viewing desktop while the form is open, then
   restore them without stealing focus when it closes.

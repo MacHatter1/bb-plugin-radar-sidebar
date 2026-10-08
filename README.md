@@ -77,6 +77,12 @@ breathe a slow glow; finished-but-unseen threads get a green wash, accent bar
 and bold title. Motion is reserved for things that need action, so movement
 always means something.
 
+Queued messages scheduled for a future time show a calm clock and **Scheduled**,
+with the local run time in the tooltip. Folded families and group headers keep
+that distinction. Threads with immediate queued work still show **Queued**.
+The project rail uses a static clock badge for scheduled work, excluding it
+from the pulsing waiting count and the spinning working count.
+
 </td>
 </tr>
 <tr>
