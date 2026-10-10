@@ -1,11 +1,11 @@
 ---
 name: radar-sidebar
-description: Use the Radar Sidebar plugin's thread list and navigation. Use when the user asks about the sidebar's groups, filters, pins, sections, or how to switch back to BB's list.
+description: Use the Radar Sidebar plugin's thread list. Use when the user asks about the sidebar's groups, filters, pins, sections, or how to switch back to BB's list.
 ---
 
 # Radar Sidebar
 
-Replaces BB's sidebar thread list and the navigation above it. There is no
+Replaces BB's sidebar thread list. There is no
 CLI and no server state: everything below is UI in the BB app, and thread mutations go
 through BB's own flows (pins, reads, renames, archives, deletes).
 
@@ -15,62 +15,16 @@ through BB's own flows (pins, reads, renames, archives, deletes).
   then Today / Yesterday / Previous 7 days / Previous 30 days / Older — or
   group by project, or by **section** for drag-to-organise. The header holds
   a text filter, an Active / Archived / All switch, grouping + expand-all +
-  density toggles, status chips, and the smart-views bar (New thread lives
-  in the nav above, so the list keeps no duplicate). Preferences persist per
-  client in `localStorage` (`radar-sidebar:*:v1` keys).
-- **Navigation** (`experimental_sidebarNavigation`, id `radar`): a primary
-  New thread button, inline destination rows, and a **More** popover (count
-  badge, highlighted while the current page lives in it). Search threads is
-  not rendered: the list filter and the ⌘K palette cover it. Inline vs More
-  and the row order follow BB's
-  own stock arrangement exactly — the server-synced `sidebar.pluginPanelOrder`
-  and `sidebar.visiblePluginPanels` preferences behind Settings →
-  Customize sidebar — so More holds precisely what the user put there.
-  The host navigation hook supplies the live arrangement, and its actions
-  save visibility changes. Right-click a destination for Keep in sidebar /
-  Move to More (so arranging in either nav carries over) and Open in
-  split for panels. Option-click opens in a split. New thread is the fixed
-  Radar header — always inline — while destinations follow the stock
-  arrangement exactly.
+  density toggles, status chips, and the smart-views bar (New thread is
+  BB's own, above the list, so the list keeps no duplicate). Preferences
+  persist per client in `localStorage` (`radar-sidebar:*:v1` keys).
+## Navigation
 
-## Navigation rail
-
-Enable **Navigation rail** (`railNav`, default `false`) under Settings →
-Installed plugins → Radar Sidebar. Both slots keep id `radar`. Off restores
-navigation above the list, including the touch toolbar, and ignores the
-remembered rail project filter. Turning it back on restores that choice.
-
-The rail sits beside the list on desktop (60px) and in the mobile drawer
-(56px). BB still supplies destination order, visibility and actions. Search
-stays on the rail; **Home** only clears the project filter and never creates
-or opens a thread. **New thread** remains BB's action in the list heading.
-Project tiles show visible, unarchived threads, newest project first; click a
-tile to filter, click it again or Home/the heading to clear. A project with
-only archives keeps its scope. A deleted project clears once the directory
-is ready; loading/error snapshots preserve the saved choice. When using
-another navigation provider with `railNav` enabled, the list has its own
-clear-project button.
-
-Desktop hover/focus tooltips include shortcuts, accessories and project
-counts (including queued/background work). Arrow keys wrap between enabled
-controls; Home/End focus the first/last. Right-click destinations for Move to
-More / Keep in sidebar, Move up/down, Open in split and Plugin details.
-Customize opens BB's editor beside the desktop rail; mobile uses BB's full
-editor. Narrow lists fold status chips at 284px while keeping accessible labels.
-
-**Labelled rail** (`wideRail`, default `false`) requires `railNav`. It adds a
-Show labels / Hide labels control on desktop. The 168px rail expands the
-sidebar by its extra width so the thread list keeps its room. It probes the
-host sidebar/footer/width structure and hides the toggle when unavailable.
-The gutter, footer stacking and Customize layout use host `data-sidebar`
-selectors in `components/radar/railHostStyles.ts`. The rail renders them
-as `<style>` elements in its own markup, by state (wide, compact, scoped),
-plus a small `<style>` for the measured footer reserve and scroll thumb.
-Disabling the rail unmounts them and releases those styles. It never
-writes to BB's elements, and it avoids `:has()` on the page or sidebar,
-which restyled the whole page on every DOM change.
-A BB shell update can require selector adjustments. Wide mode and tooltips
-are desktop-only; safe-area padding and reduced motion are respected.
+BB 0.46 retired the `experimental_sidebarNavigation` slot. BB's own navigation
+rail now holds Home, plugins and the user's chosen destinations, and plugins
+cannot replace it, so Radar 0.5.3 ships no navigation or rail. The `railNav`
+and `wideRail` settings are gone. On BB 0.44 or 0.45, Radar 0.5.2 still has
+both.
 
 ## Organisation tools
 
@@ -120,9 +74,8 @@ are desktop-only; safe-area padding and reduced motion are respected.
 
 ## Selecting it
 
-Settings → Appearance → **Sidebar** (list) and **Navigation** (controls).
-Choosing BB there restores the stock experience; disabling this plugin falls
-back to BB's list automatically.
+Settings → Appearance → **Sidebar**. Choosing BB there restores the stock
+list; disabling this plugin falls back to BB's list automatically.
 
 ## Row behaviour
 
@@ -177,7 +130,8 @@ back to BB's list automatically.
   closes on leave, scroll, window blur, or when a menu opens.
 - Responsive: container-query width tiers shed load as the sidebar
   narrows (status words first, then project chips, then badges down to
-  status + unread); compact touch viewports pin the ⋯ menu inline since
+  status + unread); status chips fold to glyph and count at 284px or less,
+  keeping their accessible labels; compact touch viewports pin the ⋯ menu inline since
   hover doesn't exist there, and filters wrap.
 - Title line: title, then a project chip in the project's own muted hue
   (stable per project id, readable light and dark — always shown, even on
@@ -271,8 +225,6 @@ rows paint at their final height.
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `railNav` | `false` | Navigation rail beside the list, with project filters; off keeps navigation above the list. |
-| `wideRail` | `false` | Experimental labelled desktop rail; requires `railNav` and a recognised host shell. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed; off under `prefers-reduced-motion` regardless. |
@@ -283,14 +235,6 @@ rows paint at their final height.
 | `swipeActions` | `true` | Swipe a row left or right to act on it, by touch or with two fingers on a trackpad. |
 | `swipeRight` | `Mark read / unread` | Rightward swipe action: `Mark read / unread`, `Pin / unpin`, `Archive / unarchive`, `Open in split`, `Rename`, `More actions`, `Delete…` or `Nothing`. |
 | `swipeLeft` | `Archive / unarchive` | Leftward swipe action, same options. |
-
-## Rail storage keys
-
-- `radar-sidebar:rail-scope:v1`: selected project id; absence means all projects.
-- `radar-sidebar:rail-wide:v1`: `1` for expanded labels, `0` for icons.
-
-These are client preferences inside the same plugin, alongside the existing
-filter, density, smart-view, project-order and collapse keys.
 
 ## Rules
 

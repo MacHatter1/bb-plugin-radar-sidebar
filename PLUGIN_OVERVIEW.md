@@ -2,12 +2,6 @@ A thread list you can read at a glance, for BB.
 
 ## What you get
 
-- **Optional navigation rail.** Enable `railNav` to place destinations and
-  project filters beside the thread list on desktop and mobile. Home clears
-  the project filter; New thread keeps BB's own action. The experimental
-  `wideRail` option adds desktop labels. Both settings default off, so
-  existing installs keep navigation above the list.
-
 - A **Radar thread list** in the left sidebar. Threads group by Today,
   Yesterday, Previous 7 days, Previous 30 days or Older, keyed off real
   activity rather than when you last opened them, so merely reading a thread
@@ -26,10 +20,6 @@ A thread list you can read at a glance, for BB.
   while a thread is in flight, plus a branch line you can copy and a
   pull-request badge that opens in your browser. Pause on a row for a peek
   card with the original goal and a stacked context-window meter.
-- **Radar navigation** above the list: New thread, your inline destinations
-  and More for the rest. It shows inline exactly what you set inline in BB's
-  own "Customize sidebar", and writes back to the same store, so arranging in
-  either surface carries over.
 - **For working fast.** Status filter chips, saved smart views, a text
   filter, comfortable or compact density, keyboard traversal with quick
   archive and pin, multi-select bulk actions, and drag a thread onto a section
@@ -43,8 +33,9 @@ as they do in the stock list, and nothing about your threads changes — only ho
 the sidebar presents them. It makes no network requests of its own, keeps no
 database, and stores no secrets.
 
-Pick it under **Settings → Appearance → Sidebar** and **Navigation**; choosing
-BB there, or disabling the plugin, restores the stock sidebar immediately.
+Pick it under **Settings → Appearance → Sidebar**; choosing BB there, or
+disabling the plugin, restores the stock list immediately. Navigation stays on
+BB's own rail. Requires BB 0.46 or later.
 
 Two limits worth knowing: it will not move a thread between projects, because
 BB's thread API exposes no project on update, and it shows model and thinking

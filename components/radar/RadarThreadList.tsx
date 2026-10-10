@@ -58,7 +58,6 @@ import {
 } from "./RadarGroupHeader";
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
-import { setRailScope, useValidatedRailScope } from "./railScope";
 import {
   useThreadGroups,
   type ThreadGroup,
@@ -145,7 +144,6 @@ function useSidebarSettings() {
     writeStored(LAST_TWO_LINE_TITLES_KEY, wrapTitles ? "on" : "off");
   }, [loaded, defaultDensity, wrapTitles]);
   return {
-    railNav: flag("railNav", false),
     hoverCard: flag("hoverCard", true),
     celebrate: flag("celebrate", true),
     motion: flag("motion", true),
@@ -495,23 +493,11 @@ export function RadarThreadList({
   );
   const {
     status,
-    threads: allThreads,
+    threads,
     projects,
     sections,
     experimental_archived,
   } = experimental_useSidebarThreads(lifecyclesParam);
-  // The navigation rail can scope the list to one project.
-  const rememberedRailScope = useValidatedRailScope({ projects, status });
-  const railScope = settings.railNav ? rememberedRailScope : null;
-  const scopedProject = railScope ? projects.find((project) => project.id === railScope) : null;
-  const scopeName = scopedProject?.isPersonal ? "Personal" : scopedProject?.name ?? "Project";
-  const threads = useMemo(
-    () =>
-      railScope
-        ? allThreads.filter((thread) => thread.projectId === railScope)
-        : allThreads,
-    [allThreads, railScope],
-  );
   const actions = experimental_useSidebarThreadActions();
   const sdk = useSdk();
   const { providers } = experimental_useProviders();
@@ -1489,19 +1475,6 @@ export function RadarThreadList({
       }
     >
       <div className="radar-list-header">
-        {railScope ? (
-          <button
-            type="button"
-            className="radar-list-scope"
-            aria-label={`Clear project filter: ${scopeName}`}
-            title="Show every project"
-            onClick={() => setRailScope(null)}
-          >
-            <Icon name="Folder" aria-hidden="true" />
-            <span>{scopeName}</span>
-            <Icon name="X" aria-hidden="true" />
-          </button>
-        ) : null}
         <div className="radar-search">
           <Icon
             name="Search"

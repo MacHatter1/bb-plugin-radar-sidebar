@@ -6,6 +6,24 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+BB 0.46 retired the sidebar navigation slot that Radar's navigation and rail
+were built on. On BB 0.46, 0.5.2 can't load: its bundle registers the removed
+slot, so the thread list disappears too. This release keeps the thread list
+working and leaves navigation to BB's own rail.
+
+### Removed
+
+- Radar's navigation above the list, the navigation rail and its labelled
+  mode. BB's own rail now holds Home, plugins and your destinations, and
+  plugins can no longer replace it. The **Navigation rail** (`railNav`) and
+  **Labelled rail** (`wideRail`) settings and the rail's project filter over
+  the list go with them.
+
+### Changed
+
+- Requires BB 0.46 or later. On BB 0.44 or 0.45, keep 0.5.2, which still has
+  the navigation and rail.
+
 ## 0.5.2 - 2026-10-04
 
 ### Fixed
