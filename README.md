@@ -140,7 +140,7 @@ to mark it read or archive it; each direction's action is a setting.
 ## Install
 
 ```sh
-bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.5.2' --yes
+bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.5.3' --yes
 ```
 
 The Git semver range tracks compatible `v0.5.x` releases. If you installed
@@ -148,7 +148,7 @@ an earlier minor series, rerun this command to move to the new range.
 
 Then pick it in **Settings → Appearance**: choose **Radar** for the sidebar.
 Navigation stays on BB's own rail: BB 0.46 retired the navigation slot that
-Radar's navigation and rail were built on, so this release removes them. On BB 0.44
+Radar's navigation and rail were built on, so 0.5.3 removes them. On BB 0.44
 or 0.45, keep 0.5.2, which still has them.
 
 <details>

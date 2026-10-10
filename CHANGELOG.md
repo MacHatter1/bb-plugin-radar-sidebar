@@ -6,6 +6,8 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+## 0.5.3 - 2026-10-10
+
 BB 0.46 retired the sidebar navigation slot that Radar's navigation and rail
 were built on. On BB 0.46, 0.5.2 can't load: its bundle registers the removed
 slot, so the thread list disappears too. This release keeps the thread list
