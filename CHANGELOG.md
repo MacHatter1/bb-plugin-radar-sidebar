@@ -6,6 +6,13 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- **Threads per project** (`projectThreadLimit`): cap each project folder to
+  its 3, 5 or 10 most recent threads, with **Show more** and **Show less**
+  below. The open thread and threads that need you stay visible past the cap,
+  and searching or a status filter shows everything. Off (`all`) by default.
+
 ## 0.5.3 - 2026-10-10
 
 BB 0.46 retired the sidebar navigation slot that Radar's navigation and rail

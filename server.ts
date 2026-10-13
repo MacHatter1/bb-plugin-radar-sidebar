@@ -66,6 +66,14 @@ export default async function plugin(bb: BbPluginApi) {
         "Let long thread titles wrap onto a second line before truncating. Applies in both densities.",
       default: false,
     },
+    projectThreadLimit: {
+      type: "select",
+      label: "Threads per project",
+      description:
+        "Show only the most recent threads in each project folder, with Show more for the rest. The open thread and threads that are working, waiting, failed or unread always stay visible.",
+      options: ["all", "3", "5", "10"],
+      default: "all",
+    },
     swipeActions: {
       type: "boolean",
       label: "Swipe actions",

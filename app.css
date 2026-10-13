@@ -3110,6 +3110,12 @@ a.radar-row-main:hover {
   color: var(--muted-foreground);
 }
 
+/* Show more / Show less under a capped project folder. */
+.radar-group-more {
+  display: flex;
+  padding: 0 4px 4px;
+}
+
 .radar-group-empty {
   margin: 2px 8px 6px;
   padding: 10px 8px;
