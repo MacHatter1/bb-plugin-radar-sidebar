@@ -48,12 +48,13 @@ function renderThreads(
     execution?: Record<string, unknown> | null;
     archived?: PluginSidebarThreadsState["experimental_archived"];
     sdk?: Record<string, unknown>;
+    activeThreadId?: string | null;
   } = {},
 ) {
   return renderSlot(
     threadList,
     {
-      activeThreadId: null,
+      activeThreadId: options.activeThreadId ?? null,
       activeProjectId: "proj_a",
       isCompactViewport: false,
       onNavigate: () => {},
@@ -134,6 +135,78 @@ describe("grouping", () => {
       .getAllByText(/today|yesterday|previous|older/i)
       .map((node) => node.textContent);
     expect(headers).toContain("Today");
+  });
+});
+
+describe("project folder preview", () => {
+  const family = (count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      makeThread({ id: `t${index + 1}`, latestAttentionAt: NOW - (index + 1) * HOUR }),
+    );
+
+  it("shows every thread by default", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(5));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(screen.queryByRole("button", { name: /show \d+ more/i })).toBeNull();
+  });
+
+  it("caps a folder to its most recent threads and opens the rest on demand", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more" }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(localStorage.getItem("radar-sidebar:expanded-groups:v1")).toBe(JSON.stringify(["project:proj_a"]));
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("keeps a thread that needs the user visible past the cap", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const threads = family(5);
+    threads[4] = makeThread({ id: "t5", latestAttentionAt: NOW - 5 * HOUR, isUnread: true });
+    const { container } = renderThreads(threads, { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t5"]);
+    expect(screen.getByRole("button", { name: "Show 1 more" })).toBeTruthy();
+  });
+
+  it("keeps a quiet family visible when a child has queued work", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const working = ["w1", "w2", "w3"].map((id) =>
+      makeThread({ id, status: "active", indicator: "runtime" }),
+    );
+    const quiet = makeThread({ id: "quiet", latestAttentionAt: NOW - 9 * HOUR });
+    const queued = makeThread({
+      id: "queued",
+      parentThreadId: "quiet",
+      queuedWork: "waiting",
+      latestAttentionAt: NOW - 9 * HOUR,
+    });
+    const { container } = renderThreads([...working, quiet, queued], {
+      settings: { projectThreadLimit: "3" },
+    });
+    expect(visibleRowIds(container)).toEqual(expect.arrayContaining(["quiet", "queued"]));
+  });
+
+  it("keeps the open thread's family visible through a parent cycle", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(
+      [
+        ...family(3),
+        makeThread({ id: "a", parentThreadId: "b", latestAttentionAt: NOW - 9 * HOUR }),
+        makeThread({ id: "b", parentThreadId: "a", latestAttentionAt: NOW - 9 * HOUR }),
+      ],
+      { settings: { projectThreadLimit: "3" }, activeThreadId: "b" },
+    );
+    expect(visibleRowIds(container)).toEqual(expect.arrayContaining(["a", "b"]));
+  });
+
+  it("lifts the cap while searching", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Thread" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
   });
 });
 

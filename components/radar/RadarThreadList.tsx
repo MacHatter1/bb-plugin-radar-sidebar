@@ -51,7 +51,7 @@ import {
 } from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
 import { RadarThreadRow } from "./RadarThreadRow";
-import { activityTime, isRunningThread, timeAgo } from "./time";
+import { activityTime, isLiveThread, isRunningThread, timeAgo } from "./time";
 import {
   GroupHeader,
   SortableGroupSection,
@@ -83,6 +83,7 @@ const LIFECYCLE_KEY = "radar-sidebar:lifecycles:v1";
 const GROUPING_KEY = "radar-sidebar:grouping:v1";
 const COLLAPSED_KEY = "radar-sidebar:collapsed:v1";
 const COLLAPSED_THREADS_KEY = "radar-sidebar:collapsed-threads:v1";
+const EXPANDED_KEY = "radar-sidebar:expanded-groups:v1";
 const PROJECT_ORDER_KEY = "radar-sidebar:project-order:v1";
 const STATUS_FILTER_KEY = "radar-sidebar:status-filter:v1";
 const DENSITY_KEY = "radar-sidebar:density:v1";
@@ -104,6 +105,12 @@ function readStored<T extends string>(
     // Private browsing or unavailable storage: fall through to the default.
   }
   return fallback;
+}
+
+/** "3", "5" or "10" caps each project folder; anything else shows them all. */
+function threadLimitFromSetting(value: unknown): number | null {
+  const limit = typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN;
+  return Number.isInteger(limit) && limit > 0 ? limit : null;
 }
 
 function writeStored(key: string, value: string): void {
@@ -151,6 +158,7 @@ function useSidebarSettings() {
     adaptiveCollapse: flag("adaptiveCollapse", true),
     defaultDensity,
     wrapTitles,
+    projectThreadLimit: threadLimitFromSetting(values?.projectThreadLimit),
     swipeRight: swipeOn
       ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
       : "none",
@@ -452,6 +460,12 @@ export function RadarThreadList({
   useEffect(() => {
     writeStored(COLLAPSED_THREADS_KEY, JSON.stringify([...collapsedThreads]));
   }, [collapsedThreads]);
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(readStringArray(EXPANDED_KEY)),
+  );
+  useEffect(() => {
+    writeStored(EXPANDED_KEY, JSON.stringify([...expanded]));
+  }, [expanded]);
   // Typing stays responsive: the heavy list derivation trails the input.
   const deferredQuery = useDeferredValue(query);
   // Filtering forces everything open so matches never hide inside folds.
@@ -556,6 +570,56 @@ export function RadarThreadList({
     () => (dragActiveId ? (groups.find((g) => g.id === dragActiveId) ?? null) : null),
     [groups, dragActiveId],
   );
+
+  // Walks the rendered tree (already cycle-free), so absent parents and
+  // cycles resolve exactly as the rows do: the open thread and anything that
+  // needs the user keeps its whole family visible.
+  const familyNeedsShowing = useCallback(
+    (root: PluginSidebarThread): boolean => {
+      const stack = [root];
+      while (stack.length > 0) {
+        const thread = stack.pop()!;
+        if (
+          thread.id === activeThreadId ||
+          thread.isUnread ||
+          isLiveThread(thread) ||
+          thread.indicator === "waiting-for-input" ||
+          thread.indicator === "unread-error" ||
+          thread.indicator === "queued-failed"
+        ) {
+          return true;
+        }
+        stack.push(...(shownChildren.get(thread.id) ?? []));
+      }
+      return false;
+    },
+    [activeThreadId, shownChildren],
+  );
+
+  /** A project folder previews its most recent families when capped. The open
+   * family and any family that needs the user stay visible past the cap;
+   * filtering lifts the cap so matches are never hidden. */
+  const previewRoots = useCallback(
+    (group: ThreadGroup): { roots: PluginSidebarThread[]; toggle: "more" | "less" | null; hidden: number } => {
+      const limit = settings.projectThreadLimit;
+      if (limit === null || group.projectId === null || isFiltering || group.roots.length <= limit) {
+        return { roots: group.roots, toggle: null, hidden: 0 };
+      }
+      if (expanded.has(group.id)) return { roots: group.roots, toggle: "less", hidden: 0 };
+      const roots = group.roots.filter((root, index) => index < limit || familyNeedsShowing(root));
+      const hidden = group.roots.length - roots.length;
+      return { roots, toggle: hidden > 0 ? "more" : null, hidden };
+    },
+    [settings.projectThreadLimit, isFiltering, expanded, familyNeedsShowing],
+  );
+  const toggleShowMore = useCallback((id: string) => {
+    setExpanded((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const toggleGroup = useCallback((id: string) => {
     if (justDragged.current) return;
@@ -703,11 +767,11 @@ export function RadarThreadList({
     }
     for (const group of groups) {
       if (!collapsedGroupIds.has(group.id)) {
-        walk(group.roots);
+        walk(previewRoots(group).roots);
       }
     }
     return list;
-  }, [pinnedGroup, groups, collapsedGroupIds, collapseIds, shownChildren]);
+  }, [pinnedGroup, groups, collapsedGroupIds, collapseIds, shownChildren, previewRoots]);
   const visibleThreadIds = useMemo(
     () => new Set(visibleFlattenedThreadIds),
     [visibleFlattenedThreadIds],
@@ -1342,6 +1406,7 @@ export function RadarThreadList({
   const renderGroup = useCallback(
     (group: ThreadGroup, isSortable = false, draggable = false) => {
       const isCollapsed = collapsedGroupIds.has(group.id);
+      const preview = previewRoots(group);
 
       const groupContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
         event.preventDefault();
@@ -1358,19 +1423,34 @@ export function RadarThreadList({
             group.roots.length === 0 ? (
               <p className="radar-group-empty">Drop a thread here to file it.</p>
             ) : (
-              group.roots.map((root, index) =>
-                renderSubtree(
-                  root,
-                  0,
-                  renderRow,
-                  shownChildren,
-                  group.projectId,
-                  collapseIds,
-                  index === group.roots.length - 1,
-                  draggable,
-                  isCollapsed,
-                ),
-              )
+              <>
+                {preview.roots.map((root, index) =>
+                  renderSubtree(
+                    root,
+                    0,
+                    renderRow,
+                    shownChildren,
+                    group.projectId,
+                    collapseIds,
+                    index === preview.roots.length - 1,
+                    draggable,
+                    isCollapsed,
+                  ),
+                )}
+                {preview.toggle ? (
+                  <div className="radar-group-more">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={preview.toggle === "less"}
+                      onClick={() => toggleShowMore(group.id)}
+                    >
+                      {preview.toggle === "more" ? `Show ${preview.hidden} more` : "Show less"}
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             )
           }
         </Fold>
@@ -1435,6 +1515,8 @@ export function RadarThreadList({
     },
     [
       collapsedGroupIds,
+      previewRoots,
+      toggleShowMore,
       toggleGroup,
       handleNewThreadInProject,
       renderRow,
