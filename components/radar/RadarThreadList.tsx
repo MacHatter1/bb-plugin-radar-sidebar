@@ -403,6 +403,7 @@ export function RadarThreadList({
   const [groupMenu, setGroupMenu] = useState<{
     x: number;
     y: number;
+    trigger: HTMLElement;
   } | null>(null);
   const justDragged = useRef(false);
   const sensors = useSensors(
@@ -445,6 +446,7 @@ export function RadarThreadList({
     x: number;
     y: number;
     threadId: string;
+    trigger: HTMLElement;
   } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   // Bumped to revalidate per-thread model info (cheap, cached reads).
@@ -1044,9 +1046,9 @@ export function RadarThreadList({
   );
 
   const openMenu = useCallback(
-    (clientX: number, clientY: number, thread: PluginSidebarThread) => {
+    (clientX: number, clientY: number, thread: PluginSidebarThread, trigger: HTMLElement) => {
       setEditingId(null);
-      setMenu({ x: clientX, y: clientY, threadId: thread.id });
+      setMenu({ x: clientX, y: clientY, threadId: thread.id, trigger });
     },
     [],
   );
@@ -1354,7 +1356,11 @@ export function RadarThreadList({
 
       const groupContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
         event.preventDefault();
-        setGroupMenu({ x: event.clientX, y: event.clientY });
+        const button = event.target instanceof Element ? event.target.closest("button") : null;
+        const trigger = button && event.currentTarget.contains(button)
+          ? button
+          : event.currentTarget.querySelector<HTMLElement>(".radar-group-toggle");
+        if (trigger) setGroupMenu({ x: event.clientX, y: event.clientY, trigger });
       };
 
       const foldContent = (
@@ -1971,6 +1977,7 @@ export function RadarThreadList({
         <RadarMenu
           x={groupMenu.x}
           y={groupMenu.y}
+          trigger={groupMenu.trigger}
           items={[
             {
               kind: "item",
@@ -2020,6 +2027,7 @@ export function RadarThreadList({
         <RadarMenu
           x={menu.x}
           y={menu.y}
+          trigger={menu.trigger}
           items={menuItems}
           onSelect={handleMenuSelect}
           onClose={() => setMenu(null)}
