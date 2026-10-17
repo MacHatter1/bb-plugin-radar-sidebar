@@ -2840,6 +2840,13 @@ a.radar-row-main:hover {
   height: 10px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .radar-skeleton-title,
+  .radar-skeleton-subtitle {
+    animation: none;
+  }
+}
+
 .radar-more {
   display: flex;
   justify-content: center;
