@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginAppSlots } from "@get-bb/plugin-sdk/app";
 import { RadarProjectRail, type RadarProjectRailProps } from "./RadarProjectRail";
+import { RadarThreadList } from "./RadarThreadList";
 import { registerProjectRail } from "./registerProjectRail";
 import { makeProject, makeThread } from "./fixtures";
 import { EMPTY_PROJECT_ORGANISATION, changeProjectOrganisation } from "@/lib/projectOrganisation";
@@ -15,14 +16,22 @@ const threads = [makeThread({ id: "one", title: "Polish dashboard", projectId: "
   makeThread({ id: "two", title: "Review extensions", projectId: "b", indicator: "waiting-for-input" }),
   makeThread({ id: "hidden", title: "Hidden helper", projectId: "a", isHidden: true, isUnread: true })];
 
+function Sidebar(props: RadarProjectRailProps) {
+  return <><RadarProjectRail {...props} /><RadarThreadList activeThreadId={null} activeProjectId="a"
+    isCompactViewport={false} onNavigate={() => {}} searchQuery="" /></>;
+}
+
 function renderRail(saved: SavedSettings = {}, props: RadarProjectRailProps = {}, sdk: Record<string, unknown> = {},
-  rpc: Record<string, (input: unknown) => unknown> = {}) {
+  rpc: Record<string, (input: unknown) => unknown> = {}, includeList = false) {
   let settings = saved;
   let revision = 1;
   seedSettings(settings);
-  return renderSlot({ component: RadarProjectRail }, props, {
+  return renderSlot({ component: includeList ? Sidebar : RadarProjectRail }, props, {
     context: { projectId: "a", threadId: null },
-    sidebarThreads: { status: "ready", projects, threads, sections: [] }, sdk,
+    sidebarThreads: { status: "ready", projects, threads, sections: [] },
+    sdk: { threads: { defaultExecutionOptions: async () => null }, providers: { models: async () => ({
+      models: [], modelLoadError: null, permissionCeiling: "full" as const, providers: [], selectedOnlyModels: [],
+    }) }, ...sdk },
     rpc: {
       getSettings: () => ({ ...settings, revision }),
       setProjectPinned: raw => {
@@ -67,7 +76,7 @@ describe("compact project rail", () => {
     expect(slot.getByRole("button", { name: /^Empty project, 0 threads/ })).toBeTruthy();
     expect(slot.getByRole("button", { name: /^Learn Anything, 1 thread · 1 working · 1 unread/ })).toBeTruthy();
     expect(slot.getByRole("button", { name: /^bb-plus, 1 thread · 1 need input/ })).toBeTruthy();
-    expect(slot.container.querySelector(".radar-project-tile-selected")?.getAttribute("aria-label")).toMatch(/^Learn Anything/);
+    expect(slot.container.querySelector(".radar-project-tile-selected")).toBeNull();
   });
 
   it("portals the card, opens projects, and expands a collapsed host sidebar", async () => {
@@ -75,7 +84,7 @@ describe("compact project rail", () => {
     const slot = renderRail({}, { state: "collapsed", openSidebar });
     await act(async () => {});
     const trigger = slot.getByRole("button", { name: /^Learn Anything,/ });
-    fireEvent.click(trigger);
+    fireEvent.contextMenu(trigger);
     const card = await screen.findByRole("dialog", { name: "Learn Anything" });
     expect(slot.container.contains(card)).toBe(false);
     expect(within(card).queryByText("Hidden helper")).toBeNull();
@@ -183,5 +192,86 @@ describe("compact project rail", () => {
     await waitFor(() => expect(setProjectPinned).toHaveBeenCalledOnce());
     await waitFor(() => expect(screen.getByRole("button", { name: "Pin Empty project" }).hasAttribute("disabled")).toBe(false));
     expect(slot.queryByRole("button", { name: /^Empty project,/ })).toBeNull();
+  });
+});
+
+describe("project selection filters the thread list", () => {
+  const rowIds = (container: HTMLElement) => Array.from(container.querySelectorAll(".radar-list [data-sidebar-thread-id]"))
+    .map(row => row.getAttribute("data-sidebar-thread-id"));
+
+  it("filters by the clicked tile, switches projects, and clears back to all projects", async () => {
+    const slot = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    expect(rowIds(slot.container).sort()).toEqual(["one", "two"]);
+    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    expect(rowIds(slot.container)).toEqual(["one"]);
+    expect(slot.getByRole("button", { name: /^Learn Anything,/ }).getAttribute("aria-pressed")).toBe("true");
+    const card = await screen.findByRole("dialog", { name: "Learn Anything" });
+    fireEvent.keyDown(card, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(slot.getByRole("button", { name: /^bb-plus,/ }));
+    expect(rowIds(slot.container)).toEqual(["two"]);
+    fireEvent.keyDown(await screen.findByRole("dialog", { name: "bb-plus" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(slot.getByRole("button", { name: "Show all projects" }));
+    expect(rowIds(slot.container).sort()).toEqual(["one", "two"]);
+    expect(slot.queryByRole("button", { name: "Show all projects" })).toBeNull();
+    expect(slot.container.querySelector(".radar-project-tile-selected")).toBeNull();
+    expect(slot.inspection.navigateCalls).toEqual([]);
+  });
+
+  it("opens a collapsed sidebar when selecting a project and retains the filter after remount", async () => {
+    const openSidebar = vi.fn();
+    const slot = renderRail({}, { state: "collapsed", openSidebar }, {}, {}, true);
+    await act(async () => {});
+    fireEvent.click(slot.getByRole("button", { name: /^bb-plus,/ }));
+    expect(openSidebar).toHaveBeenCalledOnce();
+    expect(rowIds(slot.container)).toEqual(["two"]);
+    slot.lifecycle.unmount();
+    const next = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    expect(rowIds(next.container)).toEqual(["two"]);
+    expect(next.getByRole("button", { name: /^bb-plus,/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(next.getByLabelText("Project filter: bb-plus")).toBeTruthy();
+  });
+
+  it("selects an empty project from the picker without falling back to other projects' threads", async () => {
+    const slot = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    fireEvent.click(slot.getByRole("button", { name: "All projects" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Empty project" }));
+    expect(rowIds(slot.container)).toEqual([]);
+    expect(slot.getByLabelText("Project filter: Empty project")).toBeTruthy();
+    expect(slot.getByText("No threads yet.")).toBeTruthy();
+    expect(slot.inspection.navigateCalls).toEqual([]);
+    fireEvent.click(slot.getByRole("button", { name: "Show all projects" }));
+    expect(rowIds(slot.container).sort()).toEqual(["one", "two"]);
+  });
+
+  it("keeps search and status filters within the selected project", async () => {
+    const slot = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.keyDown(await screen.findByRole("dialog", { name: "Learn Anything" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.change(slot.getByRole("searchbox", { name: "Filter threads" }), { target: { value: "Review" } });
+    await waitFor(() => expect(rowIds(slot.container)).toEqual([]));
+    fireEvent.click(slot.getByRole("button", { name: "Clear filter" }));
+    await waitFor(() => expect(rowIds(slot.container)).toEqual(["one"]));
+    fireEvent.click(slot.getByRole("radio", { name: "Waiting" }));
+    expect(rowIds(slot.container)).toEqual([]);
+  });
+
+  it("leaves Enter available for activating a pinned project's filter and card", async () => {
+    const slot = renderRail({ pinnedProjects: { b: true } }, {}, {}, {}, true);
+    await act(async () => {});
+    const tile = slot.getByRole("button", { name: /^bb-plus,/ });
+    tile.focus();
+    expect(fireEvent.keyDown(tile, { key: "Enter", code: "Enter" })).toBe(true);
+    // Browsers generate a native button click after an unhandled Enter key.
+    fireEvent.click(tile);
+    expect(rowIds(slot.container)).toEqual(["two"]);
+    expect(await screen.findByRole("dialog", { name: "bb-plus" })).toBeTruthy();
+    expect(slot.container.querySelector(".radar-project-tile-dragging")).toBeNull();
   });
 });

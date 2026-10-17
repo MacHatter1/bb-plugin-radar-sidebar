@@ -4,7 +4,7 @@ import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  experimental_Icon as HostIcon, experimental_useSidebarThreads, useBbContext, useBbNavigate, useSdk,
+  experimental_Icon as HostIcon, experimental_useSidebarThreads, useBbNavigate, useSdk,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import type { ProjectOrganisationChange } from "@/lib/projectOrganisation";
 import { useChangeProjectOrganisation, useSetProjectPinned, useSettingValues } from "./settingsStore";
 import { useScheduledThreads } from "./useScheduledThreads";
 import { RadarProjectCard } from "./RadarProjectCard";
+import { setProjectScope, useProjectScope } from "./projectScope";
 import "./projectRail.css";
 
 const tileStyle = (id: string): CSSProperties => ({ "--radar-project-hue": projectHue(id) }) as CSSProperties;
@@ -32,9 +33,9 @@ function RailPopover({ id, title, children, className = "" }: {
   </Popover.Content></Popover.Portal>;
 }
 
-function ProjectTile({ project, pinned, selected, open, onOpenChange, children }: {
+function ProjectTile({ project, pinned, selected, open, onOpenChange, onSelect, children }: {
   project: RailProject; pinned: boolean; selected: boolean; open: boolean;
-  onOpenChange: (open: boolean) => void; children: ReactNode;
+  onOpenChange: (open: boolean) => void; onSelect: () => void; children: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id, disabled: !pinned });
   const badge = projectRailBadge(project);
@@ -44,8 +45,10 @@ function ProjectTile({ project, pinned, selected, open, onOpenChange, children }
       {...(pinned ? attributes : {})} {...(pinned ? listeners : {})}
       className={`radar-project-tile${selected ? " radar-project-tile-selected" : ""}${isDragging ? " radar-project-tile-dragging" : ""}`}
       style={{ ...tileStyle(project.id), transform: CSS.Transform.toString(transform), transition }}
-      aria-label={`${project.name}, ${summary}`} aria-description={pinned ? "Pinned project. Press Enter to open its card, or Space and arrow keys to reorder." : undefined}
+      aria-label={`${project.name}, ${summary}`} aria-pressed={selected}
+      aria-description={pinned ? "Pinned project. Press Enter to filter its threads and open its card, or Space and arrow keys to reorder." : "Filter this project's threads and open its card."}
       title={`${project.name}\n${summary}`}
+      onClick={onSelect}
       onContextMenu={event => { event.preventDefault(); onOpenChange(true); }}
       onKeyDown={event => {
         if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
@@ -74,7 +77,7 @@ export interface RadarProjectRailProps {
  * and it works when another plugin supplies the thread list. */
 export function RadarProjectRail({ state, openSidebar }: RadarProjectRailProps = {}) {
   const { threads, projects, status } = experimental_useSidebarThreads();
-  const { projectId: activeProjectId } = useBbContext();
+  const projectScope = useProjectScope({ projects, status });
   const navigate = useBbNavigate();
   const sdk = useSdk();
   const settings = useSettingValues();
@@ -94,10 +97,16 @@ export function RadarProjectRail({ state, openSidebar }: RadarProjectRailProps =
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space", "Enter", "Tab"] },
+    }),
   );
   const changeOpen = (key: string, value: boolean) => setOpen(current => value ? key : current === key ? null : current);
   const finishNavigation = () => { setOpen(null); };
+  const selectProject = (projectId: string) => {
+    setProjectScope(projectId);
+    if (state === "collapsed") openSidebar?.();
+  };
   const writePin = async (id: string, value: boolean) => {
     const ok = await setPinned(id, value);
     if (!ok) toast.error("Couldn’t save project pin", { description: "Please try again." });
@@ -122,14 +131,15 @@ export function RadarProjectRail({ state, openSidebar }: RadarProjectRailProps =
     if (read) toast.success(`Marked ${read} ${read === 1 ? "thread" : "threads"} read`);
   };
   const renderProject = (project: RailProject) => <ProjectTile key={project.id} project={project}
-    pinned={pinnedProjects[project.id] === true} selected={activeProjectId === project.id}
+    pinned={pinnedProjects[project.id] === true} selected={projectScope === project.id}
+    onSelect={() => selectProject(project.id)}
     open={open === `project:${project.id}`} onOpenChange={value => changeOpen(`project:${project.id}`, value)}>
     <RailPopover id={`${titleId}-${project.id}`} title={project.name}>
       <div style={tileStyle(project.id)}><RadarProjectCard project={project} threads={threads} schedules={schedules}
         pinned={pinnedProjects[project.id] === true} pinIndex={visiblePins.indexOf(project.id)} pinCount={visiblePins.length}
         organisation={projectOrganisation} setPinned={writePin} saveOrganisation={saveOrganisation} movePin={movePin} markRead={markRead}
         titleId={`${titleId}-${project.id}`} onNavigate={finishNavigation}
-        openProject={() => { finishNavigation(); if (state === "collapsed") openSidebar?.(); navigate.toProject(project.id); }}
+        openProject={() => { finishNavigation(); selectProject(project.id); navigate.toProject(project.id); }}
         newThread={() => { finishNavigation(); navigate.toCompose({ projectId: project.id, focusPrompt: true }); }}
         openThread={(id, split) => { finishNavigation(); if (split) navigate.toThread(id, { split: true }); else navigate.toThread(id); }} />
       </div>
@@ -210,7 +220,7 @@ export function RadarProjectRail({ state, openSidebar }: RadarProjectRailProps =
         <input className="radar-project-search" aria-label="Find a project" placeholder="Find a project…" value={query} onChange={event => setQuery(event.target.value)} />
         <div className="radar-project-picker-list">
           {projects.filter(project => project.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())).map(project => <div className="radar-project-picker-row" key={project.id}>
-            <button type="button" className="radar-project-picker-open" onClick={() => { finishNavigation(); if (state === "collapsed") openSidebar?.(); navigate.toProject(project.id); }}>
+            <button type="button" className="radar-project-picker-open" onClick={() => { finishNavigation(); selectProject(project.id); }}>
               <span className="radar-project-avatar" style={tileStyle(project.id)} aria-hidden="true">{projectInitials(project.isPersonal ? "Personal" : project.name)}</span>
               <span>{project.isPersonal ? "Personal" : project.name}</span>
             </button>
