@@ -153,7 +153,7 @@ to mark it read or archive it; each direction's action is a setting.
 ## Install
 
 ```sh
-bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.5.2' --yes
+bb plugin install 'git:https://github.com/MacHatter1/bb-plugin-radar-sidebar.git@^0.5.3' --yes
 ```
 
 The Git semver range tracks compatible `v0.5.x` releases. If you installed
@@ -163,6 +163,8 @@ Then pick it in **Settings → Appearance**: choose **Radar** for the sidebar.
 On a BB fork with `experimental_navRailSection`, open **Customize rail → Rail
 sections** and enable **Radar projects** for compact project tiles below the
 navigation icons. The section is independent of the selected thread list.
+On BB 0.44 or 0.45, keep Radar 0.5.2, which still includes the previous
+navigation replacement.
 
 <details>
 <summary><b>Install from a local clone</b></summary>
