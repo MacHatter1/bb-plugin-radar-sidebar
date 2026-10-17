@@ -9,6 +9,7 @@ import { makeProject, makeThread } from "./fixtures";
 import { EMPTY_PROJECT_ORGANISATION, changeProjectOrganisation } from "@/lib/projectOrganisation";
 import type { SavedSettings } from "@/lib/settings";
 import { seedSettings } from "./settingsStore";
+import { setProjectScope } from "./projectScope";
 
 const projects = [makeProject({ id: "a", name: "Learn Anything" }), makeProject({ id: "b", name: "bb-plus" }),
   makeProject({ id: "c", name: "Empty project" })];
@@ -49,7 +50,7 @@ function renderRail(saved: SavedSettings = {}, props: RadarProjectRailProps = {}
   });
 }
 
-afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); setProjectScope(null); localStorage.clear(); });
 
 describe("optional rail registration", () => {
   it("keeps the thread list and settings loadable on a BB without the extension", async () => {
@@ -218,6 +219,26 @@ describe("project selection filters the thread list", () => {
     expect(slot.queryByRole("button", { name: "Show all projects" })).toBeNull();
     expect(slot.container.querySelector(".radar-project-tile-selected")).toBeNull();
     expect(slot.inspection.navigateCalls).toEqual([]);
+  });
+
+  it("switches the selected rail tile and thread list when storage is full and retains that choice after remount", async () => {
+    const slot = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    expect(rowIds(slot.container)).toEqual(["one"]);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Full storage", "QuotaExceededError");
+    });
+    fireEvent.click(slot.getByRole("button", { name: /^bb-plus,/ }));
+    expect(rowIds(slot.container)).toEqual(["two"]);
+    expect(slot.getByRole("button", { name: /^bb-plus,/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(slot.getByLabelText("Project filter: bb-plus").textContent).toContain("bb-plus");
+    expect(localStorage.getItem("radar-sidebar:rail-scope:v1")).toBe("a");
+    slot.lifecycle.unmount();
+    const next = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    expect(rowIds(next.container)).toEqual(["two"]);
+    expect(next.getByRole("button", { name: /^bb-plus,/ }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("keeps right-click cards separate from selection and closes them when selecting a project", async () => {
