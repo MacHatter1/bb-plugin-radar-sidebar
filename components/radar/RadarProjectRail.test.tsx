@@ -97,10 +97,10 @@ describe("compact project rail", () => {
   it("opens a project-scoped composer and recent threads through BB navigation", async () => {
     const slot = renderRail();
     await act(async () => {});
-    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^Learn Anything,/ }));
     fireEvent.click(await screen.findByRole("button", { name: "New thread" }));
     expect(slot.inspection.navigateCalls).toContainEqual({ method: "toCompose", options: { projectId: "a", focusPrompt: true } });
-    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^Learn Anything,/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Open Polish dashboard" }), { metaKey: true });
     expect(slot.inspection.navigateCalls).toContainEqual({ method: "toThread", threadId: "one", options: { split: true } });
   });
@@ -109,12 +109,12 @@ describe("compact project rail", () => {
     const slot = renderRail();
     await act(async () => {});
     const trigger = slot.getByRole("button", { name: /^Learn Anything,/ });
-    trigger.focus(); fireEvent.click(trigger);
+    trigger.focus(); fireEvent.contextMenu(trigger);
     const card = await screen.findByRole("dialog", { name: "Learn Anything" });
     fireEvent.keyDown(card, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
-    fireEvent.click(trigger);
+    fireEvent.contextMenu(trigger);
     await screen.findByRole("dialog");
     slot.lifecycle.unmount();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -136,7 +136,7 @@ describe("compact project rail", () => {
     const slot = renderRail({ projectOrganisation: { ...EMPTY_PROJECT_ORGANISATION,
       collections: { work: { name: "Work", collapsed: true } } } });
     await act(async () => {});
-    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^Learn Anything,/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Collection…" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Collection" }), { target: { value: "work" } });
     fireEvent.click(screen.getByRole("button", { name: "Save collection" }));
@@ -149,7 +149,7 @@ describe("compact project rail", () => {
   it("changes pin order through the atomic layout operation", async () => {
     const slot = renderRail({ pinnedProjects: { a: true, b: true }, projectOrganisation: { ...EMPTY_PROJECT_ORGANISATION, pinOrder: ["a", "b"] } });
     await act(async () => {});
-    fireEvent.click(slot.getByRole("button", { name: /^bb-plus,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^bb-plus,/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Move pin up" }));
     await waitFor(() => expect(slot.inspection.rpcCalls.some(call => call.method === "changeProjectOrganisation" &&
       JSON.stringify(call.input) === JSON.stringify({ kind: "move-pin", projectId: "b", beforeProjectId: "a" }))).toBe(true));
@@ -160,7 +160,7 @@ describe("compact project rail", () => {
     const markRead = vi.fn(async () => ({}));
     const slot = renderRail({}, {}, { threads: { markRead } });
     await act(async () => {});
-    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^Learn Anything,/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Mark project read" }));
     await waitFor(() => expect(markRead).toHaveBeenCalledExactlyOnceWith({ threadId: "one" }));
   });
@@ -168,7 +168,7 @@ describe("compact project rail", () => {
   it("creates, renames and removes a collection without losing its project", async () => {
     const slot = renderRail();
     await act(async () => {});
-    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^Learn Anything,/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Collection…" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Collection" }), { target: { value: "new" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Collection name" }), { target: { value: "Research" } });
@@ -206,18 +206,31 @@ describe("project selection filters the thread list", () => {
     fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
     expect(rowIds(slot.container)).toEqual(["one"]);
     expect(slot.getByRole("button", { name: /^Learn Anything,/ }).getAttribute("aria-pressed")).toBe("true");
-    const card = await screen.findByRole("dialog", { name: "Learn Anything" });
-    fireEvent.keyDown(card, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    expect(rowIds(slot.container)).toEqual(["one"]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(slot.getByRole("button", { name: /^bb-plus,/ }));
     expect(rowIds(slot.container)).toEqual(["two"]);
-    fireEvent.keyDown(await screen.findByRole("dialog", { name: "bb-plus" }), { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(slot.getByRole("button", { name: "Show all projects" }));
     expect(rowIds(slot.container).sort()).toEqual(["one", "two"]);
     expect(slot.queryByRole("button", { name: "Show all projects" })).toBeNull();
     expect(slot.container.querySelector(".radar-project-tile-selected")).toBeNull();
     expect(slot.inspection.navigateCalls).toEqual([]);
+  });
+
+  it("keeps right-click cards separate from selection and closes them when selecting a project", async () => {
+    const slot = renderRail({}, {}, {}, {}, true);
+    await act(async () => {});
+    fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
+    fireEvent.contextMenu(slot.getByRole("button", { name: /^bb-plus,/ }));
+    expect(await screen.findByRole("dialog", { name: "bb-plus" })).toBeTruthy();
+    expect(rowIds(slot.container)).toEqual(["one"]);
+    expect(slot.getByRole("button", { name: /^Learn Anything,/ }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(slot.getByRole("button", { name: /^bb-plus,/ }));
+    expect(rowIds(slot.container)).toEqual(["two"]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("opens a collapsed sidebar when selecting a project and retains the filter after remount", async () => {
@@ -252,8 +265,7 @@ describe("project selection filters the thread list", () => {
     const slot = renderRail({}, {}, {}, {}, true);
     await act(async () => {});
     fireEvent.click(slot.getByRole("button", { name: /^Learn Anything,/ }));
-    fireEvent.keyDown(await screen.findByRole("dialog", { name: "Learn Anything" }), { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.change(slot.getByRole("searchbox", { name: "Filter threads" }), { target: { value: "Review" } });
     await waitFor(() => expect(rowIds(slot.container)).toEqual([]));
     fireEvent.click(slot.getByRole("button", { name: "Clear filter" }));
@@ -262,7 +274,7 @@ describe("project selection filters the thread list", () => {
     expect(rowIds(slot.container)).toEqual([]);
   });
 
-  it("leaves Enter available for activating a pinned project's filter and card", async () => {
+  it("uses Enter to filter a pinned project and context-menu keys to open its card", async () => {
     const slot = renderRail({ pinnedProjects: { b: true } }, {}, {}, {}, true);
     await act(async () => {});
     const tile = slot.getByRole("button", { name: /^bb-plus,/ });
@@ -271,7 +283,14 @@ describe("project selection filters the thread list", () => {
     // Browsers generate a native button click after an unhandled Enter key.
     fireEvent.click(tile);
     expect(rowIds(slot.container)).toEqual(["two"]);
-    expect(await screen.findByRole("dialog", { name: "bb-plus" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(slot.container.querySelector(".radar-project-tile-dragging")).toBeNull();
+    for (const key of ["ContextMenu", "F10"]) {
+      fireEvent.keyDown(tile, { key, shiftKey: key === "F10" });
+      const card = await screen.findByRole("dialog", { name: "bb-plus" });
+      expect(rowIds(slot.container)).toEqual(["two"]);
+      fireEvent.keyDown(card, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    }
   });
 });

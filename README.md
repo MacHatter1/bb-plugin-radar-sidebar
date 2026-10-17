@@ -207,11 +207,11 @@ See the [interactive sidebar integration map](docs/radar-sidebar-integration-map
 for the thread-list, project-rail and settings extension points.
 
 The optional project section reuses saved project pins and collections. Click
-a tile to filter Radar's thread list to that project and open its card. The
-selected project appears above the thread filters; **Show all projects** clears
+a tile to filter Radar's thread list to that project. The selected project
+appears above the thread filters; **Show all projects** clears
 the project filter. This choice is remembered per client, and search and status
-filters apply within it. Right-click also opens the card, with its activity
-tally, recent threads, Open project, New thread, pin, read and collection
+filters apply within it. Right-click or press **Shift+F10** to open the card,
+with its activity tally, recent threads, Open project, New thread, pin, read and collection
 actions. The All projects button finds
 projects without active threads too. Drag pinned tiles to reorder them, or use
 Move pin up/down in their cards; collection cards expand/collapse, rename and

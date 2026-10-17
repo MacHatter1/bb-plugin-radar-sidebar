@@ -46,9 +46,13 @@ function ProjectTile({ project, pinned, selected, open, onOpenChange, onSelect, 
       className={`radar-project-tile${selected ? " radar-project-tile-selected" : ""}${isDragging ? " radar-project-tile-dragging" : ""}`}
       style={{ ...tileStyle(project.id), transform: CSS.Transform.toString(transform), transition }}
       aria-label={`${project.name}, ${summary}`} aria-pressed={selected}
-      aria-description={pinned ? "Pinned project. Press Enter to filter its threads and open its card, or Space and arrow keys to reorder." : "Filter this project's threads and open its card."}
+      aria-description={pinned ? "Pinned project. Press Enter to filter its threads, or Space and arrow keys to reorder. Right-click or press Shift+F10 to open its card." : "Filter this project's threads. Right-click or press Shift+F10 to open its card."}
       title={`${project.name}\n${summary}`}
-      onClick={onSelect}
+      onClick={event => {
+        // Prevent the popover trigger's automatic toggle when selecting.
+        event.preventDefault();
+        onSelect();
+      }}
       onContextMenu={event => { event.preventDefault(); onOpenChange(true); }}
       onKeyDown={event => {
         if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
@@ -104,6 +108,7 @@ export function RadarProjectRail({ state, openSidebar }: RadarProjectRailProps =
   const changeOpen = (key: string, value: boolean) => setOpen(current => value ? key : current === key ? null : current);
   const finishNavigation = () => { setOpen(null); };
   const selectProject = (projectId: string) => {
+    setOpen(null);
     setProjectScope(projectId);
     if (state === "collapsed") openSidebar?.();
   };
@@ -164,7 +169,7 @@ export function RadarProjectRail({ state, openSidebar }: RadarProjectRailProps =
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={() => setOpen(null)}
       onDragEnd={({ active, over }) => {
         if (over && typeof active.id === "string" && typeof over.id === "string") movePin(active.id, visiblePins.indexOf(over.id));
-      }} accessibility={{ screenReaderInstructions: { draggable: "Press Space to pick up a pinned project, use arrow keys to move it, and Space to drop. Escape cancels. Enter opens its project card." } }}>
+      }} accessibility={{ screenReaderInstructions: { draggable: "Press Space to pick up a pinned project, use arrow keys to move it, and Space to drop. Escape cancels. Enter filters its threads. Shift+F10 opens its project card." } }}>
       <SortableContext items={visiblePins} strategy={verticalListSortingStrategy}>
         {railProjects.filter(project => pinnedProjects[project.id] === true).map(renderProject)}
         {Object.entries(projectOrganisation.collections).map(([id, collection]) => {

@@ -33,13 +33,14 @@ the host keeps sections hidden by default and owns their ordering/visibility.
 
 The compact project tiles show active projects and saved empty pinned or
 collected projects. A tile's badge gives the highest-priority count: failed,
-needs input, working, unread, queued, then scheduled (clock). Click, Enter or
-right-click opens a portalled card with the complete tally, recent threads,
+needs input, working, unread, queued, then scheduled (clock). Right-click or
+press Shift+F10 to open a portalled card with the complete tally, recent threads,
 Open project, New thread, pin, read and collection actions. Open project also
 expands a collapsed desktop sidebar through the host's `openSidebar` prop.
-Clicking a tile also filters Radar's thread list to that project and expands a
-collapsed sidebar. The selected tile is marked; the project name appears above
-the thread filters with **Show all projects** to clear it. Search and status
+Clicking a tile or pressing Enter filters Radar's thread list to that project
+and expands a collapsed sidebar without opening the card. The selected tile
+is marked; the project name appears above the thread filters with
+**Show all projects** to clear it. Search and status
 filters apply within that project. The choice is remembered per client and is
 cleared if the project is deleted, once the project directory finishes loading.
 Right-click opens a card without changing the filter. Cards and project actions
