@@ -338,6 +338,9 @@ selector update. Nothing here touches BB's data: thread operations go through th
 public SDK, navigation order through `setOrder`/`setVisible`, and client
 state lives under `radar-sidebar:*` localStorage keys.
 
+See the [interactive sidebar integration map](docs/radar-sidebar-integration-map.html)
+for the thread-list, project-rail and settings extension points.
+
 ## How it works
 
 ```mermaid
