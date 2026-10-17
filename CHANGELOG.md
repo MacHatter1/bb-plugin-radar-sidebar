@@ -6,6 +6,12 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+## 0.1.10
+
+Changes merged in [PR #15](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/15).
+
+### Fixed
+
 - Clicking a project tile or selecting a project in the rail's picker filters
   Radar's thread list to that project. The filter is remembered per client;
   **Show all projects** in the list header clears it. Project cards remain
