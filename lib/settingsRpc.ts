@@ -8,7 +8,6 @@ import {
   isValidSettingValue,
   sanitizeSaved,
   type SavedSettings,
-  type RailLiveStatus,
   type SettingKey,
   type SettingValues,
 } from "./settings";
@@ -50,7 +49,6 @@ export interface SettingChange {
   value: SettingValues[SettingKey];
 }
 
-export type RailLiveStatusChange = { itemId: string; mode: RailLiveStatus };
 export type ProjectPinChange = { projectId: string; pinned: boolean };
 const projectPinChange = schema<ProjectPinChange>((input) => {
   const projectId = (input as ProjectPinChange | null)?.projectId;
@@ -61,13 +59,14 @@ const projectPinChange = schema<ProjectPinChange>((input) => {
   return { ok: true, value: { projectId, pinned: pinned as boolean } };
 });
 
-const liveStatusChange = schema<RailLiveStatusChange>((input) => {
-  const itemId = (input as RailLiveStatusChange | null)?.itemId;
-  const mode = (input as RailLiveStatusChange | null)?.mode;
-  if (typeof itemId !== "string" || !isValidSettingValue("railLiveStatus", { [itemId]: mode })) {
-    return { ok: false, message: "Invalid live-status item or mode." };
+export type ContributorEnabledChange = { pluginId: string; enabled: boolean };
+const contributorChange = schema<ContributorEnabledChange>((input) => {
+  const pluginId = (input as ContributorEnabledChange | null)?.pluginId;
+  const enabled = (input as ContributorEnabledChange | null)?.enabled;
+  if (typeof pluginId !== "string" || typeof enabled !== "boolean" || !isValidSettingValue("disabledContributors", { [pluginId]: enabled })) {
+    return { ok: false, message: "Invalid contributor or enabled choice." };
   }
-  return { ok: true, value: { itemId, mode: mode as RailLiveStatus } };
+  return { ok: true, value: { pluginId, enabled } };
 });
 
 const noInput = schema<null>((value) =>
@@ -101,7 +100,7 @@ const saved = schema<SettingsSnapshot>((value) => {
 export const SETTINGS_RPC = {
   getSettings: { input: noInput, output: saved },
   setSetting: { input: change, output: saved },
-  setRailLiveStatus: { input: liveStatusChange, output: saved },
   setProjectPinned: { input: projectPinChange, output: saved },
   changeProjectOrganisation: { input: organisationChange, output: saved },
+  setContributorEnabled: { input: contributorChange, output: saved },
 } as const;

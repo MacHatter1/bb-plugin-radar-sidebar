@@ -7,9 +7,8 @@ import {
   SETTING_REQUIRES,
   type SettingKey,
 } from "@/lib/settings";
-import { ProjectBadges, ProjectGlyph, projectRailState, type RailProject } from "./RadarRailNavigation";
-import { projectHue } from "./railScope";
 import { useSetSetting, useSettingValues } from "./settingsStore";
+import { RadarContributorSettings } from "./RadarContributorSettings";
 
 /** The plugin's settings as BB's Settings page shows them: grouped into cards,
  * each with a small live picture of what its switches change. A choice shows
@@ -19,6 +18,7 @@ function useRadarSettings() {
   const save = useSetSetting();
   const [failed, setFailed] = useState<SettingKey | null>(null);
   return {
+    values,
     flag: (key: SettingKey): boolean => values[key] === true,
     text: (key: SettingKey): string => String(values[key]),
     failed,
@@ -124,87 +124,6 @@ function SettingRow({
 }
 
 /* ---- Live pictures: the plugin's own classes, fed the current choices. ---- */
-
-const RAIL_SAMPLE: (Omit<RailProject, "latest" | "live" | "threads"> & {
-  id: string;
-})[] = [
-  { id: "p-api", name: "api-server", waiting: 1, active: 0, unread: 0 },
-  { id: "p-app", name: "bb-appimage", waiting: 0, active: 2, unread: 3 },
-  { id: "p-docs", name: "docs-site", waiting: 0, active: 0, unread: 12 },
-];
-
-function RailPreview({ settings }: { settings: Settings }) {
-  const railNav = settings.flag("railNav");
-  const wide = settings.flag("wideRail");
-  const badges = settings.flag("projectBadges");
-  const style = settings.text("projectStyle");
-
-  if (!railNav) {
-    return (
-      <div className="radar-settings-above" aria-hidden="true">
-        <div className="radar-settings-above-nav">
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-        <i />
-        <i />
-        <i />
-        <em>Navigation sits above the list</em>
-      </div>
-    );
-  }
-
-  // With badges on, the project that needs you floats to the top.
-  const tiles = badges
-    ? RAIL_SAMPLE
-    : [RAIL_SAMPLE[1]!, RAIL_SAMPLE[2]!, RAIL_SAMPLE[0]!];
-  return (
-    <div className="radar-settings-railrow" aria-hidden="true">
-    <div
-      className={cn(
-        "radar-double-navigation radar-settings-rail",
-        wide && "radar-double-navigation-wide",
-      )}
-      style={{ "--radar-rail-width": wide ? "176px" : "60px" } as CSSProperties}
-    >
-      <nav className="radar-double-rail">
-        <div className="radar-rail-projects">
-          {tiles.map((project) => {
-            const full = { ...project, threads: 1, live: 0, latest: 0 };
-            return (
-              <button
-                key={project.id}
-                type="button"
-                tabIndex={-1}
-                className={cn(
-                  "radar-nav-icon-button radar-rail-project",
-                  style === "Rings" && "radar-rail-style-rings",
-                  style === "Chips" && "radar-rail-style-chips",
-                  `radar-rail-state-${projectRailState(full)}`,
-                )}
-                style={
-                  { "--radar-project-hue": projectHue(project.id) } as CSSProperties
-                }
-              >
-                <ProjectGlyph project={full} style={style} />
-                <span className="radar-rail-label">{project.name}</span>
-                {badges ? <ProjectBadges project={full} /> : null}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-    </div>
-    <div className="radar-settings-lines">
-      <i />
-      <i />
-      <i />
-    </div>
-    </div>
-  );
-}
 
 function SampleRow({
   title,
@@ -347,7 +266,6 @@ function SwipePreview({ settings }: { settings: Settings }) {
 }
 
 const PREVIEWS = {
-  rail: RailPreview,
   rows: RowsPreview,
   attention: AttentionPreview,
   swipe: SwipePreview,
@@ -380,6 +298,7 @@ export function RadarSettings() {
           </section>
         );
       })}
+      <RadarContributorSettings disabled={settings.values.disabledContributors} />
       {settings.failed ? (
         <p className="radar-settings-error" role="alert">
           Couldn’t save {SETTINGS[settings.failed].label}. Try again.

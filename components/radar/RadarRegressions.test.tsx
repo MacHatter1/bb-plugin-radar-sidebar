@@ -8,7 +8,7 @@ import type { KeyboardCoordinateGetter, KeyboardSensorOptions } from "@dnd-kit/c
 import type { PluginProvidersState } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { makeThread, makeProject, makeSection, NOW } from "./fixtures";
+import { makeThread, makeProject, makeSection, NOW, recordCoreThreadActions, threadActionCalls, type ThreadActionCall } from "./fixtures";
 import { useThreadGroups } from "./useThreadGroups";
 
 const probes = vi.hoisted(() => ({
@@ -55,14 +55,17 @@ const sdk: Record<string, unknown> = {
   threads: {
     defaultExecutionOptions: async () => null, context: async () => ({ usage: null }),
     update: async () => ({}), unarchive: async () => ({}), markRead: async () => ({}),
+    markUnread: async () => ({}), pin: async () => ({}), unpin: async () => ({}),
   },
   providers: { models: async () => ({ models: [] }) },
 };
 function mount(threads: PluginSidebarThread[], settings: Record<string, boolean> = {}, onNavigate = () => {}) {
-  return renderSlot(list, { ...props, onNavigate }, {
-    sdk, settings, sidebarThreads: { status: "ready", threads,
+  const runs: ThreadActionCall[] = [];
+  const slot = renderSlot(list, { ...props, onNavigate }, {
+    sdk, settings, threadActions: recordCoreThreadActions(runs), sidebarThreads: { status: "ready", threads,
       projects: [makeProject({ id: "proj_a" })], sections: [] },
   });
+  return Object.assign(slot, { actionCalls: () => threadActionCalls(slot.inspection, runs) });
 }
 beforeAll(() => { Element.prototype.scrollIntoView = () => {}; });
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals();
@@ -82,11 +85,11 @@ describe("sidebar behavior regressions", () => {
     for (const key of ["ArrowDown", "Enter", "Escape"]) fireEvent.keyDown(search, { key, ...composition });
     expect(document.activeElement).toBe(search);
     expect(search.value).toBe("needle");
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(onNavigate).not.toHaveBeenCalled();
     fireEvent.compositionEnd(search);
     fireEvent.keyDown(search, { key: "Enter", keyCode: 13 });
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({ method: "open", threadId: "needle" });
+    expect(slot.actionCalls()).toContainEqual({ method: "open", threadId: "needle" });
     expect(onNavigate).toHaveBeenCalledOnce();
   });
 
@@ -100,12 +103,12 @@ describe("sidebar behavior regressions", () => {
     fireEvent.compositionStart(input);
     fireEvent.change(input, { target: { value: "renamed" } });
     fireEvent.keyDown(input, { key: "Enter", ...composition });
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     fireEvent.keyDown(input, { key: "Escape", ...composition });
     expect(screen.getByRole("textbox", { name: "Rename thread" })).toBe(input);
     fireEvent.compositionEnd(input);
     fireEvent.keyDown(input, { key: "Enter", keyCode: 13 });
-    expect(slot.inspection.sidebarActionCalls).toEqual([{ method: "rename", threadId: "edit", title: "renamed" }]);
+    expect(slot.actionCalls()).toEqual([{ method: "rename", threadId: "edit", title: "renamed" }]);
   });
 
   it("applies an adaptiveCollapse setting change to already mounted rows", async () => {
@@ -192,7 +195,7 @@ describe("sidebar behavior regressions", () => {
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     fireEvent.click(screen.getByRole("button", { name: "Collapse all folders" }));
     fireEvent.keyDown(document.body, { key: "e" });
-    expect(slot.inspection.sidebarActionCalls.filter(call => call.method === "archive")).toEqual([]);
+    expect(slot.actionCalls().filter(call => call.method === "archive")).toEqual([]);
   });
 
   it.each(["arrows", "tab"])("returns %s focus to a visible parent when its child is folded", (focus) => {
@@ -211,7 +214,7 @@ describe("sidebar behavior regressions", () => {
     const slot = mount([makeThread({ id: "archive" })]);
     fireEvent.keyDown(document.body, { key: "ArrowDown" });
     fireEvent.keyDown(document.body, { key: "e" });
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({ method: "archive", threadId: "archive" });
+    expect(slot.actionCalls()).toContainEqual({ method: "archive", threadId: "archive" });
     expect(success).not.toHaveBeenCalled();
   });
 
@@ -220,8 +223,8 @@ describe("sidebar behavior regressions", () => {
     const slot = mount([makeThread({ id: "parent" }), makeThread({ id: "child", parentThreadId: "parent" })]);
     fireEvent.click(slot.container.querySelector('[data-sidebar-thread-id="parent"]')!, { ctrlKey: true });
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
-    // The SDK harness records archive(), but does not archive anything or confirm.
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({ method: "archive", threadId: "parent" });
+    // The fake records bb's Archive running, but archives and confirms nothing.
+    expect(slot.actionCalls()).toContainEqual({ method: "archive", threadId: "parent" });
     expect(success).not.toHaveBeenCalled();
   });
 

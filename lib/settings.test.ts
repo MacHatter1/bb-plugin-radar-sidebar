@@ -32,35 +32,39 @@ describe("settings definitions", () => {
   });
 });
 
+describe("contributor settings", () => {
+  it("copies valid contributor preferences and rejects malformed maps", () => {
+    const map = { teams: true, sibyl: false };
+    const saved = sanitizeSaved({ disabledContributors: map });
+    expect(saved.disabledContributors).toEqual(map);
+    expect(saved.disabledContributors).not.toBe(map);
+    for (const invalid of [null, [], { constructor: true }, { "teams/nav": true }, { teams: "yes" }, Object.fromEntries(Array.from({ length: 129 }, (_, i) => [`p-${i}`, true]))]) {
+      expect(isValidSettingValue("disabledContributors", invalid)).toBe(false);
+    }
+  });
+});
+
 describe("project pin settings", () => {
   it("defaults to no pins and copies saved project choices", () => {
     expect(DEFAULT_SETTINGS.pinnedProjects).toEqual({});
     const map = { proj_a: true, proj_b: false };
-    const saved = sanitizeSaved({ pinnedProjects: map, railNav: true });
-    expect(saved).toEqual({ pinnedProjects: map, railNav: true });
+    const saved = sanitizeSaved({ pinnedProjects: map, twoLineTitles: true });
+    expect(saved).toEqual({ pinnedProjects: map, twoLineTitles: true });
     expect(saved.pinnedProjects).not.toBe(map);
   });
 
   it.each([null, [], true, { "": true }, { constructor: true }, { proj_a: "yes" }, JSON.parse('{"__proto__":true}'), { ["x".repeat(129)]: true }])("rejects invalid project pins %j", (value) => {
     expect(isValidSettingValue("pinnedProjects", value)).toBe(false);
-    expect(sanitizeSaved({ pinnedProjects: value, railNav: true })).toEqual({ railNav: true });
+    expect(sanitizeSaved({ pinnedProjects: value, twoLineTitles: true })).toEqual({ twoLineTitles: true });
   });
 });
 
-describe("rail live status settings", () => {
-  it("defaults every item to Off with no saved choices", () => {
-    expect(DEFAULT_SETTINGS.railLiveStatus).toEqual({});
-  });
-
-  it("parses and copies valid per-item choices alongside other settings", () => {
-    const map = { "dot/dot": "icon", "alpha/beta": "badge", "gamma/nav": "off" };
-    const saved = sanitizeSaved({ railNav: true, railLiveStatus: map, unknown: 42 });
-    expect(saved).toEqual({ railNav: true, railLiveStatus: map });
-    expect(saved.railLiveStatus).not.toBe(map);
-  });
-
-  it.each([null, [], "icon", true, { "dot/dot": "other" }, { "dot/dot": 1 }, { "": "icon" }, JSON.parse('{"__proto__":"icon"}'), { constructor: "badge" }])("rejects an invalid map %j", (value) => {
-    expect(isValidSettingValue("railLiveStatus", value)).toBe(false);
-    expect(sanitizeSaved({ railLiveStatus: value, railNav: true })).toEqual({ railNav: true });
+describe("retired rail settings", () => {
+  it("drops the rail's switches but keeps the stored project arrangement", () => {
+    const pinnedProjects = { proj_a: true };
+    expect(sanitizeSaved({
+      railNav: true, wideRail: true, projectBadges: false, projectStyle: "Rings",
+      railLiveStatus: { "dot/dot": "icon" }, pinnedProjects, twoLineTitles: true,
+    })).toEqual({ pinnedProjects, twoLineTitles: true });
   });
 });

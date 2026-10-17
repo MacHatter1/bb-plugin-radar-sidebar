@@ -52,10 +52,13 @@ export default async function plugin(bb: BbPluginApi) {
       ...current,
       projectOrganisation: changeProjectOrganisation(current.projectOrganisation ?? EMPTY_PROJECT_ORGANISATION, current.pinnedProjects ?? {}, change),
     })),
-    // Patch only this item against the latest map, inside the same write queue.
-    setRailLiveStatus: ({ itemId, mode }) => update((current) => ({
-      ...current, railLiveStatus: { ...current.railLiveStatus, [itemId]: mode },
-    })),
+    setContributorEnabled: ({ pluginId, enabled }) => update((current) => {
+      const disabledContributors = { ...current.disabledContributors, [pluginId]: !enabled };
+      // Enabled is the default, so avoid accumulating old enabled entries.
+      if (enabled) delete disabledContributors[pluginId];
+      if (!isValidSettingValue("disabledContributors", disabledContributors)) throw new Error("Too many saved contributor choices.");
+      return { ...current, disabledContributors };
+    }),
   });
 
   bb.onDispose(() => {

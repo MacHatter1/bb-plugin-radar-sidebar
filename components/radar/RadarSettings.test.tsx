@@ -24,16 +24,16 @@ describe("settings section", () => {
   it("groups the settings into cards and shows every one once", () => {
     mount();
     expect(screen.getAllByRole("region").map((card) => card.getAttribute("aria-label"))).toEqual([
-      "Navigation rail", "Thread rows", "Attention and feedback", "Swipe actions",
+      "Thread rows", "Attention and feedback", "Swipe actions", "Plugin contributions",
     ]);
     const labels = Array.from(document.querySelectorAll(".radar-setting-label")).map((label) => label.textContent);
     expect(labels).toEqual(SETTING_GROUPS.flatMap((group) => group.keys.map((key) => SETTINGS[key].label)));
   });
 
   it("shows saved values and the defaults for the rest", () => {
-    mount({ railNav: true, projectBadges: false, defaultDensity: "compact" });
-    expect(toggle("Navigation rail").getAttribute("aria-checked")).toBe("true");
-    expect(toggle("Project badges").getAttribute("aria-checked")).toBe("false");
+    mount({ twoLineTitles: true, hoverCard: false, defaultDensity: "compact" });
+    expect(toggle("Two-line titles").getAttribute("aria-checked")).toBe("true");
+    expect(toggle("Hover peek card").getAttribute("aria-checked")).toBe("false");
     expect(toggle("Loud unread rows").getAttribute("aria-checked")).toBe("true");
     expect((screen.getByRole("combobox", { name: "Default row density" }) as HTMLSelectElement).value).toBe("compact");
   });
@@ -52,27 +52,24 @@ describe("settings section", () => {
   });
 
   it("greys out settings whose requirement is off, and says why", () => {
-    mount();
-    for (const label of ["Labelled rail (experimental)", "Project badges"]) {
-      expect((toggle(label) as HTMLButtonElement).disabled).toBe(true);
+    mount({ swipeActions: false });
+    for (const name of ["Swipe right", "Swipe left"]) {
+      expect((screen.getByRole("combobox", { name }) as HTMLSelectElement).disabled).toBe(true);
     }
-    expect((screen.getByRole("combobox", { name: "Project style" }) as HTMLSelectElement).disabled).toBe(true);
-    expect(screen.getAllByText("Turn on Navigation rail first")).toHaveLength(3);
-    expect((screen.getByRole("combobox", { name: "Swipe right" }) as HTMLSelectElement).disabled).toBe(false);
-  });
-
-  it("enables them once the requirement is on", () => {
-    mount({ railNav: true, swipeActions: false });
-    expect((toggle("Project badges") as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole("combobox", { name: "Swipe right" }) as HTMLSelectElement).disabled).toBe(true);
     expect(screen.getAllByText("Turn on Swipe actions first")).toHaveLength(2);
   });
 
   it("enables a dependent as soon as its requirement is switched on", () => {
+    mount({ swipeActions: false });
+    expect((screen.getByRole("combobox", { name: "Swipe right" }) as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.click(toggle("Swipe actions"));
+    expect((screen.getByRole("combobox", { name: "Swipe right" }) as HTMLSelectElement).disabled).toBe(false);
+  });
+
+  it("offers no navigation rail settings: BB 0.46 owns navigation", () => {
     mount();
-    expect((toggle("Project badges") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(toggle("Navigation rail"));
-    expect((toggle("Project badges") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole("switch", { name: "Navigation rail" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Project style" })).toBeNull();
   });
 
   it("puts a failed save back and says so", async () => {
@@ -84,43 +81,6 @@ describe("settings section", () => {
 });
 
 describe("settings previews", () => {
-  const railTiles = () => Array.from(document.querySelectorAll(".radar-settings-rail .radar-rail-label")).map((label) => label.textContent);
-
-  it("shows navigation above the list while the rail is off", () => {
-    mount();
-    expect(screen.getByText("Navigation sits above the list")).toBeTruthy();
-    expect(document.querySelector(".radar-settings-rail")).toBeNull();
-  });
-
-  it("shows the rail with badges and the needs-you project on top", () => {
-    mount({ railNav: true });
-    expect(railTiles()).toEqual(["api-server", "bb-appimage", "docs-site"]);
-    expect(document.querySelectorAll(".radar-settings-rail .radar-rail-badge-waiting")).toHaveLength(1);
-    expect(document.querySelector(".radar-settings-rail .radar-double-navigation-wide")).toBeNull();
-  });
-
-  it("drops the badges and the ordering when Project badges is off", () => {
-    mount({ railNav: true, projectBadges: false });
-    expect(railTiles()).toEqual(["bb-appimage", "docs-site", "api-server"]);
-    expect(document.querySelector(".radar-settings-rail .radar-rail-badges")).toBeNull();
-  });
-
-  it("widens the preview rail with Labelled rail", () => {
-    mount({ railNav: true, wideRail: true });
-    expect(document.querySelector(".radar-settings-rail.radar-double-navigation-wide")).not.toBeNull();
-  });
-
-  it.each([
-    ["Tiles", ".radar-rail-monogram", ".radar-rail-ring"],
-    ["Rings", ".radar-rail-ring", ".radar-rail-monogram"],
-    ["Chips", ".radar-rail-chip", ".radar-rail-monogram"],
-  ])("draws the preview projects in the %s style", (style, present, absent) => {
-    mount({ railNav: true, projectStyle: style });
-    const preview = document.querySelector(".radar-settings-rail")!;
-    expect(preview.querySelector(present)).not.toBeNull();
-    expect(preview.querySelector(absent)).toBeNull();
-  });
-
   it("follows the row settings", () => {
     mount({ defaultDensity: "compact", twoLineTitles: true, loudUnread: false });
     const list = document.querySelector(".radar-settings-list")!;

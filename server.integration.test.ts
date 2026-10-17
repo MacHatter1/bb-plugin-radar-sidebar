@@ -71,23 +71,23 @@ describe("settings host integration", () => {
   it("preserves legacy preferences, concurrent item edits and revisions through a reload", async () => {
     let host = createFakePluginHost({ pluginId: "radar-sidebar" });
     try {
-      await host.bb.storage.kv.set("settings", { motion: false, railLiveStatus: { "existing/nav": "badge" } });
+      await host.bb.storage.kv.set("settings", { motion: false, pinnedProjects: { existing: true } });
       await plugin(host.bb);
       const rpc = host.harness.behavior;
       await Promise.all([
-        rpc.callRpc("setRailLiveStatus", { itemId: "alpha/a", mode: "badge" }),
-        rpc.callRpc("setRailLiveStatus", { itemId: "beta/b", mode: "icon" }),
-        rpc.callRpc("setSetting", { key: "railNav", value: true }),
+        rpc.callRpc("setProjectPinned", { projectId: "alpha", pinned: true }),
+        rpc.callRpc("setProjectPinned", { projectId: "beta", pinned: true }),
+        rpc.callRpc("setSetting", { key: "twoLineTitles", value: true }),
       ]);
-      const expected = {
-        motion: false, railNav: true,
-        railLiveStatus: { "existing/nav": "badge", "alpha/a": "badge", "beta/b": "icon" }, revision: 3,
-      };
-      expect(await rpc.callRpc("getSettings")).toEqual(expected);
+      const expected = await rpc.callRpc("getSettings") as Record<string, unknown>;
+      expect(expected).toMatchObject({
+        motion: false, twoLineTitles: true,
+        pinnedProjects: { existing: true, alpha: true, beta: true }, revision: 3,
+      });
       host = await host.harness.lifecycle.reload(plugin);
       expect(await host.harness.behavior.callRpc("getSettings")).toEqual(expected);
-      expect(await host.harness.behavior.callRpc("setRailLiveStatus", { itemId: "alpha/a", mode: "off" }))
-        .toEqual({ ...expected, railLiveStatus: { ...expected.railLiveStatus, "alpha/a": "off" }, revision: 4 });
+      expect(await host.harness.behavior.callRpc("setProjectPinned", { projectId: "alpha", pinned: false }))
+        .toMatchObject({ pinnedProjects: { existing: true, beta: true }, revision: 4 });
     } finally {
       await host.harness.lifecycle.dispose();
     }
@@ -97,7 +97,7 @@ describe("settings host integration", () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "radar-sidebar" });
     try {
       await plugin(bb);
-      await expect(harness.behavior.callRpc("setRailLiveStatus", { itemId: "__proto__", mode: "icon" }))
+      await expect(harness.behavior.callRpc("setProjectPinned", { projectId: "__proto__", pinned: true }))
         .rejects.toThrow("rpc input validation failed");
       await expect(harness.behavior.callRpc("setSetting", { key: "revision", value: 99 }))
         .rejects.toThrow("rpc input validation failed");
@@ -108,17 +108,62 @@ describe("settings host integration", () => {
     }
   });
 
+  it("keeps concurrent contributor toggles, rejects invalid identities and preserves them through reload", async () => {
+    let host = createFakePluginHost({ pluginId: "radar-sidebar" });
+    try {
+      await plugin(host.bb);
+      await Promise.all([
+        host.harness.behavior.callRpc("setContributorEnabled", { pluginId: "teams", enabled: false }),
+        host.harness.behavior.callRpc("setContributorEnabled", { pluginId: "sibyl", enabled: false }),
+      ]);
+      const expected = { revision: 2, disabledContributors: { teams: true, sibyl: true } };
+      expect(await host.harness.behavior.callRpc("getSettings")).toEqual(expected);
+      host = await host.harness.lifecycle.reload(plugin);
+      expect(await host.harness.behavior.callRpc("getSettings")).toEqual(expected);
+      await expect(host.harness.behavior.callRpc("setContributorEnabled", { pluginId: "__proto__", enabled: false })).rejects.toThrow("rpc input validation failed");
+      await expect(host.harness.behavior.callRpc("setContributorEnabled", { pluginId: "teams", enabled: "false" })).rejects.toThrow("rpc input validation failed");
+      expect(await host.harness.behavior.callRpc("setContributorEnabled", { pluginId: "teams", enabled: true })).toEqual({ revision: 3, disabledContributors: { sibyl: true } });
+    } finally { await host.harness.lifecycle.dispose(); }
+  });
+
+  it("rejects excess contributor choices without dropping saved opt-outs and can still re-enable an owner", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "radar-sidebar" });
+    try {
+      const disabledContributors = Object.fromEntries(Array.from({ length: 128 }, (_, i) => [`p-${i}`, true]));
+      await bb.storage.kv.set("settings", { disabledContributors });
+      await plugin(bb);
+      await expect(harness.behavior.callRpc("setContributorEnabled", { pluginId: "extra", enabled: false })).rejects.toThrow("Too many saved contributor choices.");
+      expect(await harness.behavior.callRpc("getSettings")).toEqual({ revision: 0, disabledContributors });
+      const result = await harness.behavior.callRpc("setContributorEnabled", { pluginId: "p-0", enabled: true }) as { disabledContributors: Record<string, boolean>; revision: number };
+      expect(result.revision).toBe(1);
+      expect(Object.keys(result.disabledContributors)).toHaveLength(127);
+      expect(result.disabledContributors["p-0"]).toBeUndefined();
+    } finally { await harness.lifecycle.dispose(); }
+  });
+
   it("keeps processing writes after the host rejects a change over its KV size limit", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "radar-sidebar" });
     try {
+      // Each value is valid on its own; together they pass the 256KB KV limit.
+      const id = (prefix: string, i: number) => `${prefix}${i}`.padEnd(128, "x");
+      const ids = Array.from({ length: 512 }, (_, i) => id("p", i));
+      const pinnedProjects = Object.fromEntries(ids.map(project => [project, true]));
+      const collections = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [id("c", i), { name: "n".repeat(64), collapsed: false }]));
+      const tooLarge = {
+        pinOrder: ids,
+        collections,
+        projectCollections: Object.fromEntries(ids.map((project, i) => [project, id("c", i % 64)])),
+      };
+      await bb.storage.kv.set("settings", { pinnedProjects });
       await plugin(bb);
-      const tooLarge = Object.fromEntries(Array.from({ length: 2_000 }, (_, i) => [`nav/${i}/${"x".repeat(150)}`, "badge"]));
+      expect(JSON.stringify({ pinnedProjects, projectOrganisation: tooLarge }).length).toBeGreaterThan(256 * 1024);
       const results = await Promise.allSettled([
-        harness.behavior.callRpc("setSetting", { key: "railLiveStatus", value: tooLarge }),
-        harness.behavior.callRpc("setSetting", { key: "railNav", value: true }),
+        harness.behavior.callRpc("setSetting", { key: "projectOrganisation", value: tooLarge }),
+        harness.behavior.callRpc("setSetting", { key: "twoLineTitles", value: true }),
       ]);
       expect(results.map(result => result.status)).toEqual(["rejected", "fulfilled"]);
-      expect(await harness.behavior.callRpc("getSettings")).toEqual({ railNav: true, revision: 1 });
+      expect(String((results[0] as PromiseRejectedResult).reason)).toMatch(/the limit is/);
+      expect(await harness.behavior.callRpc("getSettings")).toEqual({ pinnedProjects, twoLineTitles: true, revision: 1 });
     } finally {
       await harness.lifecycle.dispose();
     }

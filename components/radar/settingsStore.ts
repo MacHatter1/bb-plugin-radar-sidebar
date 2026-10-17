@@ -5,7 +5,6 @@ import {
   isValidSettingValue,
   sanitizeSaved,
   type SavedSettings,
-  type RailLiveStatus,
   type SettingKey,
   type SettingValues,
 } from "@/lib/settings";
@@ -55,7 +54,7 @@ function sameSaved(a: SavedSettings, b: SavedSettings): boolean {
       if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) return false;
       continue;
     }
-    if (key !== "railLiveStatus" && key !== "pinnedProjects") return false;
+    if (key !== "disabledContributors" && key !== "pinnedProjects") return false;
     const left = a[key];
     const right = b[key];
     if (!left || !right) return false;
@@ -199,18 +198,6 @@ export function useSetSetting(): <K extends SettingKey>(
   }, [rpc]);
 }
 
-/** Patch one accessory instead of submitting a potentially stale whole map. */
-export function useSetRailLiveStatus(): (itemId: string, mode: RailLiveStatus) => Promise<boolean> {
-  const rpc = useRpc<typeof SETTINGS_RPC>();
-  return useCallback(async (itemId, mode) => {
-    if (!isValidSettingValue("railLiveStatus", { [itemId]: mode })) return false;
-    return enqueue(
-      (base) => ({ ...base, railLiveStatus: { ...base.railLiveStatus, [itemId]: mode } }),
-      () => rpc.call("setRailLiveStatus", { itemId, mode }),
-    );
-  }, [rpc]);
-}
-
 /** Patch one project pin without overwriting another window's pins. */
 export function useSetProjectPinned(): (projectId: string, pinned: boolean) => Promise<boolean> {
   const rpc = useRpc<typeof SETTINGS_RPC>();
@@ -241,6 +228,18 @@ export function useChangeProjectOrganisation(): (change: ProjectOrganisationChan
         } catch { return base; }
       },
       () => rpc.call("changeProjectOrganisation", parsed.data),
+    );
+  }, [rpc]);
+}
+
+/** Atomic contributor toggle: concurrent clients cannot overwrite one another. */
+export function useSetContributorEnabled(): (pluginId: string, enabled: boolean) => Promise<boolean> {
+  const rpc = useRpc<typeof SETTINGS_RPC>();
+  return useCallback(async (pluginId, enabled) => {
+    if (!isValidSettingValue("disabledContributors", { [pluginId]: !enabled })) return false;
+    return enqueue(
+      (base) => ({ ...base, disabledContributors: { ...base.disabledContributors, [pluginId]: !enabled } }),
+      () => rpc.call("setContributorEnabled", { pluginId, enabled }),
     );
   }, [rpc]);
 }

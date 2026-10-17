@@ -32,7 +32,6 @@ import {
 } from "@dnd-kit/sortable";
 import {
   experimental_useProviders,
-  experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
   useSdk,
   type PluginSidebarThread,
@@ -50,6 +49,8 @@ import {
   swipeActionFromSetting,
 } from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
+import { useContributions } from "./useContributions";
+import { EMPTY_CONTRIBUTIONS, contributionActionId } from "@/lib/contributions";
 import { RadarThreadRow } from "./RadarThreadRow";
 import { activityTime, isRunningThread, threadAttention, timeAgo } from "./time";
 import {
@@ -59,7 +60,7 @@ import {
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
 import { useScheduledThreads } from "./useScheduledThreads";
-import { setRailScope, useValidatedRailScope } from "./railScope";
+import { useRadarThreadActions } from "./threadActions";
 import { useSettingValues } from "./settingsStore";
 import {
   useThreadGroups,
@@ -121,7 +122,7 @@ function writeStored(key: string, value: string): void {
 function useSidebarSettings() {
   const values = useSettingValues();
   return {
-    railNav: values.railNav,
+    disabledContributors: values.disabledContributors,
     hoverCard: values.hoverCard,
     celebrate: values.celebrate,
     motion: values.motion,
@@ -471,24 +472,12 @@ export function RadarThreadList({
   );
   const {
     status,
-    threads: allThreads,
+    threads,
     projects,
     sections,
     experimental_archived,
   } = experimental_useSidebarThreads(lifecyclesParam);
-  // The navigation rail can scope the list to one project.
-  const rememberedRailScope = useValidatedRailScope({ projects, status });
-  const railScope = settings.railNav ? rememberedRailScope : null;
-  const scopedProject = railScope ? projects.find((project) => project.id === railScope) : null;
-  const scopeName = scopedProject?.isPersonal ? "Personal" : scopedProject?.name ?? "Project";
-  const threads = useMemo(
-    () =>
-      railScope
-        ? allThreads.filter((thread) => thread.projectId === railScope)
-        : allThreads,
-    [allThreads, railScope],
-  );
-  const actions = experimental_useSidebarThreadActions();
+  const actions = useRadarThreadActions();
   const sdk = useSdk();
   const scheduledThreads = useScheduledThreads(threads, sdk);
   const { providers } = experimental_useProviders();
@@ -704,6 +693,9 @@ export function RadarThreadList({
     () => new Set(visibleFlattenedThreadIds),
     [visibleFlattenedThreadIds],
   );
+  const contributions = useContributions(visibleFlattenedThreadIds, settings.disabledContributors);
+  const contributionRows = contributions.rows;
+  const contributionClient = contributions.client;
   // Every host snapshot rebuilds the flattened order. Rows read it through a
   // ref so their select handler stays stable and the memo keeps them still.
   const visibleOrderRef = useRef(visibleFlattenedThreadIds);
@@ -1134,8 +1126,17 @@ export function RadarThreadList({
         danger: true,
       },
     ];
+    const pluginActions = contributionRows.get(menuThread.id)?.actions ?? [];
+    if (pluginActions.length > 0) {
+      items.push({ kind: "separator" }, { kind: "header", label: "Plugin actions" });
+      items.push(...pluginActions.map((action): RadarMenuItem => ({
+        kind: "item", id: contributionActionId(action), label: `${action.pluginName}: ${action.label}`,
+        icon: action.icon ?? "Puzzle", hostIcon: true, disabled: action.disabled,
+        href: action.kind === "link" ? action.href : undefined,
+      })));
+    }
     return items;
-  }, [menuThread, sections, childrenOf]);
+  }, [menuThread, sections, childrenOf, contributionRows]);
 
   const handleMenuSelect = useCallback(
     async (id: string) => {
@@ -1143,6 +1144,15 @@ export function RadarThreadList({
       setMenu(null);
       if (!thread) return;
       try {
+        if (id.startsWith("radar-extension:")) {
+          const action = contributionClient.getSnapshot().rows.get(thread.id)?.actions.find((item) => contributionActionId(item) === id);
+          if (!action || action.disabled) throw new Error("This contributor action is no longer available.");
+          if (action.kind === "link") return;
+          if (action.confirmation && !window.confirm(action.confirmation)) return;
+          const result = await contributionClient.execute(thread.id, action.key);
+          if (result.message) toast.success(result.message);
+          return;
+        }
         if (id === "open-split") {
           actions.open(thread.id, { split: true });
           onNavigate();
@@ -1177,7 +1187,7 @@ export function RadarThreadList({
         toast.error(problem(cause));
       }
     },
-    [menuThread, actions, sdk, onNavigate, markFamilyRead],
+    [menuThread, actions, sdk, onNavigate, markFamilyRead, contributionClient],
   );
 
   const commitRename = useCallback(
@@ -1243,6 +1253,7 @@ export function RadarThreadList({
           key={thread.id}
           thread={thread}
           scheduledFor={scheduledThreads.get(thread.id)}
+          contributions={contributionRows.get(thread.id) ?? EMPTY_CONTRIBUTIONS}
           depth={depth}
           isLastChild={isLastChild}
           projectName={projectNameFor(thread)}
@@ -1293,6 +1304,7 @@ export function RadarThreadList({
       );
     },
     [
+      contributionRows,
       scheduledThreads,
       projectNameFor,
       sectionById,
@@ -1466,19 +1478,6 @@ export function RadarThreadList({
       }
     >
       <div className="radar-list-header">
-        {railScope ? (
-          <button
-            type="button"
-            className="radar-list-scope"
-            aria-label={`Clear project filter: ${scopeName}`}
-            title="Show every project"
-            onClick={() => setRailScope(null)}
-          >
-            <Icon name="Folder" aria-hidden="true" />
-            <span>{scopeName}</span>
-            <Icon name="X" aria-hidden="true" />
-          </button>
-        ) : null}
         <div className="radar-search">
           <Icon
             name="Search"

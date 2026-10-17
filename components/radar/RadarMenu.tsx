@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { UrlLink, experimental_Icon as HostIcon } from "@get-bb/plugin-sdk/app";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +10,8 @@ export type RadarMenuItem =
       id: string;
       label: string;
       icon?: string;
+      hostIcon?: boolean;
+      href?: string;
       checked?: boolean;
       danger?: boolean;
       disabled?: boolean;
@@ -57,7 +60,7 @@ export function RadarMenu({
     };
     const onScroll = (event: Event) => {
       if (ref.current && ref.current.contains(event.target as Node)) return;
-      // An anchored rail menu only moves when its trigger's container scrolls.
+      // An anchored menu only moves when its trigger's container scrolls.
       // Chat updates can scroll another pane while someone is choosing an item.
       if (!triggerRef || (event.target as Node).contains(triggerRef.current)) onClose();
     };
@@ -80,8 +83,8 @@ export function RadarMenu({
 
   const moveFocus = (direction: 1 | -1 | "first" | "last") => {
     const buttons = Array.from(
-      ref.current?.querySelectorAll<HTMLButtonElement>(
-        'button[data-menu-item]:not(:disabled)',
+      ref.current?.querySelectorAll<HTMLElement>(
+        '[data-menu-item]:not(:disabled):not([aria-disabled="true"])',
       ) ?? [],
     );
     if (buttons.length === 0) return;
@@ -139,6 +142,18 @@ export function RadarMenu({
             </div>
           );
         }
+        const content = <>
+          {item.icon ? (
+            item.hostIcon ? <HostIcon name={item.icon} aria-hidden="true" className="radar-menu-icon" />
+              : <Icon name={item.icon} aria-hidden="true" className="radar-menu-icon" />
+          ) : <span className="radar-menu-icon" aria-hidden="true" />}
+          <span className="radar-menu-label">{item.label}</span>
+          {item.checked ? <Icon name="Check" aria-hidden="true" className="radar-menu-check" /> : null}
+        </>;
+        if (item.href && !item.disabled) {
+          return <UrlLink key={item.id} href={item.href} role="menuitem" data-menu-item=""
+            className="radar-menu-item" onClick={onClose}>{content}</UrlLink>;
+        }
         return (
           <button
             key={item.id}
@@ -152,15 +167,7 @@ export function RadarMenu({
             )}
             onClick={() => onSelect(item.id)}
           >
-            {item.icon ? (
-              <Icon name={item.icon} aria-hidden="true" className="radar-menu-icon" />
-            ) : (
-              <span className="radar-menu-icon" aria-hidden="true" />
-            )}
-            <span className="radar-menu-label">{item.label}</span>
-            {item.checked ? (
-              <Icon name="Check" aria-hidden="true" className="radar-menu-check" />
-            ) : null}
+            {content}
           </button>
         );
       })}

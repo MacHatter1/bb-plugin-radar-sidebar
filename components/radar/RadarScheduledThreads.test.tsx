@@ -4,7 +4,6 @@ import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { PluginBrowserBbSdk, PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { makeProject, makeThread } from "./fixtures";
 import { scheduledLabel } from "./useScheduledThreads";
-import { seedSettings } from "./settingsStore";
 
 type Message = Awaited<ReturnType<PluginBrowserBbSdk["threads"]["queue"]["list"]>>[number];
 const sendAt = Date.now() + 3_600_000;
@@ -17,16 +16,6 @@ const message = (threadId: string, at: number | null = sendAt): Message => ({
   senderThreadId: null, serviceTier: "default", waitingOn: at === null ? { kind: "thread-busy" } : { kind: "time" },
 });
 const app = await loadPluginApp(() => import("../../app"));
-function mountRail(threads: PluginSidebarThread[], messages: Message[], style = "Tiles") {
-  seedSettings({ railNav: true });
-  return renderSlot(app.experimentalSidebarNavigations[0]!, {
-    isCompactViewport: false, experimental_Original: () => null,
-  }, {
-    sdk: { threads: { queue: { list: async () => messages } } },
-    settings: { railNav: true, projectStyle: style },
-    sidebarThreads: { status: "ready", threads, projects: [makeProject({ id: "proj_a", name: "Scheduled project" })], sections: [] },
-  });
-}
 function mount(threads: PluginSidebarThread[], messages: Message[]) {
   return renderSlot(app.threadLists[0]!, {
     activeThreadId: null, activeProjectId: "proj_a", isCompactViewport: false,
@@ -92,54 +81,5 @@ describe("scheduled thread display", () => {
       expect(slot.container.querySelector(`[data-sidebar-thread-id="${id}"] .radar-status-word`)?.textContent).toBe(label);
     }
     expect(slot.container.querySelector(".radar-group-status")?.getAttribute("aria-label")).toBe("1 failed");
-  });
-});
-
-describe("scheduled project rail display", () => {
-  const tile = () => screen.getByRole("button", { name: "Scheduled project: show only this project" });
-
-  it.each(["Tiles", "Rings", "Chips"])("replaces the yellow waiting state with a static clock in %s", async style => {
-    mountRail([scheduled], [message(scheduled.id)], style);
-    await act(async () => {});
-    expect(tile().className).toContain("radar-rail-state-scheduled");
-    expect(tile().className).not.toContain("radar-rail-state-waiting");
-    expect(tile().querySelector(".radar-rail-badge-scheduled")?.textContent).toBe("1");
-    expect(tile().querySelector('.radar-rail-badge-scheduled [data-icon="Clock"]')).not.toBeNull();
-    expect(tile().querySelector(".radar-rail-badge-waiting")).toBeNull();
-    expect(tile().querySelector(".radar-rail-badge-active")).toBeNull();
-    expect(tile().querySelector(".radar-rail-ring-waiting")).toBeNull();
-    expect(tile().getAttribute("aria-description")).toBe("1 thread · 1 scheduled");
-  });
-
-  it("keeps genuine waiting and working counts separate from scheduled work", async () => {
-    mountRail([
-      scheduled,
-      makeThread({ id: "input", indicator: "waiting-for-input", hasPendingInteraction: true }),
-      makeThread({ id: "running", status: "active", indicator: "runtime" }),
-      makeThread({ id: "queued", indicator: "queued-waiting", queuedWork: "waiting" }),
-    ], [message(scheduled.id), message("queued", null)]);
-    await act(async () => {});
-    expect(tile().querySelector(".radar-rail-badge-waiting")?.textContent).toBe("2");
-    expect(tile().querySelector(".radar-rail-badge-active")?.textContent).toBe("1");
-    expect(tile().querySelector(".radar-rail-badge-scheduled")?.textContent).toBe("1");
-    expect(tile().getAttribute("aria-description")).toBe("4 threads · 2 waiting · 1 scheduled · 3 live");
-  });
-
-  it("leaves mixed immediate/scheduled items in the ordinary queue", async () => {
-    mountRail([scheduled], [message(scheduled.id), message(scheduled.id, null)]);
-    await act(async () => {});
-    expect(tile().querySelector(".radar-rail-badge-waiting")?.textContent).toBe("1");
-    expect(tile().querySelector(".radar-rail-badge-scheduled")).toBeNull();
-  });
-
-  it("restores the queued badge when scheduled work becomes due", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(sendAt - 500);
-    mountRail([scheduled], [message(scheduled.id)]);
-    await act(async () => {});
-    expect(tile().querySelector(".radar-rail-badge-scheduled")).not.toBeNull();
-    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
-    expect(tile().querySelector(".radar-rail-badge-scheduled")).toBeNull();
-    expect(tile().querySelector(".radar-rail-badge-waiting")?.textContent).toBe("1");
   });
 });

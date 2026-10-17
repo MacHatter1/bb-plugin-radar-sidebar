@@ -6,78 +6,73 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+BB 0.46 retired the sidebar navigation slot that Radar's rail was built on.
+On BB 0.46, 0.5.2 can't load at all: its frontend bundle imports the removed
+navigation hooks, so the thread list and settings disappear with the rail.
+This release replaces only the thread list and leaves navigation to BB's own
+rail, with an optional project section on forks supporting the new extension.
+
+### Removed
+
+- The navigation rail and Radar's navigation above the list. BB's own rail
+  now holds Home, plugins and your chosen destinations, and plugins can no
+  longer replace it. The rail's settings (Navigation rail, Labelled rail,
+  Project badges and Project style), its live-status placements and its
+  project filter over the list go with it. Project pins and collections
+  saved on the rail stay in the plugin's storage and are reused by the optional
+  project section below.
+
 ### Changed
 
-- Reorganise the plugin's settings page into four grouped cards (Navigation
-  rail, Thread rows, Attention and feedback, Swipe actions), each with a live
-  preview of its choices and short one-line descriptions. Settings that need
-  another are greyed out with a note until it is on. The setting keys and
-  defaults are unchanged.
+- Requires BB 0.46 or later (plugin SDK 0.6.37).
+- Archive and Delete run BB's own thread actions, so BB's confirmations and
+  undo apply as before. Opening, pinning, read state and rename go through
+  BB's navigation and SDK, as BB's own actions do. This replaces the retired
+  `experimental_useSidebarThreadActions`.
+- Reorganise the plugin's settings page into three grouped cards (Thread
+  rows, Attention and feedback, Swipe actions), each with a live preview of
+  its choices and short one-line descriptions. Settings that need another
+  are greyed out with a note until it is on. The setting keys and defaults
+  are unchanged.
 - The plugin now keeps its settings itself, shared by every device, instead
   of in BB's plugin settings, so BB's own flat settings list is gone and the
   page above is the only place to change them. Choices saved by earlier
   versions can't be carried over and return to their defaults once.
   `bb plugin config radar-sidebar` no longer lists them.
-- Retake the README's rail and settings screenshots for the badges and the
-  new settings page.
 
 ### Added
 
+- Feature-detect `experimental_navRailSection` and register **Radar projects**
+  on supporting BB forks. Compact tiles show live status/counts and open
+  portalled project cards with recent threads and project/new-thread/read
+  actions. Saved project pins and collections return, including drag/keyboard
+  pin ordering, collection management and an All projects picker. Enable the
+  section in Customize rail; clients without the extension keep working.
 - Show future scheduled queue work with a clock and Scheduled label, including
   folded families and group headers. The tooltip gives its local run time;
-  immediate queued work keeps the existing amber indicator. Project rail badges
-  also show a static scheduled clock, without counting future work as waiting
-  or working.
-- Drag pinned projects to reorder them, with keyboard dragging and Move pin
-  up/down menu alternatives. The chosen order persists across devices and
-  stays fixed as thread activity changes.
-- Named, collapsible project collections. Move projects into a new or existing
-  collection, rename or remove collections, and keep pins visible above them.
-  Organisation edits are atomic and preserve concurrent changes.
-- Project quick actions for starting a new thread and opening the local
-  checkout in detected desktop editor and terminal apps.
-- Mark project as read, with bounded requests, project-scoped unread snapshots
-  and feedback when any thread fails to update.
-- **Pin project / Unpin project** in the rail's project right-click menu on
-  every platform. Pinned projects appear first, remain visible without active
-  threads, and are remembered across reloads and devices.
-- **Open in Finder** in the rail's project right-click menu when using BB's
-  macOS desktop app. It opens the project's checkout on the viewing Mac and
-  reports when that project has no local folder.
-- Badges on the rail's project tiles: an amber count with a pulsing halo for
-  threads that need you, a green count in a spinning ring for work in
-  progress, and a count of unread threads. A thread counts once between
-  needs-you and working. A project with a thread that needs you moves to the
-  top of the tiles until that is resolved. Wide mode shows the badges as a
-  row of pills at the end of the tile. The tile's description carries the
-  tally for assistive tech.
-- A **Project badges** setting (`projectBadges`, on by default) turns the
-  badges and the needs-you ordering off. It applies when the rail is on.
+  immediate queued work keeps the existing amber indicator.
+- Experimental Radar v1 contributions: other BB plugins can supply bounded
+  thread badges, owned panel links and explicit context-menu RPC actions through
+  BB’s discoverable RPC interface. Reads are batched, cached and failure-isolated;
+  reload/removal, reconnects, timeouts and stale replies are reconciled without
+  changing BB’s core indicators or actions.
+- A Plugin contributions settings card with atomic, server-synced per-owner
+  opt-outs. Turning a contribution off keeps the plugin itself enabled.
+- A locally packable `bb-radar-contributions` contract package, contributor
+  authoring guide and tested, ready-to-copy Agent Teams integration adapter.
+  The package is not published and the adapter is not automatically activated.
 
 ### Fixed
 
-- Keep the scheduled clock clear of the active badge in narrow project tiles.
-  Scheduled counts remain visible in the wide rail and project tooltip.
-- Keep collection dialogs centered in the window. Temporarily hide visible
-  native browser panes in the viewing desktop while the form is open, then
-  restore them without stealing focus when it closes.
 - Keep pending settings edits visible while earlier saves finish; apply newer
   remote snapshots without letting stale replies or fetches overwrite them.
   Reconcile missed changes after realtime reconnects or the sidebar remounts.
-- Save live-status preferences as atomic per-item edits, so simultaneous edits
-  from different windows or devices do not overwrite unrelated accessories.
-  Existing stored choices remain readable.
-- Let a second click on More close it instead of closing on pointer-down and
-  immediately reopening on click, in both standard navigation and the rail.
 - Leave search and inline-rename keys to the IME while composing text, including
   the legacy key-code fallback used when confirming a candidate.
 - Keep queued work visible in folded families and group headers, separately
   from threads waiting for input from the user.
 - Correct the privacy and development notes to describe shared plugin KV
   preferences and the local first-paint cache.
-- Start the thread in the scoped project when you press New thread beside
-  the project's name in the rail's heading. It opened the composer with no
-  project chosen. Option-click still opens a split through BB's own action.
 
 ## 0.5.2 - 2026-10-04
 

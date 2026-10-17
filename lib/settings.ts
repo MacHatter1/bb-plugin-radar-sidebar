@@ -14,7 +14,7 @@ import { EMPTY_PROJECT_ORGANISATION, projectOrganisationSchema, type ProjectOrga
 type SettingDescriptor =
   | { type: "project-organisation"; label: string; description: string; default: ProjectOrganisation }
   | { type: "project-pin-map"; label: string; description: string; default: Record<string, boolean> }
-  | { type: "live-status-map"; label: string; description: string; default: Record<string, RailLiveStatus> }
+  | { type: "contributor-map"; label: string; description: string; default: Record<string, boolean> }
   | { type: "boolean"; label: string; description: string; default: boolean }
   | {
       type: "select";
@@ -25,52 +25,25 @@ type SettingDescriptor =
     };
 
 export const SETTINGS = {
+  // Shared by the optional project-rail section. Keep them on clients without
+  // that extension too, so an existing arrangement survives settings writes.
   projectOrganisation: {
     type: "project-organisation",
     label: "Project organisation",
-    description: "Saved pin order, collections and their collapsed state, arranged directly from the rail.",
+    description: "Saved pin order, collections and their collapsed state.",
     default: EMPTY_PROJECT_ORGANISATION,
   },
   pinnedProjects: {
     type: "project-pin-map",
     label: "Pinned projects",
-    description: "Projects kept at the top of the rail, chosen from each project's right-click menu.",
+    description: "Projects kept at the top of the project list.",
     default: {},
   },
-  railLiveStatus: {
-    type: "live-status-map",
-    label: "Live status",
-    description: "Per-item accessory placement, chosen from the navigation item's right-click menu.",
+  disabledContributors: {
+    type: "contributor-map",
+    label: "Plugin contributions",
+    description: "Disable individual plugins’ thread badges and context-menu actions without disabling the plugin itself.",
     default: {},
-  },
-  railNav: {
-    type: "boolean",
-    label: "Navigation rail",
-    description:
-      "Show a vertical navigation rail with project filters beside the thread list on desktop and mobile. Off keeps navigation above the list.",
-    default: false,
-  },
-  wideRail: {
-    type: "boolean",
-    label: "Labelled rail (experimental)",
-    description:
-      "Requires Navigation rail. Adds a toggle at the foot of the navigation rail that widens it to show labels, including BB's own footer actions. Experimental: uses BB's sidebar layout and falls back to icons when the expected layout is unavailable.",
-    default: false,
-  },
-  projectBadges: {
-    type: "boolean",
-    label: "Project badges",
-    description:
-      "Requires Navigation rail. Show needs-you, working and unread counts on the rail's project tiles, and keep projects that need you at the top.",
-    default: true,
-  },
-  projectStyle: {
-    type: "select",
-    label: "Project style",
-    description:
-      "Requires Navigation rail. How projects look on the rail: Tiles (hue squares with overlaid counts), Rings (state in the ring) or Chips (pills edged by state).",
-    options: ["Tiles", "Rings", "Chips"],
-    default: "Tiles",
   },
   defaultDensity: {
     type: "select",
@@ -152,18 +125,10 @@ export type SettingValues = {
     ? ProjectOrganisation
     : (typeof SETTINGS)[K] extends { type: "boolean" }
     ? boolean
-    : (typeof SETTINGS)[K] extends { type: "live-status-map" }
-      ? Record<string, RailLiveStatus>
-      : (typeof SETTINGS)[K] extends { type: "project-pin-map" }
-        ? Record<string, boolean>
-        : string;
+    : (typeof SETTINGS)[K] extends { type: "contributor-map" | "project-pin-map" }
+      ? Record<string, boolean>
+      : string;
 };
-
-export type RailLiveStatus = "off" | "badge" | "icon";
-
-export function isRailLiveStatus(value: unknown): value is RailLiveStatus {
-  return value === "off" || value === "badge" || value === "icon";
-}
 
 /** Every setting at its shipped default. */
 export const DEFAULT_SETTINGS = Object.fromEntries(
@@ -184,11 +149,12 @@ export function isValidSettingValue(key: SettingKey, value: unknown): boolean {
       && Object.entries(value).every(([id, pinned]) => id.length > 0 && id.length <= 128
         && !["__proto__", "constructor", "prototype"].includes(id) && typeof pinned === "boolean");
   }
-  if (descriptor.type === "live-status-map") {
+  if (descriptor.type === "contributor-map") {
     return value !== null && typeof value === "object" && !Array.isArray(value)
       && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-      && Object.entries(value).every(([id, mode]) => id.length > 0
-        && !["__proto__", "constructor", "prototype"].includes(id) && isRailLiveStatus(mode));
+      && Object.keys(value).length <= 128
+      && Object.entries(value).every(([id, disabled]) => /^[a-z0-9-]{1,128}$/.test(id)
+        && !["__proto__", "constructor", "prototype"].includes(id) && typeof disabled === "boolean");
   }
   return descriptor.type === "boolean"
     ? typeof value === "boolean"
@@ -198,17 +164,11 @@ export function isValidSettingValue(key: SettingKey, value: unknown): boolean {
 /** How the Settings section groups the settings, in display order. A setting
  *  with `requires` is greyed out until that boolean setting is on. */
 export const SETTING_GROUPS: readonly {
-  id: "rail" | "rows" | "attention" | "swipe";
+  id: "rows" | "attention" | "swipe";
   title: string;
   description: string;
   keys: readonly SettingKey[];
 }[] = [
-  {
-    id: "rail",
-    title: "Navigation rail",
-    description: "A vertical rail of destinations and projects beside the list.",
-    keys: ["railNav", "wideRail", "projectBadges", "projectStyle"],
-  },
   {
     id: "rows",
     title: "Thread rows",
@@ -231,9 +191,6 @@ export const SETTING_GROUPS: readonly {
 
 /** Settings that only apply once another boolean setting is on. */
 export const SETTING_REQUIRES: Partial<Record<SettingKey, SettingKey>> = {
-  wideRail: "railNav",
-  projectBadges: "railNav",
-  projectStyle: "railNav",
   swipeRight: "swipeActions",
   swipeLeft: "swipeActions",
 };
@@ -241,14 +198,9 @@ export const SETTING_REQUIRES: Partial<Record<SettingKey, SettingKey>> = {
 /** One short line per setting for the Settings section; the descriptor's
  *  longer description stays on hover and in BB's generated list. */
 export const SETTING_HINTS: Record<SettingKey, string> = {
-  projectOrganisation: "Drag pinned projects to reorder; right-click projects and collection headers to organise them.",
-  pinnedProjects: "Right-click a project to pin or unpin it in the rail.",
-  railLiveStatus: "Right-click a plugin destination with live status to choose Off, As a badge or Instead of the icon.",
-  railNav: "Destinations and project filters in a rail beside the list.",
-  wideRail: "Widen the rail to show labels. Experimental.",
-  projectBadges:
-    "Needs-you, working and unread counts on each project. Projects that need you float to the top.",
-  projectStyle: "Tiles, Rings or Chips for the rail's projects.",
+  projectOrganisation: "Pin order and collections for your projects.",
+  pinnedProjects: "Projects kept at the top.",
+  disabledContributors: "Badges and menu actions supplied by other plugins.",
   defaultDensity: "Starting row size. The header toggle overrides it per client.",
   twoLineTitles: "Wrap long titles onto a second line.",
   loudUnread: "Tint and accent finished threads you haven't seen.",
@@ -272,7 +224,7 @@ export function sanitizeSaved(raw: unknown): SavedSettings {
       if (parsed.success) saved[key] = parsed.data;
       continue;
     }
-    if (isValidSettingValue(key, value)) saved[key] = key === "railLiveStatus" || key === "pinnedProjects"
+    if (isValidSettingValue(key, value)) saved[key] = key === "disabledContributors" || key === "pinnedProjects"
       ? { ...(value as Record<string, unknown>) }
       : value;
   }

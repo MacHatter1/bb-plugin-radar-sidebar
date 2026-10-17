@@ -19,7 +19,6 @@ import {
   useSidebarThreadShortcut,
   type PluginBrowserBbSdk,
   type PluginSidebarThread,
-  type PluginSidebarThreadActions,
 } from "@get-bb/plugin-sdk/app";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/ui/icon";
@@ -28,12 +27,15 @@ import { isComposingKey } from "@/lib/keyboard";
 import { toast } from "sonner";
 import { isLiveThread, threadAttention } from "./time";
 import { scheduledLabel } from "./useScheduledThreads";
+import { useBindCoreThreadActions, type RadarThreadActions } from "./threadActions";
 import {
   formatReasoningLevel,
   useModelDisplayName,
   useThreadExecution,
 } from "./useThreadExecution";
 import { RadarHoverCard, type ContextUsage } from "./RadarHoverCard";
+import { RadarContributionBadges } from "./RadarContributionBadges";
+import { EMPTY_CONTRIBUTIONS, type ThreadContributions } from "@/lib/contributions";
 import { useRowSwipe } from "./useRowSwipe";
 import {
   swipeActionView,
@@ -330,10 +332,12 @@ function RadarThreadRowImpl({
   listFiltersArchived = true,
   hasChildren = false,
   isShortcutTarget,
+  contributions = EMPTY_CONTRIBUTIONS,
   scheduledFor,
 }: {
   thread: PluginSidebarThread;
   scheduledFor?: number;
+  contributions?: ThreadContributions;
   depth: number;
   isLastChild: boolean;
   projectName: string;
@@ -347,7 +351,7 @@ function RadarThreadRowImpl({
   isEditing: boolean;
   /** False inside a folded group or ancestor; suspend requests and gestures. */
   isVisible?: boolean;
-  actions: PluginSidebarThreadActions;
+  actions: RadarThreadActions;
   /** Relative activity time, e.g. "5m ago". A string rather than the clock,
    * so the minute tick re-renders only rows whose label actually moved. */
   timeText: string;
@@ -397,6 +401,7 @@ function RadarThreadRowImpl({
   const navigate = useBbNavigate();
   const { splitProps, layout: splitLayout } =
     experimental_useSidebarThreadSplit(thread.id);
+  useBindCoreThreadActions(thread, actions);
 
   const [renameValue, setRenameValue] = useState("");
   const [copiedBranch, setCopiedBranch] = useState(false);
@@ -1184,6 +1189,7 @@ function RadarThreadRowImpl({
         </span>
         <span className="radar-row-badges">
           {statusBadge}
+          <RadarContributionBadges badges={contributions.badges} />
           {shortcut ? (
             <kbd className="radar-kbd">{shortcut.label}</kbd>
           ) : null}
