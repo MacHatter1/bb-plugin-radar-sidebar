@@ -10,8 +10,11 @@ import {
   activityTime,
   isLiveThread,
   isRunningThread,
+  isWaitingThread,
+  threadAttention,
   timeGroupFor,
 } from "./time";
+import { EMPTY_SCHEDULES } from "./useScheduledThreads";
 
 /** A rendered group of threads: a time bucket, a project, or a section. */
 export interface ThreadGroup {
@@ -28,6 +31,10 @@ export interface ThreadGroup {
   live: number;
   /** Number of threads waiting for input in group. */
   needsUser: number;
+  /** Number of queued threads, distinct from input the user must provide. */
+  queued: number;
+  /** Threads whose queued work is exclusively scheduled for a future time. */
+  scheduled: number;
   /** Number of failed threads in group. */
   failed: number;
   /** Set for project groups so rows can hide a redundant project chip. */
@@ -41,6 +48,8 @@ interface SubtreeCounts {
   unread: number;
   live: number;
   needsUser: number;
+  queued: number;
+  scheduled: number;
   failed: number;
   kids: { id: string; title: string; dot: string | null }[];
 }
@@ -72,6 +81,7 @@ export function useThreadGroups(args: {
   projects: readonly PluginSidebarProject[];
   sections: readonly PluginSidebarSection[];
   now: number;
+  scheduledThreads?: ReadonlyMap<string, number>;
 }) {
   const {
     threads,
@@ -82,6 +92,7 @@ export function useThreadGroups(args: {
     projects,
     sections,
     now,
+    scheduledThreads = EMPTY_SCHEDULES,
   } = args;
 
   const projectById = useMemo(
@@ -150,12 +161,7 @@ export function useThreadGroups(args: {
     let unread = 0;
     for (const thread of allRows) {
       if (isLiveThread(thread)) live += 1;
-      if (
-        thread.indicator === "waiting-for-input" ||
-        thread.indicator === "queued-waiting"
-      ) {
-        waiting += 1;
-      }
+      if (isWaitingThread(thread)) waiting += 1;
       if (thread.isUnread) unread += 1;
     }
     return { live, waiting, unread };
@@ -168,12 +174,7 @@ export function useThreadGroups(args: {
     const matchesStatus = (thread: PluginSidebarThread) => {
       if (statusFilter === "all") return true;
       if (statusFilter === "live") return isLiveThread(thread);
-      if (statusFilter === "waiting") {
-        return (
-          thread.indicator === "waiting-for-input" ||
-          thread.indicator === "queued-waiting"
-        );
-      }
+      if (statusFilter === "waiting") return isWaitingThread(thread);
       if (statusFilter === "unread") return thread.isUnread;
       if (statusFilter === "pinned") return thread.isPinned;
       return true;
@@ -271,11 +272,11 @@ export function useThreadGroups(args: {
       let total = 1;
       let unread = root.isUnread ? 1 : 0;
       let live = Number(isRunningThread(root));
-      let needsUser = Number(root.indicator === "waiting-for-input");
-      let failed = Number(
-        root.indicator === "unread-error" ||
-        root.indicator === "queued-failed",
-      );
+      const attention = threadAttention(root, scheduledThreads.get(root.id));
+      let needsUser = Number(attention === "needs-user");
+      let queued = Number(attention === "queued");
+      let scheduled = Number(attention === "scheduled");
+      let failed = Number(attention === "failed");
       const kids: { id: string; title: string; dot: string | null }[] = [];
       const walk = (id: string, depth: number) => {
         if (depth > 25) return;
@@ -284,11 +285,14 @@ export function useThreadGroups(args: {
           if (child.isUnread) unread += 1;
           const childLive = isRunningThread(child);
           if (childLive) live += 1;
-          const childNeeds = child.indicator === "waiting-for-input";
+          const childAttention = threadAttention(child, scheduledThreads.get(child.id));
+          const childNeeds = childAttention === "needs-user";
+          const childQueued = childAttention === "queued";
+          const childScheduled = childAttention === "scheduled";
+          const childFailed = childAttention === "failed";
           if (childNeeds) needsUser += 1;
-          const childFailed =
-            child.indicator === "unread-error" ||
-            child.indicator === "queued-failed";
+          if (childQueued) queued += 1;
+          if (childScheduled) scheduled += 1;
           if (childFailed) failed += 1;
           if (kids.length < 5) {
             kids.push({
@@ -296,10 +300,12 @@ export function useThreadGroups(args: {
               title: child.displayTitle,
               dot: childFailed
                 ? "radar-dot-error"
-                : childNeeds
+                : childNeeds || childQueued
                   ? "radar-dot-attention"
                   : childLive
                     ? "radar-dot-running radar-dot-pulse"
+                    : childScheduled
+                      ? "radar-dot-scheduled"
                     : child.isUnread
                       ? "radar-unread"
                       : null,
@@ -309,11 +315,11 @@ export function useThreadGroups(args: {
         }
       };
       walk(root.id, 0);
-      const counts = { total, unread, live, needsUser, failed, kids };
+      const counts = { total, unread, live, needsUser, queued, scheduled, failed, kids };
       cache.set(root.id, counts);
       return counts;
     };
-  }, [shownChildren]);
+  }, [shownChildren, scheduledThreads]);
 
   const assembleGroup = useCallback(
     (
@@ -328,6 +334,8 @@ export function useThreadGroups(args: {
       let unread = 0;
       let live = 0;
       let needsUser = 0;
+      let queued = 0;
+      let scheduled = 0;
       let failed = 0;
       for (const root of members) {
         const counts = countSubtree(root);
@@ -335,6 +343,8 @@ export function useThreadGroups(args: {
         unread += counts.unread;
         live += counts.live;
         needsUser += counts.needsUser;
+        queued += counts.queued;
+        scheduled += counts.scheduled;
         failed += counts.failed;
       }
       return {
@@ -346,6 +356,8 @@ export function useThreadGroups(args: {
         unread,
         live,
         needsUser,
+        queued,
+        scheduled,
         failed,
         projectId,
         sectionId,

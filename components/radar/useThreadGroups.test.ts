@@ -87,6 +87,21 @@ describe("family derivation cache", () => {
     ]);
   });
 
+  it("rolls up queued descendants separately from running or user-blocked work", () => {
+    const parent = makeThread({ id: "parent" });
+    const threads = [parent,
+      makeThread({ id: "child", parentThreadId: "parent" }),
+      makeThread({ id: "queued", parentThreadId: "child", queuedWork: "waiting", indicator: "queued-waiting" }),
+    ];
+    const hook = renderHook(() => useThreadGroups(argsFor(threads)));
+    expect(hook.result.current.countSubtree(parent)).toMatchObject({
+      total: 3, live: 0, needsUser: 0, queued: 1, failed: 0,
+    });
+    expect(hook.result.current.groups[0]).toMatchObject({ live: 0, needsUser: 0, queued: 1 });
+    expect(hook.result.current.statusCounts).toMatchObject({ live: 1, waiting: 1 });
+    expect(hook.result.current.countSubtree(parent).kids.find(kid => kid.id === "queued")?.dot).toBe("radar-dot-attention");
+  });
+
   it("preserves the traversal depth guard", () => {
     const threads = Array.from({ length: 32 }, (_, i) => makeThread({
       id: `t${i}`, parentThreadId: i === 0 ? null : `t${i - 1}`,
@@ -95,5 +110,19 @@ describe("family derivation cache", () => {
     const hook = renderHook(() => useThreadGroups(argsFor(threads)));
     expect(hook.result.current.countSubtree(threads[0]).total).toBe(27);
     expect(hook.result.current.subtreeActivity(threads[0])).toBe(threads[26].latestAttentionAt);
+  });
+
+  it("separates scheduled descendants and invalidates family summaries on rescheduling", () => {
+    const parent = makeThread({ id: "parent" });
+    const child = makeThread({ id: "scheduled", parentThreadId: "parent", queuedWork: "waiting", indicator: "queued-waiting" });
+    const args = { ...argsFor([parent, child]), scheduledThreads: new Map([[child.id, NOW + HOUR]]) };
+    const hook = renderHook((props: Args) => useThreadGroups(props), { initialProps: args });
+    const before = hook.result.current.countSubtree(parent);
+    expect(before).toMatchObject({ queued: 0, scheduled: 1, live: 0, needsUser: 0 });
+    expect(before.kids[0].dot).toBe("radar-dot-scheduled");
+    expect(hook.result.current.groups[0]).toMatchObject({ queued: 0, scheduled: 1 });
+    hook.rerender({ ...args, scheduledThreads: new Map() });
+    expect(hook.result.current.countSubtree(parent)).not.toBe(before);
+    expect(hook.result.current.countSubtree(parent)).toMatchObject({ queued: 1, scheduled: 0 });
   });
 });

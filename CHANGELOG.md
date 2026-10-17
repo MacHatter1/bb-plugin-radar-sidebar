@@ -6,6 +6,74 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+BB 0.46 retired the sidebar navigation slot that Radar's rail was built on.
+On BB 0.46, 0.5.2 can't load at all: its frontend bundle imports the removed
+navigation hooks, so the thread list and settings disappear with the rail.
+This release replaces only the thread list and leaves navigation to BB's own
+rail, with an optional project section on forks supporting the new extension.
+
+### Removed
+
+- The navigation rail and Radar's navigation above the list. BB's own rail
+  now holds Home, plugins and your chosen destinations, and plugins can no
+  longer replace it. The rail's settings (Navigation rail, Labelled rail,
+  Project badges and Project style), its live-status placements and its
+  project filter over the list go with it. Project pins and collections
+  saved on the rail stay in the plugin's storage and are reused by the optional
+  project section below.
+
+### Changed
+
+- Requires BB 0.46 or later (plugin SDK 0.6.37).
+- Archive and Delete run BB's own thread actions, so BB's confirmations and
+  undo apply as before. Opening, pinning, read state and rename go through
+  BB's navigation and SDK, as BB's own actions do. This replaces the retired
+  `experimental_useSidebarThreadActions`.
+- Reorganise the plugin's settings page into three grouped cards (Thread
+  rows, Attention and feedback, Swipe actions), each with a live preview of
+  its choices and short one-line descriptions. Settings that need another
+  are greyed out with a note until it is on. The setting keys and defaults
+  are unchanged.
+- The plugin now keeps its settings itself, shared by every device, instead
+  of in BB's plugin settings, so BB's own flat settings list is gone and the
+  page above is the only place to change them. Choices saved by earlier
+  versions can't be carried over and return to their defaults once.
+  `bb plugin config radar-sidebar` no longer lists them.
+
+### Added
+
+- Feature-detect `experimental_navRailSection` and register **Radar projects**
+  on supporting BB forks. Compact tiles show live status/counts and open
+  portalled project cards with recent threads and project/new-thread/read
+  actions. Saved project pins and collections return, including drag/keyboard
+  pin ordering, collection management and an All projects picker. Enable the
+  section in Customize rail; clients without the extension keep working.
+- Show future scheduled queue work with a clock and Scheduled label, including
+  folded families and group headers. The tooltip gives its local run time;
+  immediate queued work keeps the existing amber indicator.
+- Experimental Radar v1 contributions: other BB plugins can supply bounded
+  thread badges, owned panel links and explicit context-menu RPC actions through
+  BB’s discoverable RPC interface. Reads are batched, cached and failure-isolated;
+  reload/removal, reconnects, timeouts and stale replies are reconciled without
+  changing BB’s core indicators or actions.
+- A Plugin contributions settings card with atomic, server-synced per-owner
+  opt-outs. Turning a contribution off keeps the plugin itself enabled.
+- A locally packable `bb-radar-contributions` contract package, contributor
+  authoring guide and tested, ready-to-copy Agent Teams integration adapter.
+  The package is not published and the adapter is not automatically activated.
+
+### Fixed
+
+- Keep pending settings edits visible while earlier saves finish; apply newer
+  remote snapshots without letting stale replies or fetches overwrite them.
+  Reconcile missed changes after realtime reconnects or the sidebar remounts.
+- Leave search and inline-rename keys to the IME while composing text, including
+  the legacy key-code fallback used when confirming a candidate.
+- Keep queued work visible in folded families and group headers, separately
+  from threads waiting for input from the user.
+- Correct the privacy and development notes to describe shared plugin KV
+  preferences and the local first-paint cache.
+
 ## 0.5.3 - 2026-10-10
 
 BB 0.46 retired the sidebar navigation slot that Radar's navigation and rail

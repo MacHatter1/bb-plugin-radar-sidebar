@@ -1598,6 +1598,11 @@
   margin-top: 0;
 }
 
+.radar-kids-pill [data-icon-root] {
+  width: 12px;
+  height: 12px;
+}
+
 .radar-kids-line {
   display: flex;
   align-items: center;
@@ -2274,6 +2279,64 @@ a.radar-row-main:hover {
   display: inline-flex;
 }
 
+/* Data-only contributors get bounded chrome; they never replace host status. */
+.radar-contribution-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.radar-contribution-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 48px;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.radar-contribution-badge [data-icon-root] {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.radar-contribution-badge > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radar-contribution-tone-info { color: var(--primary); }
+.radar-contribution-tone-success { color: var(--success, var(--primary)); }
+.radar-contribution-tone-warning { color: var(--warning, var(--primary)); }
+.radar-contribution-tone-danger { color: var(--destructive); }
+
+.radar-contribution-overflow {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.radar-contributor-refresh {
+  align-self: flex-start;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.radar-contributor-refresh:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.radar-menu-item[href] { text-decoration: none; }
+
 .radar-badge-icon [data-icon-root] {
   width: 14px;
   height: 14px;
@@ -2305,6 +2368,10 @@ a.radar-row-main:hover {
 
 .radar-tone-info {
   color: var(--primary);
+}
+
+.radar-dot-scheduled {
+  background: var(--primary);
 }
 
 /* Status dots read the host status tokens; unknown indicators draw nothing. */
@@ -3147,4 +3214,181 @@ a.radar-row-main:hover {
 
 [data-radar-loud-unread="off"] .radar-row-active.radar-row-unread {
   box-shadow: none;
+}
+
+/* ---- Settings section: grouped cards, each with a live picture. ---- */
+
+.radar-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.radar-settings-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card, var(--background));
+  overflow: hidden;
+}
+.radar-settings-card-head { padding: 12px 16px 0; }
+.radar-settings-card-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.radar-settings-card-head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.radar-settings-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  margin: 12px 16px 4px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+.radar-settings-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 16px 6px;
+}
+.radar-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.radar-setting:first-child { border-top: 0; }
+.radar-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.radar-setting-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.radar-setting-hint {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+.radar-setting-needs {
+  font-size: 11px;
+  color: var(--warning, #b98533);
+}
+.radar-setting-disabled .radar-setting-label,
+.radar-setting-disabled .radar-setting-hint { opacity: 0.55; }
+.radar-setting-control { flex: none; }
+.radar-settings-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--destructive, #d43d3d);
+}
+
+.radar-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 38%, transparent);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.radar-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.radar-switch-on { background: var(--primary); }
+.radar-switch-on .radar-switch-thumb { transform: translateX(14px); }
+.radar-select {
+  max-width: 190px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+.radar-switch:focus-visible,
+.radar-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.radar-switch:disabled,
+.radar-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.radar-settings-swipe-row i {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted-foreground) 22%, transparent);
+}
+/* Pictures. The rows are the real ones; only the frame is new. */
+.radar-settings-list {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  pointer-events: none;
+}
+.radar-settings-swipe {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  transition: opacity 140ms ease;
+}
+.radar-settings-swipe-off { opacity: 0.4; }
+.radar-settings-swipe-row {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+.radar-settings-swipe-row i:last-child { width: 55%; }
+.radar-settings-swipe-chip {
+  flex: none;
+  max-width: 34%;
+  padding: 4px 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar-settings-swipe-left {
+  background: color-mix(in srgb, var(--destructive, #d43d3d) 16%, transparent);
+  color: color-mix(in srgb, var(--destructive, #d43d3d) 80%, var(--foreground));
+}
+.radar-settings-swipe-right {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: color-mix(in srgb, var(--primary) 80%, var(--foreground));
 }

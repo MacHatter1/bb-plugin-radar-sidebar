@@ -5,9 +5,10 @@ description: Use the Radar Sidebar plugin's thread list. Use when the user asks 
 
 # Radar Sidebar
 
-Replaces BB's sidebar thread list. There is no
-CLI and no server state: everything below is UI in the BB app, and thread mutations go
-through BB's own flows (pins, reads, renames, archives, deletes).
+Replaces BB's sidebar thread list. There is no CLI; plugin settings are
+stored on the server. Everything below is UI in the BB app. Archive and
+delete run BB's own thread actions, so BB's confirmations apply; pins, read
+state and renames make the same SDK calls BB's actions do.
 
 ## Surfaces
 
@@ -18,13 +19,62 @@ through BB's own flows (pins, reads, renames, archives, deletes).
   density toggles, status chips, and the smart-views bar (New thread is
   BB's own, above the list, so the list keeps no duplicate). Preferences
   persist per client in `localStorage` (`radar-sidebar:*:v1` keys).
+
 ## Navigation
 
 BB 0.46 retired the `experimental_sidebarNavigation` slot. BB's own navigation
 rail now holds Home, plugins and the user's chosen destinations, and plugins
-cannot replace it, so Radar 0.5.3 ships no navigation or rail. The `railNav`
-and `wideRail` settings are gone. On BB 0.44 or 0.45, Radar 0.5.2 still has
-both.
+cannot replace it. Forks exposing `app.slots.experimental_navRailSection`
+can show Radar's additive **Radar projects** section (`radar-sidebar/projects`)
+under the destinations and above Settings. Registration is feature-detected;
+BB clients without that method keep the thread list and settings working.
+Enable the section once in **Customize rail → Rail sections → Radar projects**;
+the host keeps sections hidden by default and owns their ordering/visibility.
+
+The compact project tiles show active projects and saved empty pinned or
+collected projects. A tile's badge gives the highest-priority count: failed,
+needs input, working, unread, queued, then scheduled (clock). Click, Enter or
+right-click opens a portalled card with the complete tally, recent threads,
+Open project, New thread, pin, read and collection actions. Open project also
+expands a collapsed desktop sidebar through the host's `openSidebar` prop.
+Project and thread navigation use BB's SDK; selecting a project does not add
+a private filter to the thread list. The rail works with any thread-list provider.
+
+**All projects** finds any known project, including ones without active work,
+and lets you pin it. Saved pins keep their order; drag a pinned tile (Space,
+arrows, Space with the keyboard) or use Move pin up/down in its card. Collections
+can be created or selected in a project's card; the collection's own card
+expands/collapses, renames or removes it. Removing a collection leaves projects
+available. Pins and collections reuse the atomic settings operations and sync
+across clients. All rail CSS is confined to Radar's own elements.
+
+The retired replacement rail's
+settings (`railNav`, `wideRail`, `projectBadges`, `projectStyle`,
+`railLiveStatus`) are ignored and dropped from storage on the next settings
+write. Saved project pins (`pinnedProjects`) and collections
+(`projectOrganisation`) are reused by the optional section and stay in storage
+even on hosts without it.
+
+## Plugin contributions (experimental v1)
+
+Other BB plugins can add data-only thread badges and context-menu actions.
+BB supplies discoverable `radar.v1.contributions` / `radar.v1.action` RPC methods;
+Radar renders the data. Register on the contributing plugin’s server with the
+`experimental_registerRadarContributor` helper in `packages/contributions/`.
+See `docs/contributions.md` and the tested `examples/agent-teams-radar.ts` adapter.
+The contract package is locally packable, not yet published; the example is not
+automatically installed in Agent Teams.
+
+Settings → Installed plugins → Radar Sidebar → **Plugin contributions** has
+shared per-plugin toggles (`disabledContributors`), saved with atomic
+`setContributorEnabled` edits. Off does not disable the plugin. Reads use only
+shown thread IDs in batches of 64, at most four concurrent calls. Discovery
+and reads time out after 3 seconds and refresh every 15 seconds while mounted,
+on focus/reconnect or scope changes. Removal/disable can take one refresh cycle.
+Actions require explicit selection, may ask for confirmation, and are never
+retried automatically on timeout. Keep normal BB status, unread indicators and
+actions intact. Do not add a global registry, plugin loader or arbitrary React
+renderers; v1 is intentionally data-only.
 
 ## Organisation tools
 
@@ -217,11 +267,22 @@ list; disabling this plugin falls back to BB's list automatically.
 
 ## Settings
 
-`bb plugin config radar-sidebar`, or Settings → Installed plugins → Radar
-Sidebar. The frontend reads them through `useSettings()`, and every value
-has a default, so the list never waits on them. Until they load,
-`defaultDensity` and `twoLineTitles` use the value this client last saw, so
-rows paint at their final height.
+Settings → Installed plugins → Radar Sidebar. The plugin keeps its own
+settings in its server KV storage (`getSettings` and `setSetting` over RPC),
+shared by every device.
+RPC replies and the `settings` realtime channel carry the full saved choices
+with a monotonically increasing `revision`. The frontend keeps pending edits
+visible without discarding remote changes, and refetches after reconnecting or
+returning to a previously unmounted sidebar. Earlier unversioned saved choices
+remain readable.
+BB's plugin settings are not used, so there is no `bb plugin config` for them
+and BB draws no flat list. The frontend reads them from `useSettingValues()`;
+every value has a default, and the last values this browser saw are cached so
+the first paint is right and the list never waits on the server.
+
+The settings page shows these as three cards (Thread rows, Attention and
+feedback, Swipe actions) with live previews, and greys out settings whose
+requirement is off.
 
 | Key | Default | Effect |
 | --- | --- | --- |

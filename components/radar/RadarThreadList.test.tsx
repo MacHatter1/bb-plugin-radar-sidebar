@@ -5,7 +5,17 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
-import { DAY, HOUR, NOW, makeProject, makeSection, makeThread } from "./fixtures";
+import {
+  DAY,
+  HOUR,
+  NOW,
+  makeProject,
+  makeSection,
+  makeThread,
+  recordCoreThreadActions,
+  threadActionCalls,
+  type ThreadActionCall,
+} from "./fixtures";
 
 // Expose configurable test exports while retaining the SDK's slot runtime.
 vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => ({
@@ -27,6 +37,9 @@ function sdkFakes(
       update: async () => ({ ok: true }),
       unarchive: async () => ({ ok: true }),
       markRead: async () => ({ ok: true }),
+      markUnread: async () => ({ ok: true }),
+      pin: async () => ({ ok: true }),
+      unpin: async () => ({ ok: true }),
       context: async () => ({ usage: null }),
     },
     providers: { models: async () => ({ models: [] }) },
@@ -50,7 +63,8 @@ function renderThreads(
     sdk?: Record<string, unknown>;
   } = {},
 ) {
-  return renderSlot(
+  const runs: ThreadActionCall[] = [];
+  const slot = renderSlot(
     threadList,
     {
       activeThreadId: null,
@@ -61,6 +75,7 @@ function renderThreads(
     },
     {
       sdk: sdkFakes(options.execution),
+      threadActions: recordCoreThreadActions(runs),
       ...options,
       sidebarThreads: {
         status: "ready",
@@ -71,6 +86,10 @@ function renderThreads(
       },
     },
   );
+  return Object.assign(slot, {
+    /** What the list did to threads, oldest first. */
+    actionCalls: () => threadActionCalls(slot.inspection, runs),
+  });
 }
 
 /** Row anchors are the stable handle: ThreadTitle renders empty in the
@@ -327,7 +346,7 @@ describe("actions", () => {
     const slot = renderThreads([thread]);
 
     fireEvent.click(screen.getByLabelText("Archive thread"));
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+    expect(slot.actionCalls()).toContainEqual({
       method: "archive",
       threadId: "t",
     });
@@ -338,10 +357,41 @@ describe("actions", () => {
     const slot = renderThreads([thread]);
 
     fireEvent.click(screen.getByLabelText("Pin thread"));
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+    expect(slot.actionCalls()).toContainEqual({
       method: "setPinned",
       threadId: "t",
       pinned: true,
+    });
+  });
+
+  it("opens bb's own delete confirmation rather than deleting", async () => {
+    const slot = renderThreads([makeThread({ id: "t" })]);
+    fireEvent.contextMenu(slot.container.querySelector('[data-sidebar-thread-id="t"]')!);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await waitFor(() => {
+      expect(slot.actionCalls()).toEqual([{ method: "requestDelete", threadId: "t" }]);
+    });
+    expect(slot.inspection.sdkCalls.map((call) => call.method)).not.toContain("threads.delete");
+  });
+
+  it("leaves an archived thread alone when archive is pressed", () => {
+    localStorage.setItem("radar-sidebar:lifecycles:v1", "archived");
+    const slot = renderThreads([makeThread({ id: "t", isArchived: true })]);
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("data-sidebar-thread-id")).toBe("t");
+    fireEvent.keyDown(document.body, { key: "e" });
+    expect(slot.actionCalls()).toEqual([]);
+  });
+
+  it("starts a project's new thread in bb's composer", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      projects: [makeProject({ id: "proj_a", name: "Alpha" })],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start new thread in Alpha" }));
+    expect(slot.inspection.navigateCalls).toContainEqual({
+      method: "toCompose",
+      options: { projectId: "proj_a", focusPrompt: true },
     });
   });
 });
@@ -394,7 +444,7 @@ describe("swipe actions", () => {
       makeThread({ id: "t", lastReadAt: null, latestAttentionAt: NOW }),
     ]);
     swipe(slot.container, 160);
-    expect(slot.inspection.sidebarActionCalls).toContainEqual(
+    expect(slot.actionCalls()).toContainEqual(
       expect.objectContaining({ method: "setRead", threadId: "t" }),
     );
   });
@@ -405,11 +455,11 @@ describe("swipe actions", () => {
       const slot = renderSwipe([makeThread({ id: "t" })]);
       swipe(slot.container, -160);
       expect(row(slot.container).dataset.swipePhase).toBe("out");
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       act(() => {
         vi.advanceTimersByTime(600);
       });
-      expect(slot.inspection.sidebarActionCalls).toContainEqual({
+      expect(slot.actionCalls()).toContainEqual({
         method: "archive",
         threadId: "t",
       });
@@ -423,7 +473,7 @@ describe("swipe actions", () => {
       settings: { swipeLeft: "Pin / unpin" },
     });
     swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+    expect(slot.actionCalls()).toContainEqual({
       method: "setPinned",
       threadId: "t",
       pinned: true,
@@ -450,7 +500,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -459,14 +509,14 @@ describe("swipe actions", () => {
   it("springs back without acting on a short drag", () => {
     const slot = renderSwipe([makeThread({ id: "t" })]);
     swipe(slot.container, -30);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(row(slot.container).dataset.swipePhase).toBe("settle");
   });
 
   it("leaves vertical movement to the scroller", () => {
     const slot = renderSwipe([makeThread({ id: "t" })]);
     swipe(slot.container, -20, 160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(row(slot.container).dataset.swipePhase).toBeUndefined();
   });
 
@@ -506,14 +556,14 @@ describe("swipe actions", () => {
       });
       expect(row(slot.container).dataset.swipePhase).toBe("open");
       expect(row(slot.container).style.transform).toContain("-96px");
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       // Moving again carries on from there.
       wheelSwipe(slot.container, -100);
       momentumTail(slot.container, -1);
       act(() => {
         vi.advanceTimersByTime(150);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
     } finally {
@@ -538,7 +588,7 @@ describe("swipe actions", () => {
       const button = slot.container.querySelector(".radar-swipe-underlay") as HTMLElement;
       fireEvent.pointerDown(button);
       fireEvent.click(button);
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
       act(() => {
@@ -576,7 +626,7 @@ describe("swipe actions", () => {
         // The harness's split-drag stand-in logs any press on a row link as
         // "open"; the real host only drags once the pointer leaves the list.
         expect(
-          slot.inspection.sidebarActionCalls.filter((call) => call.method !== "open"),
+          slot.actionCalls().filter((call) => call.method !== "open"),
         ).toEqual([]);
       } finally {
         vi.useRealTimers();
@@ -720,7 +770,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(2000);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(target.dataset.swipePhase).toBeUndefined();
       expect(target.style.transform).toBe("");
     } finally {
@@ -736,11 +786,11 @@ describe("swipe actions", () => {
       });
       wheelSwipe(slot.container, -160);
       momentumTail(slot.container, -1);
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       act(() => {
         vi.advanceTimersByTime(120);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
 
@@ -754,7 +804,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
-      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+      expect(slot.actionCalls()).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -782,7 +832,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(150);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
     } finally {
@@ -801,7 +851,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -817,11 +867,11 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       act(() => {
         vi.advanceTimersByTime(300);
       });
-      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+      expect(slot.actionCalls()).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -835,7 +885,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     } finally {
       vi.useRealTimers();
@@ -854,7 +904,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(target.dataset.swipePhase).toBeUndefined();
     } finally {
       vi.useRealTimers();
@@ -871,7 +921,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     } finally {
       vi.useRealTimers();
@@ -883,18 +933,10 @@ describe("swipe actions", () => {
       settings: { swipeActions: false },
     });
     swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     expect(slot.container.querySelector("[data-radar-swipe=\"off\"]")).not.toBeNull();
   });
-  it("waits for the saved settings before a swipe can act", () => {
-    // No `settings`: still loading, so a swipe must not run on the defaults.
-    const slot = renderThreads([makeThread({ id: "t" })]);
-    swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
-    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
-  });
-
   it("lets a locked drag go home when a second finger lands", () => {
     vi.useFakeTimers();
     try {
@@ -933,7 +975,7 @@ describe("swipe actions", () => {
     fireEvent.touchMove(target, { touches: [{ clientX: 0, clientY: 20 }] });
     fireEvent.touchCancel(target, { touches: [] });
     expect(target.dataset.swipePhase).toBe("settle");
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
   });
 
   it("leaves a touch on the drag grip to its section drag", () => {
@@ -946,7 +988,7 @@ describe("swipe actions", () => {
     fireEvent.touchMove(grip, { touches: [{ clientX: 138, clientY: 20 }] });
     fireEvent.touchMove(grip, { touches: [{ clientX: 0, clientY: 20 }] });
     fireEvent.touchEnd(grip, { touches: [] });
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(target.dataset.swipePhase).toBeUndefined();
   });
 
@@ -959,7 +1001,7 @@ describe("swipe actions", () => {
       act(() => {
         slot.unmount();
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "t" },
       ]);
     } finally {
@@ -998,7 +1040,7 @@ describe("swipe actions", () => {
         makeThread({ id: "c", parentThreadId: "p" }),
       ]);
       swipe(slot.container, -160);
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "p" },
       ]);
       expect(row(slot.container).dataset.swipePhase).toBe("settle");
@@ -1020,7 +1062,7 @@ describe("swipe actions", () => {
       expect(visibleRowIds(slot.container)).toEqual(["p"]);
       swipe(slot.container, -160);
       // The host still confirms archiving the replies it cannot see here.
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "p" },
       ]);
       expect(row(slot.container).dataset.swipePhase).toBe("settle");
@@ -1050,7 +1092,7 @@ describe("swipe actions", () => {
     localStorage.setItem("radar-sidebar:lifecycles:v1", "all");
     const slot = renderSwipe([makeThread({ id: "t" })]);
     swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([
+    expect(slot.actionCalls()).toEqual([
       { method: "archive", threadId: "t" },
     ]);
     expect(row(slot.container).dataset.swipePhase).toBe("settle");
@@ -1116,43 +1158,10 @@ describe("density", () => {
 });
 
 describe("settings gates", () => {
-  it("shows rows on the shipped defaults while settings load", () => {
-    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
-      values: undefined, isLoading: true,
-    });
+  it("shows rows on the shipped defaults when nothing is saved", () => {
     const slot = renderThreads([makeThread({ id: "t" })]);
     expect(visibleRowIds(slot.container)).toEqual(["t"]);
     expect(screen.queryByRole("status", { name: "Loading threads" })).toBeNull();
-    expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
-      .toBeNull();
-  });
-
-  it("paints the last-seen density and title mode while settings load", () => {
-    // A first render on settings remembers them for this client...
-    renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: true, defaultDensity: "compact" },
-    });
-    cleanup();
-
-    // ...so the next load sizes rows correctly before settings resolve.
-    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
-      values: undefined, isLoading: true,
-    });
-    const slot = renderThreads([makeThread({ id: "t" })]);
-    expect(visibleRowIds(slot.container)).toEqual(["t"]);
-    expect(slot.container.querySelector(".radar-title-wrap.radar-density-compact"))
-      .not.toBeNull();
-  });
-
-  it("follows the loaded settings over the last-seen ones", () => {
-    renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: true, defaultDensity: "compact" },
-    });
-    cleanup();
-
-    const slot = renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: false },
-    });
     expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
       .toBeNull();
   });
@@ -1508,7 +1517,7 @@ describe("Pinned smart view", () => {
 
 describe("keyboard shortcuts", () => {
   const archived = (slot: ReturnType<typeof renderThreads>) =>
-    slot.inspection.sidebarActionCalls.filter(
+    slot.actionCalls().filter(
       (call) => call.method === "archive",
     );
 
@@ -1634,7 +1643,7 @@ describe("review regressions", () => {
     slot.container.querySelector<HTMLElement>('[data-sidebar-thread-id="a"]')!.focus();
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement!, { key: "e" });
-    expect(slot.inspection.sidebarActionCalls).toEqual([
+    expect(slot.actionCalls()).toEqual([
       { method: "archive", threadId: "b" },
     ]);
   });
@@ -1766,7 +1775,7 @@ describe("section creation", () => {
     expect((screen.getByRole("textbox", { name: "Section name" }) as HTMLInputElement).value).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(create).not.toHaveBeenCalled();
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
   });
 
   it("keeps a failed name for retry and shows the API error", async () => {
