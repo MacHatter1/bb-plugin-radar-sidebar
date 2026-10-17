@@ -37,8 +37,13 @@ needs input, working, unread, queued, then scheduled (clock). Click, Enter or
 right-click opens a portalled card with the complete tally, recent threads,
 Open project, New thread, pin, read and collection actions. Open project also
 expands a collapsed desktop sidebar through the host's `openSidebar` prop.
-Project and thread navigation use BB's SDK; selecting a project does not add
-a private filter to the thread list. The rail works with any thread-list provider.
+Clicking a tile also filters Radar's thread list to that project and expands a
+collapsed sidebar. The selected tile is marked; the project name appears above
+the thread filters with **Show all projects** to clear it. Search and status
+filters apply within that project. The choice is remembered per client and is
+cleared if the project is deleted, once the project directory finishes loading.
+Right-click opens a card without changing the filter. Cards and project actions
+still work with other thread-list providers; the project filter applies to Radar.
 
 **All projects** finds any known project, including ones without active work,
 and lets you pin it. Saved pins keep their order; drag a pinned tile (Space,

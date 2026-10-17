@@ -61,6 +61,7 @@ import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
 import { useScheduledThreads } from "./useScheduledThreads";
 import { useRadarThreadActions } from "./threadActions";
+import { setProjectScope, useProjectScope } from "./projectScope";
 import { useSettingValues } from "./settingsStore";
 import {
   useThreadGroups,
@@ -472,11 +473,16 @@ export function RadarThreadList({
   );
   const {
     status,
-    threads,
+    threads: allThreads,
     projects,
     sections,
     experimental_archived,
   } = experimental_useSidebarThreads(lifecyclesParam);
+  const projectScope = useProjectScope({ projects, status });
+  const scopedProject = projects.find(project => project.id === projectScope);
+  const projectScopeName = scopedProject?.isPersonal ? "Personal" : scopedProject?.name ?? "Project";
+  const threads = useMemo(() => projectScope === null ? allThreads
+    : allThreads.filter(thread => thread.projectId === projectScope), [allThreads, projectScope]);
   const actions = useRadarThreadActions();
   const sdk = useSdk();
   const scheduledThreads = useScheduledThreads(threads, sdk);
@@ -1478,6 +1484,14 @@ export function RadarThreadList({
       }
     >
       <div className="radar-list-header">
+        {projectScope !== null ? (
+          <div className="radar-project-scope" aria-label={`Project filter: ${projectScopeName}`}>
+            <Icon name="Folder" aria-hidden="true" />
+            <span title={projectScopeName}>{projectScopeName}</span>
+            <button type="button" aria-label="Show all projects" title="Show all projects"
+              onClick={() => setProjectScope(null)}><Icon name="X" aria-hidden="true" /></button>
+          </div>
+        ) : null}
         <div className="radar-search">
           <Icon
             name="Search"
