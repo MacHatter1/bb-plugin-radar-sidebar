@@ -6,6 +6,12 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+## 0.1.11
+
+Changes merged in [PR #17](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/17).
+
+### Fixed
+
 - Selecting a project tile filters the thread list without opening its card.
   Right-click or Shift+F10 opens the card and its project actions.
 
