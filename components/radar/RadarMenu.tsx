@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { UrlLink, experimental_Icon as HostIcon } from "@get-bb/plugin-sdk/app";
 import { Icon } from "@/components/ui/icon";
@@ -19,12 +19,6 @@ export type RadarMenuItem =
   | { kind: "separator" }
   | { kind: "header"; label: string };
 
-/**
- * A small viewport-fixed context menu. Rendered with `position: fixed` from
- * client coordinates, clamped into the window. It closes on outside
- * pointer-down, Escape, scroll, or resize, and every listener is removed on
- * unmount.
- */
 export function RadarMenu({
   x,
   y,
@@ -32,7 +26,7 @@ export function RadarMenu({
   onSelect,
   onClose,
   label = "Thread actions",
-  triggerRef,
+  trigger,
 }: {
   x: number;
   y: number;
@@ -40,7 +34,7 @@ export function RadarMenu({
   onSelect: (id: string) => void;
   onClose: () => void;
   label?: string;
-  triggerRef?: RefObject<HTMLElement | null>;
+  trigger: HTMLElement;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -56,13 +50,18 @@ export function RadarMenu({
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (ref.current?.contains(document.activeElement) && trigger.isConnected) {
+        trigger.focus({ preventScroll: true });
+      }
+      onClose();
     };
     const onScroll = (event: Event) => {
-      if (ref.current && ref.current.contains(event.target as Node)) return;
-      // An anchored menu only moves when its trigger's container scrolls.
-      // Chat updates can scroll another pane while someone is choosing an item.
-      if (!triggerRef || (event.target as Node).contains(triggerRef.current)) onClose();
+      if (!(event.target instanceof Node)) return;
+      if (ref.current?.contains(event.target)) return;
+      if (event.target.contains(trigger)) onClose();
     };
     const onResize = () => onClose();
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -75,7 +74,7 @@ export function RadarMenu({
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [onClose, triggerRef]);
+  }, [onClose, trigger]);
 
   useEffect(() => {
     ref.current?.focus();

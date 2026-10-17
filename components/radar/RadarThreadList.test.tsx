@@ -396,6 +396,114 @@ describe("actions", () => {
   });
 });
 
+describe("context menus", () => {
+  function threadTrigger(container: HTMLElement) {
+    return container.querySelector<HTMLElement>('[data-sidebar-thread-id="one"]')!;
+  }
+
+  it.each(["thread", "group"])("keeps the %s menu open for sibling and internal scrolls, then closes on its ancestor scroll", (kind) => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = kind === "thread"
+      ? threadTrigger(slot.container)
+      : slot.container.querySelector<HTMLElement>(".radar-group-toggle")!;
+    fireEvent.contextMenu(trigger);
+    const menu = screen.getByRole("menu");
+    const conversation = document.createElement("div");
+    document.body.appendChild(conversation);
+    try {
+      fireEvent.scroll(conversation);
+      expect(screen.queryByRole("menu")).toBe(menu);
+      fireEvent.scroll(menu);
+      expect(screen.queryByRole("menu")).toBe(menu);
+      fireEvent.scroll(document);
+      expect(screen.queryByRole("menu")).toBeNull();
+    } finally {
+      conversation.remove();
+    }
+  });
+
+  it.each(["thread", "group"])("closes the %s menu when its invoking control scrolls", (kind) => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = kind === "thread"
+      ? threadTrigger(slot.container)
+      : slot.container.querySelector<HTMLElement>(".radar-group-toggle")!;
+    fireEvent.contextMenu(trigger);
+    expect(screen.getByRole("menu").getAttribute("aria-label")).toBe("Thread actions");
+    fireEvent.scroll(trigger);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it.each(["row", "more", "group", "group label", "group whitespace", "new thread"])("returns focus to the %s invoker after Escape", (kind) => {
+    if (kind === "new thread") localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const row = threadTrigger(slot.container);
+    const toggle = slot.container.querySelector<HTMLElement>(".radar-group-toggle")!;
+    const trigger = kind === "row" ? row
+      : kind === "more" ? screen.getByRole("button", { name: "More actions" })
+      : kind === "new thread" ? screen.getByRole("button", { name: /Start new thread in/ })
+      : toggle;
+    trigger.focus();
+    if (kind === "more") fireEvent.click(trigger);
+    else fireEvent.contextMenu(kind === "group label"
+      ? toggle.querySelector(".radar-group-label")!
+      : kind === "group whitespace" ? toggle.parentElement! : trigger);
+    const menu = screen.getByRole("menu");
+    expect(document.activeElement).toBe(menu);
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("uses Escape only to dismiss the menu while selection and search remain", () => {
+    const slot = renderThreads([makeThread({ id: "one", title: "Keep this thread" })]);
+    const search = screen.getByRole("searchbox");
+    fireEvent.change(search, { target: { value: "Keep" } });
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    fireEvent.keyDown(document.body, { key: "x" });
+    expect(screen.getByText("1 selected").textContent).toBe("1 selected");
+    const trigger = threadTrigger(slot.container);
+    fireEvent.contextMenu(trigger);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByText("1 selected").textContent).toBe("1 selected");
+    expect((search as HTMLInputElement).value).toBe("Keep");
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(screen.queryByText("1 selected")).toBeNull();
+    expect((search as HTMLInputElement).value).toBe("Keep");
+  });
+
+  it("leaves focus outside the menu on pointer dismissal or Escape", () => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = threadTrigger(slot.container);
+    const search = screen.getByRole("searchbox");
+    fireEvent.contextMenu(trigger);
+    search.focus();
+    fireEvent.pointerDown(search);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(search);
+    fireEvent.contextMenu(trigger);
+    search.focus();
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("does not restore focus to a disconnected invoker", () => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = threadTrigger(slot.container);
+    fireEvent.contextMenu(trigger);
+    trigger.remove();
+    const focus = vi.spyOn(trigger, "focus");
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+    expect(focus).not.toHaveBeenCalled();
+  });
+});
+
 describe("swipe actions", () => {
   const row = (container: HTMLElement) =>
     container.querySelector(".radar-row") as HTMLElement;
@@ -419,6 +527,21 @@ describe("swipe actions", () => {
     threads: PluginSidebarThread[],
     options: Parameters<typeof renderThreads>[1] = {},
   ) => renderThreads(threads, { settings: {}, ...options });
+
+  it("anchors a swipe menu to the row and returns focus there on Escape", () => {
+    const slot = renderSwipe([makeThread({ id: "one" })], {
+      settings: { swipeLeft: "More actions" },
+    });
+    const trigger = slot.container.querySelector<HTMLElement>('[data-sidebar-thread-id="one"]')!;
+    swipe(slot.container, -160);
+    const menu = screen.getByRole("menu");
+    expect(document.activeElement).toBe(menu);
+    fireEvent.scroll(screen.getByRole("searchbox"));
+    expect(screen.queryByRole("menu")).toBe(menu);
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 
   const originalOffsetWidth = Object.getOwnPropertyDescriptor(
     HTMLElement.prototype,

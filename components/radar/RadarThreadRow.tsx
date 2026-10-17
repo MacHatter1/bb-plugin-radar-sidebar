@@ -356,7 +356,7 @@ function RadarThreadRowImpl({
    * so the minute tick re-renders only rows whose label actually moved. */
   timeText: string;
   onNavigate: () => void;
-  onOpenMenu: (clientX: number, clientY: number, thread: PluginSidebarThread) => void;
+  onOpenMenu: (clientX: number, clientY: number, thread: PluginSidebarThread, trigger: HTMLElement) => void;
   onStartRename: (thread: PluginSidebarThread) => void;
   onCommitRename: (thread: PluginSidebarThread, title: string) => void;
   onCancelRename: () => void;
@@ -593,7 +593,8 @@ function RadarThreadRowImpl({
       case "menu": {
         // The row is still drawn aside by the swipe: anchor on where it rests.
         const rect = rowRef.current?.getBoundingClientRect();
-        if (rect) onOpenMenu(rect.right - offset - 220, rect.bottom + 4, thread);
+        const trigger = rowRef.current?.querySelector<HTMLElement>(".radar-row-main");
+        if (rect && trigger) onOpenMenu(rect.right - offset - 220, rect.bottom + 4, thread, trigger);
         break;
       }
       case "delete":
@@ -1092,7 +1093,7 @@ function RadarThreadRowImpl({
         onContextMenu={(event) => {
           event.preventDefault();
           closeHoverCard(true);
-          onOpenMenu(event.clientX, event.clientY, thread);
+          onOpenMenu(event.clientX, event.clientY, thread, event.currentTarget);
         }}
         onDoubleClick={(event) => {
           // Double-click the title area renames instead of navigating.
@@ -1296,7 +1297,7 @@ function RadarThreadRowImpl({
             event.stopPropagation();
             closeHoverCard(true);
             const rect = event.currentTarget.getBoundingClientRect();
-            onOpenMenu(rect.left - 200, rect.bottom + 4, thread);
+            onOpenMenu(rect.left - 200, rect.bottom + 4, thread, event.currentTarget);
           }}
         >
           <Icon name="MoreHorizontal" aria-hidden="true" />
