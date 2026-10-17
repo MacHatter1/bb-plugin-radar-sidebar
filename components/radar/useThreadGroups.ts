@@ -220,26 +220,33 @@ export function useThreadGroups(args: {
     return shown;
   }, [allRows, parentOf, childrenOf, query, statusFilter, projectNameFor, sectionById]);
 
-  // Roots: no visible parent (orphans whose parent is hidden or filtered
-  // out promote to roots). Children always nest under theirs.
+  const displayParentOf = useMemo(() => {
+    if (grouping !== "section") return parentOf;
+    const sectionBucket = (thread: PluginSidebarThread) =>
+      thread.sectionId && sectionById.has(thread.sectionId) ? thread.sectionId : null;
+    return new Map([...parentOf].filter(([childId, parentId]) =>
+      sectionBucket(rowById.get(childId)!) === sectionBucket(rowById.get(parentId)!),
+    ));
+  }, [grouping, parentOf, rowById, sectionById]);
+
   const roots = useMemo(
     () =>
       allRows.filter(
-        (thread) => !parentOf.has(thread.id) && shownIds.has(thread.id),
+        (thread) => !displayParentOf.has(thread.id) && shownIds.has(thread.id),
       ),
-    [allRows, parentOf, shownIds],
+    [allRows, displayParentOf, shownIds],
   );
 
   const shownChildren = useMemo(() => {
     const map = new Map<string, PluginSidebarThread[]>();
     for (const [parentId, kids] of childrenOf) {
       const shown = kids
-        .filter((kid) => shownIds.has(kid.id))
+        .filter((kid) => shownIds.has(kid.id) && displayParentOf.get(kid.id) === parentId)
         .sort((a, b) => activityTime(b, now) - activityTime(a, now));
       if (shown.length > 0) map.set(parentId, shown);
     }
     return map;
-  }, [childrenOf, shownIds, now]);
+  }, [childrenOf, displayParentOf, shownIds, now]);
 
   // Child activity bubbles: a root groups/sorts by the freshest activity
   // in its shown subtree, so an active child floats its parent.
