@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createElement, Fragment, type FunctionComponent } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
@@ -1155,13 +1155,20 @@ describe("swipe actions", () => {
     }
   });
 
-  it("does not fold away a parent whose archive the host may confirm", () => {
+  it.each(["time", "section"])("does not fold away a parent whose archive the host may confirm in %s mode", (grouping) => {
     vi.useFakeTimers();
     try {
+      localStorage.setItem("radar-sidebar:grouping:v1", grouping);
       const slot = renderSwipe([
-        makeThread({ id: "p" }),
-        makeThread({ id: "c", parentThreadId: "p" }),
-      ]);
+        makeThread({ id: "p", sectionId: "a" }),
+        makeThread({ id: "c", parentThreadId: "p", sectionId: "b" }),
+      ], { sections: [makeSection({ id: "a", name: "A" }), makeSection({ id: "b", name: "B" })] });
+      if (grouping === "section") {
+        expect(visibleRowIds(screen.getByRole("region", { name: "A" }))).toEqual(["p"]);
+        expect(visibleRowIds(screen.getByRole("region", { name: "B" }))).toEqual(["c"]);
+      } else {
+        expect(visibleRowIds(slot.container)).toEqual(["p", "c"]);
+      }
       swipe(slot.container, -160);
       expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "p" },
@@ -1969,4 +1976,34 @@ describe("selection", () => {
     );
     expect(screen.queryByText("1 selected")).toBeNull();
   });
+});
+
+it("files only the chosen child through its menu and displays the host update under B", async () => {
+  localStorage.setItem("radar-sidebar:grouping:v1", "section");
+  const parent = makeThread({ id: "file-parent", title: "Parent", sectionId: "a" });
+  const child = makeThread({ id: "file-child", title: "Child", parentThreadId: parent.id, sectionId: "a" });
+  const state: PluginSidebarThreadsState = { status: "ready", threads: [parent, child],
+    projects: [makeProject({ id: "proj_a" })],
+    sections: [makeSection({ id: "a", name: "A" }), makeSection({ id: "b", name: "B" })], experimental_archived: null };
+  const snapshot = vi.spyOn(pluginSdk, "experimental_useSidebarThreads").mockReturnValue(state);
+  const slot = renderThreads([parent, child], { sections: state.sections as ReturnType<typeof makeSection>[] });
+  fireEvent.contextMenu(slot.container.querySelector('[data-sidebar-thread-id="file-child"]')!);
+  fireEvent.click(screen.getByRole("menuitem", { name: "B" }));
+  await waitFor(() => expect(slot.inspection.sdkCalls.filter(call => call.method === "threads.update")).toEqual([
+    { method: "threads.update", args: [{ threadId: "file-child", sectionId: "b" }] },
+  ]));
+  snapshot.mockReturnValue({ ...state, threads: [parent, { ...child, sectionId: "b" }] });
+  slot.rerender(createElement(threadList.component, { activeThreadId: null, activeProjectId: "proj_a",
+    isCompactViewport: false, onNavigate: () => {}, searchQuery: "" }));
+  expect(visibleRowIds(screen.getByRole("region", { name: "A" }))).toEqual(["file-parent"]);
+  expect(visibleRowIds(screen.getByRole("region", { name: "B" }))).toEqual(["file-child"]);
+  expect(visibleRowIds(slot.container)).toEqual(["file-parent", "file-child"]);
+  expect(within(screen.getByRole("region", { name: "A" })).getByRole("button", { name: "A, 1 thread" }).querySelector(".radar-group-count")?.textContent).toBe("1");
+  expect(within(screen.getByRole("region", { name: "B" })).getByRole("button", { name: "B, 1 thread" }).querySelector(".radar-group-count")?.textContent).toBe("1");
+  fireEvent.contextMenu(slot.container.querySelector('[data-sidebar-thread-id="file-child"]')!);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Mark family read" }));
+  await waitFor(() => expect(slot.inspection.sdkCalls.filter(call => call.method === "threads.markRead")).toEqual([
+    { method: "threads.markRead", args: [{ threadId: "file-parent" }] },
+    { method: "threads.markRead", args: [{ threadId: "file-child" }] },
+  ]));
 });

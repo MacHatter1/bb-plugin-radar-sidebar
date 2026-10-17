@@ -240,6 +240,9 @@ list; disabling this plugin falls back to BB's list automatically.
   parent. Children show model • thinking + time only — no branch line, no
   echoed context (the tooltip keeps everything). Placement follows the
   root's pin state; orphans whose parent is hidden promote to roots.
+  In section view, replies filed to a different section become displayed
+  roots and use their own pin state. Replies in the same section stay nested.
+  Family actions still follow the original parent links across sections.
   Filtering keeps matching branches plus their ancestor context. Families
   fold via the gutter chevron (persisted per client; group headers stick
   while scrolling; filtering forces everything open). A collapsed
