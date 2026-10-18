@@ -60,6 +60,14 @@ export const SETTINGS = {
       "Let long thread titles wrap onto a second line before truncating. Applies in both densities.",
     default: false,
   },
+  projectThreadLimit: {
+    type: "select",
+    label: "Threads per project",
+    description:
+      "Show only the most recent thread families in each project folder, with Show more for the rest. Families containing the open thread or working, waiting, failed or unread threads always stay visible.",
+    options: ["all", "3", "5", "10"],
+    default: "all",
+  },
   loudUnread: {
     type: "boolean",
     label: "Loud unread rows",
@@ -173,7 +181,7 @@ export const SETTING_GROUPS: readonly {
     id: "rows",
     title: "Thread rows",
     description: "How each thread reads in the list.",
-    keys: ["defaultDensity", "twoLineTitles", "loudUnread", "adaptiveCollapse"],
+    keys: ["defaultDensity", "twoLineTitles", "projectThreadLimit", "loudUnread", "adaptiveCollapse"],
   },
   {
     id: "attention",
@@ -203,6 +211,7 @@ export const SETTING_HINTS: Record<SettingKey, string> = {
   disabledContributors: "Badges and menu actions supplied by other plugins.",
   defaultDensity: "Starting row size. The header toggle overrides it per client.",
   twoLineTitles: "Wrap long titles onto a second line.",
+  projectThreadLimit: "Preview recent thread families in each project folder.",
   loudUnread: "Tint and accent finished threads you haven't seen.",
   adaptiveCollapse: "Fold read, idle threads down to title and time.",
   motion: "A breathing glow on rows that need input or failed.",

@@ -20,11 +20,21 @@ describe("settings RPC schemas", () => {
     expect(validate(SETTINGS_RPC.setSetting.input, { key: "swipeLeft", value: "Pin / unpin" }).issues).toBeUndefined();
   });
 
+  it.each(["all", "3", "5", "10"])("accepts and retains the project family limit %s", (value) => {
+    const change = { key: "projectThreadLimit", value };
+    expect(validate(SETTINGS_RPC.setSetting.input, change).value).toEqual(change);
+    expect(validate(SETTINGS_RPC.getSettings.output, { projectThreadLimit: value, revision: 2 }).value)
+      .toEqual({ projectThreadLimit: value, revision: 2 });
+  });
+
   it.each([
     [{ key: "nope", value: true }, "Unknown setting."],
     [{ key: "constructor", value: true }, "Unknown setting."],
     [{ key: "twoLineTitles", value: "yes" }, "Not a value twoLineTitles can take."],
     [{ key: "defaultDensity", value: "roomy" }, "Not a value defaultDensity can take."],
+    [{ key: "projectThreadLimit", value: "4" }, "Not a value projectThreadLimit can take."],
+    [{ key: "projectThreadLimit", value: 3 }, "Not a value projectThreadLimit can take."],
+    [{ key: "projectThreadLimit", value: "3 families" }, "Not a value projectThreadLimit can take."],
     [{ key: "railNav", value: true }, "Unknown setting."],
     [null, "Unknown setting."],
   ])("rejects %j", (input, message) => {

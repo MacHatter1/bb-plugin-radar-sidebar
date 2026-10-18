@@ -6,6 +6,15 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- **Threads per project** (`projectThreadLimit`): cap each project folder to
+  its 3, 5 or 10 most recent thread families, with **Show N more thread
+  families** and **Show less** below. Families containing the open thread or
+  threads that need you stay visible past the cap, and searching or a status
+  filter shows everything. Off (`all`) by default; expanded folders are
+  remembered per client. Configurable in Radar's Thread rows settings card.
+
 ## 0.1.11
 
 Changes merged in [PR #17](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/17).

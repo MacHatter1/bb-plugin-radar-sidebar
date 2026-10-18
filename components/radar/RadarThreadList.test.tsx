@@ -61,13 +61,14 @@ function renderThreads(
     execution?: Record<string, unknown> | null;
     archived?: PluginSidebarThreadsState["experimental_archived"];
     sdk?: Record<string, unknown>;
+    activeThreadId?: string | null;
   } = {},
 ) {
   const runs: ThreadActionCall[] = [];
   const slot = renderSlot(
     threadList,
     {
-      activeThreadId: null,
+      activeThreadId: options.activeThreadId ?? null,
       activeProjectId: "proj_a",
       isCompactViewport: false,
       onNavigate: () => {},
@@ -153,6 +154,234 @@ describe("grouping", () => {
       .getAllByText(/today|yesterday|previous|older/i)
       .map((node) => node.textContent);
     expect(headers).toContain("Today");
+  });
+});
+
+describe("project folder preview", () => {
+  const family = (count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      makeThread({ id: `t${index + 1}`, latestAttentionAt: NOW - (index + 1) * HOUR }),
+    );
+
+  it("shows every thread by default", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(5));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(screen.queryByRole("button", { name: /show \d+ more thread famil/i })).toBeNull();
+  });
+
+  it("caps a folder to its most recent threads and opens the rest on demand", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(localStorage.getItem("radar-sidebar:expanded-groups:v1")).toBe(JSON.stringify(["project:proj_a"]));
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("keeps a thread that needs the user visible past the cap", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const threads = family(5);
+    threads[4] = makeThread({ id: "t5", latestAttentionAt: NOW - 5 * HOUR, isUnread: true });
+    const { container } = renderThreads(threads, { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t5"]);
+    expect(screen.getByRole("button", { name: "Show 1 more thread family" })).toBeTruthy();
+  });
+
+  it("keeps a quiet family visible when a child has queued work", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const working = ["w1", "w2", "w3"].map((id) =>
+      makeThread({ id, status: "active", indicator: "runtime" }),
+    );
+    const quiet = makeThread({ id: "quiet", latestAttentionAt: NOW - 9 * HOUR });
+    const queued = makeThread({
+      id: "queued",
+      parentThreadId: "quiet",
+      queuedWork: "waiting",
+      latestAttentionAt: NOW - 9 * HOUR,
+    });
+    const { container } = renderThreads([...working, quiet, queued], {
+      settings: { projectThreadLimit: "3" },
+    });
+    expect(visibleRowIds(container)).toEqual(expect.arrayContaining(["quiet", "queued"]));
+  });
+
+  it("keeps the open thread's family visible through a parent cycle", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(
+      [
+        ...family(3),
+        makeThread({ id: "a", parentThreadId: "b", latestAttentionAt: NOW - 9 * HOUR }),
+        makeThread({ id: "b", parentThreadId: "a", latestAttentionAt: NOW - 9 * HOUR }),
+      ],
+      { settings: { projectThreadLimit: "3" }, activeThreadId: "b" },
+    );
+    expect(visibleRowIds(container)).toEqual(expect.arrayContaining(["a", "b"]));
+  });
+
+  it("lifts the cap while searching", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Thread" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("keeps empty projects omitted without an expansion control", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads([], { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual([]);
+    expect(screen.getByText("No threads yet.")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Project proj_a" })).toBeNull();
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+  });
+
+  it.each([1, 2, 3])("shows all %i families without a control at or below the cap", (count) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(count), { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(family(count).map((thread) => thread.id));
+    expect(container.querySelector(".radar-group-count")?.textContent).toBe(String(count));
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+  });
+
+  it.each([5, 10])("supports a cap of %i families", (limit) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const threads = family(limit + 2);
+    const { container } = renderThreads(threads, { settings: { projectThreadLimit: String(limit) } });
+    expect(visibleRowIds(container)).toEqual(threads.slice(0, limit).map((thread) => thread.id));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(container)).toEqual(threads.map((thread) => thread.id));
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(visibleRowIds(container)).toEqual(threads.slice(0, limit).map((thread) => thread.id));
+  });
+
+  it("caps and expands projects independently while preserving their saved order", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    localStorage.setItem("radar-sidebar:project-order:v1", JSON.stringify(["proj_b", "proj_a"]));
+    const other = family(4).map((thread) => ({ ...thread, id: `b${thread.id}`, projectId: "proj_b" }));
+    const { container } = renderThreads([...family(5), ...other], {
+      settings: { projectThreadLimit: "3" },
+      projects: [makeProject({ id: "proj_a", name: "Alpha" }), makeProject({ id: "proj_b", name: "Beta" })],
+    });
+    const alpha = screen.getByRole("region", { name: "Alpha" });
+    const beta = screen.getByRole("region", { name: "Beta" });
+    expect(visibleRowIds(container)).toEqual(["bt1", "bt2", "bt3", "t1", "t2", "t3"]);
+    fireEvent.click(within(alpha).getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(alpha)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(visibleRowIds(beta)).toEqual(["bt1", "bt2", "bt3"]);
+    fireEvent.click(within(beta).getByRole("button", { name: "Show 1 more thread family" }));
+    fireEvent.click(within(alpha).getByRole("button", { name: "Show less" }));
+    expect(visibleRowIds(alpha)).toEqual(["t1", "t2", "t3"]);
+    expect(visibleRowIds(beta)).toEqual(["bt1", "bt2", "bt3", "bt4"]);
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:expanded-groups:v1")!)).toEqual(["project:proj_b"]);
+  });
+
+  it("restores expansion after remount and remembers Show less too", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const options = { settings: { projectThreadLimit: "3" } };
+    const first = renderThreads(family(5), options);
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    first.lifecycle.unmount();
+    const second = renderThreads(family(5), options);
+    expect(visibleRowIds(second.container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    const folder = screen.getByRole("button", { name: "Project proj_a, 5 threads" });
+    fireEvent.click(folder);
+    fireEvent.click(folder);
+    expect(screen.getByRole("button", { name: "Show less" }).getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    second.lifecycle.unmount();
+    const third = renderThreads(family(5), options);
+    expect(visibleRowIds(third.container)).toEqual(["t1", "t2", "t3"]);
+    expect(screen.getByRole("button", { name: "Show 2 more thread families" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it.each(["Live", "Waiting", "Unread"])("lifts the cap for the %s status filter without losing expansion", (filter) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const threads = family(6).map((thread, index) => index >= 4 ? thread : {
+      ...thread,
+      status: filter === "Live" ? "active" as const : "idle" as const,
+      indicator: filter === "Waiting" ? "waiting-for-input" as const : "none" as const,
+      hasPendingInteraction: filter === "Waiting",
+      isUnread: filter === "Unread",
+    });
+    const { container } = renderThreads(threads, { settings: { projectThreadLimit: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    fireEvent.click(screen.getByRole("radio", { name: filter }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: filter }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
+    expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+  });
+
+  it("keeps pinned roots uncapped and pinned children nested without consuming a family slot", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const pinned = family(5).map((thread) => ({ ...thread, id: `pin${thread.id}`, isPinned: true }));
+    const child = makeThread({ id: "child", parentThreadId: "t1", isPinned: true, latestAttentionAt: NOW - 8 * HOUR });
+    const { container } = renderThreads([...family(5), ...pinned, child], { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(screen.getByRole("region", { name: "Pinned" }))).toEqual(pinned.map((thread) => thread.id));
+    expect(visibleRowIds(screen.getByRole("region", { name: "Project proj_a" }))).toEqual(["t1", "child", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(container)).toHaveLength(11);
+  });
+
+  it.each(["time", "section"])("leaves %s groups uncapped", (grouping) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", grouping);
+    const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+  });
+
+  it("counts hidden families separately from the header's total thread count", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const children = ["child1", "child2"].map((id) => makeThread({
+      id, parentThreadId: "t4", latestAttentionAt: NOW - 8 * HOUR,
+    }));
+    const { container } = renderThreads([...family(4), ...children], { settings: { projectThreadLimit: "3" } });
+    expect(container.querySelector(".radar-group-count")?.textContent).toBe("6");
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more thread family" }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "child1", "child2"]);
+    expect(container.querySelector(".radar-group-count")?.textContent).toBe("6");
+  });
+
+  it("excludes hidden helpers from the cap, family exceptions and jump targets", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads([
+      makeThread({ id: "helper", isHidden: true, latestAttentionAt: NOW }),
+      ...family(5),
+      makeThread({ id: "hidden-child", parentThreadId: "t5", isHidden: true, isUnread: true }),
+    ], { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+    expect(shortcutTargetIds(container)).toEqual(["t1", "t2", "t3"]);
+    expect(screen.getByRole("button", { name: "Show 2 more thread families" })).toBeTruthy();
+  });
+
+  it("removes hidden selections and keyboard targets when Show less restores the preview", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const slot = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+    fireEvent.keyDown(document.activeElement!, { key: "x" });
+    for (let index = 0; index < 4; index++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("data-sidebar-thread-id")).toBe("t5");
+    fireEvent.keyDown(document.activeElement!, { key: "x" });
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    const less = screen.getByRole("button", { name: "Show less" });
+    less.focus();
+    fireEvent.click(less);
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(shortcutTargetIds(slot.container)).toEqual(["t1", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Deselect all" }));
+    fireEvent.keyDown(document.body, { key: "e" });
+    expect(slot.actionCalls()).toEqual([]);
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement?.getAttribute("data-sidebar-thread-id")).toBe("t3");
   });
 });
 

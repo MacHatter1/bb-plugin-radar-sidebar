@@ -1,8 +1,11 @@
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import plugin from "../../server";
 import { SETTINGS, SETTING_GROUPS } from "../../lib/settings";
 import { resetSettings } from "./settingsStore";
+import { makeProject, makeThread, NOW, HOUR } from "./fixtures";
 
 const app = await loadPluginApp(() => import("../../app"));
 const section = app.settingsSections[0]!;
@@ -49,6 +52,59 @@ describe("settings section", () => {
     const { setSetting } = mount();
     fireEvent.change(screen.getByRole("combobox", { name: "Swipe left" }), { target: { value: "Pin / unpin" } });
     expect(setSetting).toHaveBeenCalledWith({ key: "swipeLeft", value: "Pin / unpin" });
+  });
+
+  it("saves the project family limit through host RPC and updates the sidebar store", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "radar-sidebar" });
+    try {
+      await plugin(bb);
+      localStorage.setItem("radar-sidebar:grouping:v1", "project");
+      const rpc = {
+        getSettings: () => harness.behavior.callRpc("getSettings"),
+        setSetting: vi.fn((input: unknown) => harness.behavior.callRpc("setSetting", input)),
+      };
+      const settings = renderSlot(section, {}, { rpc });
+      const list = renderSlot(app.threadLists[0]!, {
+        activeThreadId: null,
+        activeProjectId: "proj_a",
+        isCompactViewport: false,
+        onNavigate: () => {},
+        searchQuery: "",
+      }, {
+        rpc,
+        sidebarThreads: {
+          status: "ready",
+          threads: Array.from({ length: 5 }, (_, index) => makeThread({ id: `t${index}`, latestAttentionAt: NOW - index * HOUR })),
+          projects: [makeProject({ id: "proj_a" })],
+          sections: [],
+          experimental_archived: null,
+        },
+      });
+      await act(async () => {});
+      const control = within(settings.container).getByRole("combobox", { name: "Threads per project" }) as HTMLSelectElement;
+      expect(control.value).toBe("all");
+      expect(Array.from(control.options, (option) => option.value)).toEqual(["all", "3", "5", "10"]);
+      expect(list.container.querySelectorAll("[data-sidebar-thread-id]")).toHaveLength(5);
+      fireEvent.change(control, { target: { value: "3" } });
+      await waitFor(() => {
+        expect(list.container.querySelectorAll("[data-sidebar-thread-id]")).toHaveLength(3);
+        expect(rpc.setSetting).toHaveBeenCalledWith({ key: "projectThreadLimit", value: "3" });
+        expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!)).toEqual({ projectThreadLimit: "3" });
+      });
+      expect(await bb.storage.kv.get("settings")).toEqual({ projectThreadLimit: "3", revision: 1 });
+      expect(within(list.container).getByRole("button", { name: "Show 2 more thread families" })).toBeTruthy();
+      await expect(harness.behavior.callRpc("setSetting", { key: "projectThreadLimit", value: "4" })).rejects.toThrow("rpc input validation failed");
+      fireEvent.change(control, { target: { value: "all" } });
+      await waitFor(() => {
+        expect(list.container.querySelectorAll("[data-sidebar-thread-id]")).toHaveLength(5);
+        expect(JSON.parse(localStorage.getItem("radar-sidebar:settings:v1")!)).toEqual({ projectThreadLimit: "all" });
+      });
+      expect(await bb.storage.kv.get("settings")).toEqual({ projectThreadLimit: "all", revision: 2 });
+    } finally {
+      cleanup();
+      localStorage.clear();
+      await harness.lifecycle.dispose();
+    }
   });
 
   it("greys out settings whose requirement is off, and says why", () => {
