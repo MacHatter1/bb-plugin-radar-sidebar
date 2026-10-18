@@ -16,7 +16,7 @@ needs a decision hides at the bottom of the list.
 ![Plugin SDK ≥ 0.6.37](https://img.shields.io/badge/plugin%20sdk-%E2%89%A5%200.6.37-0369a1)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
 
-[Features](#features) · [Install](#install) · [How it works](#how-it-works) · [Settings](#settings) · [Development](#development)
+[Features](#features) · [Install](#install) · [How it works](#how-it-works) · [Settings](#settings) · [Extending Radar](#extending-radar) · [Development](#development)
 
 <br>
 
@@ -76,6 +76,10 @@ breathe a slow glow; finished-but-unseen threads get a green wash, accent bar
 and bold title. Motion is reserved for things that need action, so movement
 always means something.
 
+Queued messages scheduled for a future time show a calm clock and **Scheduled**,
+with the local run time in the tooltip. Folded families and group headers keep
+that distinction. Threads with immediate queued work still show **Queued**.
+
 </td>
 </tr>
 <tr>
@@ -100,7 +104,16 @@ threshold. It is interactive, so you can pin, split or archive from the card.
 </td>
 </tr>
 <tr>
-<td valign="top" colspan="2">
+<td valign="top">
+
+### 🧩 Room for other plugins
+
+Other BB plugins can add bounded badges and menu actions to Radar's rows
+through its experimental contribution interface. Turn any one off in Radar's
+settings without disabling the plugin. See [Extending Radar](#extending-radar).
+
+</td>
+<td valign="top">
 
 ### ⌨️ Keyboard and bulk control
 
@@ -147,9 +160,11 @@ The Git semver range tracks compatible `v0.5.x` releases. If you installed
 an earlier minor series, rerun this command to move to the new range.
 
 Then pick it in **Settings → Appearance**: choose **Radar** for the sidebar.
-Navigation stays on BB's own rail: BB 0.46 retired the navigation slot that
-Radar's navigation and rail were built on, so 0.5.3 removes them. On BB 0.44
-or 0.45, keep 0.5.2, which still has them.
+On a BB fork with `experimental_navRailSection`, open **Customize rail → Rail
+sections** and enable **Radar projects** for compact project tiles below the
+navigation icons. The section is independent of the selected thread list.
+On BB 0.44 or 0.45, keep Radar 0.5.2, which still includes the previous
+navigation replacement.
 
 <details>
 <summary><b>Install from a local clone</b></summary>
@@ -175,14 +190,33 @@ bb plugin install path:$PWD --yes
 | **Smart views bar** | Saved query-plus-filter presets, and a shortcut to save the current one. |
 | **Row hover** | Pin, rename, archive and a fuller menu; a peek card after a short pause. |
 | **Settings → Appearance** | Choose Radar for the thread list. |
+| **Customize rail → Rail sections → Radar projects** | On supporting BB forks, enable compact project tiles with live badges, project cards, pins and collections. |
 
 ## Compatibility notes
 
 Radar replaces only the thread list. BB 0.46 retired the sidebar navigation
-slot that Radar's navigation and rail were built on, so navigation is BB's
-own rail and Radar styles none of BB's elements. Nothing here touches BB's
-data: thread operations go through BB's own actions and the public SDK, and
-client state lives under `radar-sidebar:*` localStorage keys.
+replacement. Navigation remains BB's own rail; Radar styles none of BB's elements.
+When the host exposes the new `experimental_navRailSection`, Radar also
+registers an additive project section. Older hosts skip that registration;
+the published SDK minimum stays unchanged. Nothing here bypasses BB's SDK:
+archive and delete run BB's own thread actions, other thread operations go
+through the public SDK, and client state lives under `radar-sidebar:*`
+localStorage keys.
+
+See the [interactive sidebar integration map](docs/radar-sidebar-integration-map.html)
+for the thread-list, project-rail and settings extension points.
+
+The optional project section reuses saved project pins and collections. Click
+a tile to filter Radar's thread list to that project. The selected project
+appears above the thread filters; **Show all projects** clears
+the project filter. This choice is remembered per client, and search and status
+filters apply within it. Right-click or press **Shift+F10** to open the card,
+with its activity tally, recent threads, Open project, New thread, pin, read and collection
+actions. The All projects button finds
+projects without active threads too. Drag pinned tiles to reorder them, or use
+Move pin up/down in their cards; collection cards expand/collapse, rename and
+remove collections. Cards and menus portal outside the rail's scrolling area.
+The host controls section visibility/order and keeps it hidden until enabled.
 
 ## How it works
 
@@ -190,14 +224,14 @@ client state lives under `radar-sidebar:*` localStorage keys.
 flowchart LR
   H[BB host sidebar hooks] --> D[pure derivation<br/>grouping · folding · filters]
   D --> R[rendered list]
-  R -->|actions| A[BB host actions &amp; public SDK]
+  R -->|actions| A[BB thread actions &amp; public SDK]
   A --> H
 ```
 
 - **Reads BB's live state, owns none of it.** Threads, projects and sections
-  come from the host's sidebar hooks; pins, reads, renames and archives route
-  through BB's own actions, so optimistic updates, confirmations and toasts
-  behave exactly as they do in the stock list.
+  come from the host's sidebar hooks. Archive and delete run BB's own thread
+  actions, so confirmations and undo behave exactly as they do in the stock
+  list; pins, read state and renames make the same SDK calls BB's actions do.
 - **Derivation stays out of the components.** Grouping, tree building and
   filter matching live in one hook, `useThreadGroups`, and time bucketing is
   a plain function with no React, so the rows only render.
@@ -211,21 +245,34 @@ flowchart LR
 
 ## Privacy
 
-- 🛰️ **Nothing leaves the machine.** Radar makes no network requests of its own;
-  every read and write goes to your BB server through the plugin SDK.
-- 🧾 **No storage of its own.** No database, no files. Preferences live in
-  browser `localStorage`.
+- 🛰️ **No third-party requests.** Radar sends reads and writes only to your BB
+  server through the plugin SDK; it contacts no external service.
+- 🧾 **Preferences only.** Shared plugin settings live in BB's plugin KV storage.
+  Browser `localStorage` holds a first-paint cache and per-client view choices.
+  Radar creates no separate database.
 - 🔒 **No secrets.** The plugin defines no secret settings and reads none.
 
 ## Settings
 
-`bb plugin config radar-sidebar`, or **Settings → Installed plugins → Radar Sidebar**.
+Open **Settings → Installed plugins → Radar Sidebar**. The plugin keeps its own
+settings, shared by every device you use, so they don't appear in
+`bb plugin config`.
+
+The settings page groups its switches into three preview cards: Thread rows,
+Attention and feedback, and Swipe actions. Each has a small live picture that
+changes as you flip its switches; dependent options are greyed out until their
+requirement is on. A fourth **Plugin contributions**
+card lists plugins supplying thread badges and menu actions, with shared
+per-plugin toggles that leave the plugin itself enabled.
 
 <details>
 <summary><b>All settings</b></summary>
 
 | Setting | Default | |
 | --- | --- | --- |
+| `pinnedProjects` | `{}` | Projects kept visible by the optional project-rail section. Reuses pins from the retired rail and preserves them on unsupported hosts. |
+| `projectOrganisation` | Empty order and collections | Pin order, collections and collapse state for the optional project section; shared across clients. |
+| `disabledContributors` | `{}` | Per-plugin contribution opt-outs, chosen in the Plugin contributions card; saved atomically and shared across devices. |
 | `hoverCard` | `true` | Show the hover peek card. |
 | `celebrate` | `true` | Pop the check badge once when a thread finishes. |
 | `motion` | `true` | Pulse rows that need input or have failed. Also respects `prefers-reduced-motion`. |
@@ -233,7 +280,7 @@ flowchart LR
 | `adaptiveCollapse` | `true` | Fold quiet read-idle rows down to title, project and time. |
 | `defaultDensity` | `"comfortable"` | `comfortable` or `compact`. Applies until you change density in the header, which is remembered per client. |
 | `twoLineTitles` | `false` | Enable **Two-line titles** to wrap long titles, including mentions, before truncating. Short titles keep their project chip and time beside them when they fit; otherwise metadata wraps below, aligned with the title text. Applies in both densities. |
-| `projectThreadLimit` | `"all"` | `3`, `5` or `10` shows only the most recent threads in each project folder, with **Show more** for the rest; `all` shows every thread. The open thread and threads that are working, waiting, failed or unread stay visible past the cap, and searching or a status filter lifts it. |
+| `projectThreadLimit` | `"all"` | `3`, `5` or `10` shows only the most recent thread families in each project folder, with **Show N more thread families** for the rest; `all` shows every family. Families containing the open thread or working, waiting, failed or unread threads stay visible past the cap, and searching or a status filter lifts it. Expanded projects are remembered per client, including across reloads. |
 | `swipeActions` | `true` | Swipe a row left or right to act on it: one finger on a touch screen, two fingers on a trackpad. A trackpad swipe stopped short rests open with its action as a button. A mouse's clicks, drags and Shift+wheel are unaffected. |
 | `swipeRight` | `"Mark read / unread"` | Action for a rightward swipe: `Mark read / unread`, `Pin / unpin`, `Archive / unarchive`, `Open in split`, `Rename`, `More actions`, `Delete…` (BB confirms) or `Nothing`. |
 | `swipeLeft` | `"Archive / unarchive"` | Action for a leftward swipe, from the same list. |
@@ -261,6 +308,23 @@ it returns the sidebar to BB's own list immediately.
 
 </details>
 
+## Extending Radar
+
+Other BB plugins can publish **thread badges and context-menu actions** through
+Radar’s experimental v1 contribution interface. BB owns discovery and plugin
+lifecycle; Radar owns rendering, accessibility, ordering and failure isolation.
+There is no separate loader, DOM injection or shared global registry.
+
+See the [contributor guide](docs/contributions.md), the standalone
+[`bb-radar-contributions` contract package](packages/contributions/), and the
+[tested Agent Teams adapter](examples/agent-teams-radar.ts). The package is ready
+for local packing, not yet published to npm; the adapter is an integration
+example, not automatically activated in Agent Teams.
+
+Contributions refresh in bounded batches while the list is mounted. A slow or
+malformed contributor cannot replace BB’s core status or break normal thread
+actions. Users can turn each contributor off in Radar’s settings.
+
 ## Development
 
 ```sh
@@ -273,12 +337,16 @@ bb plugin dev                      # rebuild and reload on every save
 ```
 
 ```
-server.ts               the settings the frontend reads; no storage, no CLI
-app.tsx                 registers the thread-list slot
+server.ts               shared settings in plugin KV storage; RPC and realtime, no CLI
+app.tsx                 registers the thread-list and settings slots
 app.css                 styles on BB theme tokens, behind the radar- prefix
 components/radar/       the list, rows, menus, peek card and smart views
-components/radar/*.ts   grouping hook, time bucketing, model cache
-lib/swipe.ts            swipe actions and gesture math, shared with server.ts
+components/radar/*.ts   grouping hook, time bucketing, thread actions, model cache
+lib/settingsRpc.ts      versioned settings snapshots and atomic per-item edits
+lib/swipe.ts            swipe actions and gesture math
+lib/contributions.ts    bounded contribution discovery, reads and activation
+packages/contributions/ standalone versioned contracts and registration helper
+examples/               tested contributor integration adapters
 components/storage.ts   one-time migration of codex-sidebar: preferences
 components/ui/          vendored BB UI primitives
 skills/                 the bundled agent skill
@@ -290,8 +358,11 @@ docs/                   logo and screenshots
 rendered list through BB's plugin test harness (`renderSlot` with seeded
 sidebar threads), saved-view validation, preference migration, execution-cache
 refreshes, completion timers, and render counts, so a sidebar update re-renders
-only the rows that changed. Static guards over `app.css` cover cascade
-mistakes jsdom cannot reproduce.
+only the rows that changed. Settings tests cover pending edits, stale snapshots,
+reconnection and concurrent per-item edits; interaction regressions cover
+complete pointer clicks, IME composition and folded queued work.
+Static guards over `app.css` cover cascade mistakes
+jsdom cannot reproduce.
 The test setup uses jsdom's `localStorage` explicitly, including on Node 26,
 whose native storage global otherwise shadows it without a backing file.
 

@@ -2,7 +2,13 @@ import type {
   PluginSidebarProject,
   PluginSidebarSection,
   PluginSidebarThread,
+  PluginThreadActionEntry,
 } from "@get-bb/plugin-sdk/app";
+import type {
+  RenderedSlotInspectionState,
+  TestThreadActionsResolver,
+} from "@get-bb/plugin-sdk/testing/app";
+import { CORE_ARCHIVE, CORE_DELETE } from "./threadActions";
 
 /** Deterministic clock used across fixtures so grouping maths is stable. */
 export const NOW = 1_790_000_000_000;
@@ -93,4 +99,66 @@ export function makeSection(
     createdAt: fixture.createdAt ?? NOW - DAY,
     updatedAt: fixture.updatedAt ?? NOW,
   };
+}
+
+/** One thing the list did to a thread, named as the user would put it. */
+export interface ThreadActionCall {
+  method: "open" | "openNewThread" | "setPinned" | "setRead" | "rename" | "archive" | "requestDelete";
+  threadId?: string;
+  options?: Record<string, unknown>;
+  title?: string;
+  pinned?: boolean;
+  read?: boolean;
+}
+
+/**
+ * bb's own Archive and Delete, which the harness does not emulate. Each run
+ * is recorded in `runs`, standing in for bb's confirmation opening.
+ */
+export function recordCoreThreadActions(runs: ThreadActionCall[]): TestThreadActionsResolver {
+  const entry = (key: string, method: "archive" | "requestDelete", threadId: string): PluginThreadActionEntry => ({
+    key,
+    pluginId: "bb--core",
+    group: "4_lifecycle",
+    action: {
+      label: method === "archive" ? "Archive" : "Delete",
+      icon: method === "archive" ? "Archive" : "Trash2",
+      run: async () => {
+        runs.push({ method, threadId });
+      },
+    },
+  });
+  return (thread) => [
+    entry(CORE_ARCHIVE, "archive", thread.id),
+    entry(CORE_DELETE, "requestDelete", thread.id),
+  ];
+}
+
+/**
+ * Navigation, thread writes and bb's own actions as one log. The list reaches
+ * them through three APIs; a test asserts on what happened to the thread.
+ */
+export function threadActionCalls(
+  inspection: RenderedSlotInspectionState,
+  runs: readonly ThreadActionCall[],
+): ThreadActionCall[] {
+  const calls: ThreadActionCall[] = [];
+  for (const call of inspection.navigateCalls) {
+    if (call.method === "toThread") {
+      calls.push({ method: "open", threadId: call.threadId, ...(call.options ? { options: call.options } : {}) });
+    } else if (call.method === "toCompose") {
+      calls.push({ method: "openNewThread", ...(call.options ? { options: call.options } : {}) });
+    }
+  }
+  for (const { method, args } of inspection.sdkCalls) {
+    const input = args[0] as { threadId: string; title?: unknown };
+    if (method === "threads.pin" || method === "threads.unpin") {
+      calls.push({ method: "setPinned", threadId: input.threadId, pinned: method === "threads.pin" });
+    } else if (method === "threads.markRead" || method === "threads.markUnread") {
+      calls.push({ method: "setRead", threadId: input.threadId, read: method === "threads.markRead" });
+    } else if (method === "threads.update" && typeof input.title === "string") {
+      calls.push({ method: "rename", threadId: input.threadId, title: input.title });
+    }
+  }
+  return [...calls, ...runs];
 }

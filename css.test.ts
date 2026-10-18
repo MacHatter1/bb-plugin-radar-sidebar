@@ -24,6 +24,17 @@ function rules(source = css): { selector: string; body: string }[] {
 }
 
 describe("app.css", () => {
+  it.each([".radar-skeleton-title", ".radar-skeleton-subtitle"])("disables %s animation when reduced motion is requested", (selector) => {
+    const skeletonAnimation = css.match(/\.radar-skeleton-title\s*,\s*\.radar-skeleton-subtitle\s*\{[^{}]*animation:\s*radar-pulse\b[^{}]*\}/);
+    const reducedMotionRules = [...css.matchAll(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g)]
+      .flatMap((match) => rules(match[1]).map((rule) => ({ ...rule, offset: match.index })));
+    const override = reducedMotionRules.find((rule) =>
+      rule.selector.split(",").some((part) => part.trim() === selector) && /animation:\s*none\s*;/.test(rule.body),
+    );
+    expect(override?.body).toMatch(/animation:\s*none\s*;/);
+    expect(override?.offset).toBeGreaterThan(skeletonAnimation?.index ?? Infinity);
+  });
+
   it("never styles BB's own elements", () => {
     // BB owns its sidebar, panel, toggle and navigation rail.
     const selectors = rules().flatMap((rule) => rule.selector.split(/,(?![^()]*\))/));

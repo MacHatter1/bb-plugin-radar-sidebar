@@ -32,10 +32,8 @@ import {
 } from "@dnd-kit/sortable";
 import {
   experimental_useProviders,
-  experimental_useSidebarThreadActions,
   experimental_useSidebarThreads,
   useSdk,
-  useSettings,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -44,20 +42,27 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { isComposingKey } from "@/lib/keyboard";
 import {
   DEFAULT_SWIPE_LEFT,
   DEFAULT_SWIPE_RIGHT,
   swipeActionFromSetting,
 } from "@/lib/swipe";
 import { preloadExtendedIcons } from "@/components/ui/icon";
+import { useContributions } from "./useContributions";
+import { EMPTY_CONTRIBUTIONS, contributionActionId } from "@/lib/contributions";
 import { RadarThreadRow } from "./RadarThreadRow";
-import { activityTime, isLiveThread, isRunningThread, timeAgo } from "./time";
+import { activityTime, isLiveThread, isRunningThread, threadAttention, timeAgo } from "./time";
 import {
   GroupHeader,
   SortableGroupSection,
 } from "./RadarGroupHeader";
 import { RadarMenu, type RadarMenuItem } from "./RadarMenu";
 import { useArrivals } from "./useArrivals";
+import { useScheduledThreads } from "./useScheduledThreads";
+import { useRadarThreadActions } from "./threadActions";
+import { setProjectScope, useProjectScope } from "./projectScope";
+import { useSettingValues } from "./settingsStore";
 import {
   useThreadGroups,
   type ThreadGroup,
@@ -87,8 +92,6 @@ const EXPANDED_KEY = "radar-sidebar:expanded-groups:v1";
 const PROJECT_ORDER_KEY = "radar-sidebar:project-order:v1";
 const STATUS_FILTER_KEY = "radar-sidebar:status-filter:v1";
 const DENSITY_KEY = "radar-sidebar:density:v1";
-const LAST_DEFAULT_DENSITY_KEY = "radar-sidebar:last-default-density:v1";
-const LAST_TWO_LINE_TITLES_KEY = "radar-sidebar:last-two-line-titles:v1";
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set();
 
@@ -109,8 +112,7 @@ function readStored<T extends string>(
 
 /** "3", "5" or "10" caps each project folder; anything else shows them all. */
 function threadLimitFromSetting(value: unknown): number | null {
-  const limit = typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN;
-  return Number.isInteger(limit) && limit > 0 ? limit : null;
+  return value === "3" || value === "5" || value === "10" ? Number(value) : null;
 }
 
 function writeStored(key: string, value: string): void {
@@ -121,49 +123,26 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** Plugin settings, with the shipped defaults applied while they load. The two
- * that set row height fall back to the value this client last saw instead, so
- * a reload paints rows at their final size without holding the list back.
- * Swipe actions stay off until the settings arrive. */
+/** The plugin's settings, from this browser's store. They are there on the
+ * first render, so rows paint at their final size and swipes know their
+ * actions from the start. */
 function useSidebarSettings() {
-  const { values } = useSettings();
-  const flag = (key: string, fallback: boolean): boolean =>
-    typeof values?.[key] === "boolean" ? (values[key] as boolean) : fallback;
-  const [lastSeen] = useState(() => ({
-    defaultDensity: readStored<DensityMode>(
-      LAST_DEFAULT_DENSITY_KEY,
-      "comfortable",
-      ["comfortable", "compact"],
-    ),
-    wrapTitles: readStored(LAST_TWO_LINE_TITLES_KEY, "off", ["off", "on"]) === "on",
-  }));
-  const loaded = values !== undefined;
-  const defaultDensity: DensityMode = loaded
-    ? values.defaultDensity === "compact" ? "compact" : "comfortable"
-    : lastSeen.defaultDensity;
-  const wrapTitles = loaded ? flag("twoLineTitles", false) : lastSeen.wrapTitles;
-  // Swipes act on threads, so they wait for the saved choice rather than
-  // running on the defaults for someone who turned them off.
-  const swipeOn = loaded && flag("swipeActions", true);
-  useEffect(() => {
-    if (!loaded) return;
-    writeStored(LAST_DEFAULT_DENSITY_KEY, defaultDensity);
-    writeStored(LAST_TWO_LINE_TITLES_KEY, wrapTitles ? "on" : "off");
-  }, [loaded, defaultDensity, wrapTitles]);
+  const values = useSettingValues();
   return {
-    hoverCard: flag("hoverCard", true),
-    celebrate: flag("celebrate", true),
-    motion: flag("motion", true),
-    loudUnread: flag("loudUnread", true),
-    adaptiveCollapse: flag("adaptiveCollapse", true),
-    defaultDensity,
-    wrapTitles,
-    projectThreadLimit: threadLimitFromSetting(values?.projectThreadLimit),
-    swipeRight: swipeOn
-      ? swipeActionFromSetting(values?.swipeRight, DEFAULT_SWIPE_RIGHT)
+    disabledContributors: values.disabledContributors,
+    hoverCard: values.hoverCard,
+    celebrate: values.celebrate,
+    motion: values.motion,
+    loudUnread: values.loudUnread,
+    adaptiveCollapse: values.adaptiveCollapse,
+    defaultDensity: values.defaultDensity as DensityMode,
+    wrapTitles: values.twoLineTitles,
+    projectThreadLimit: threadLimitFromSetting(values.projectThreadLimit),
+    swipeRight: values.swipeActions
+      ? swipeActionFromSetting(values.swipeRight, DEFAULT_SWIPE_RIGHT)
       : "none",
-    swipeLeft: swipeOn
-      ? swipeActionFromSetting(values?.swipeLeft, DEFAULT_SWIPE_LEFT)
+    swipeLeft: values.swipeActions
+      ? swipeActionFromSetting(values.swipeLeft, DEFAULT_SWIPE_LEFT)
       : "none",
   };
 }
@@ -431,6 +410,7 @@ export function RadarThreadList({
   const [groupMenu, setGroupMenu] = useState<{
     x: number;
     y: number;
+    trigger: HTMLElement;
   } | null>(null);
   const justDragged = useRef(false);
   const sensors = useSensors(
@@ -479,6 +459,7 @@ export function RadarThreadList({
     x: number;
     y: number;
     threadId: string;
+    trigger: HTMLElement;
   } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   // Bumped to revalidate per-thread model info (cheap, cached reads).
@@ -507,13 +488,19 @@ export function RadarThreadList({
   );
   const {
     status,
-    threads,
+    threads: allThreads,
     projects,
     sections,
     experimental_archived,
   } = experimental_useSidebarThreads(lifecyclesParam);
-  const actions = experimental_useSidebarThreadActions();
+  const projectScope = useProjectScope({ projects, status });
+  const scopedProject = projects.find(project => project.id === projectScope);
+  const projectScopeName = scopedProject?.isPersonal ? "Personal" : scopedProject?.name ?? "Project";
+  const threads = useMemo(() => projectScope === null ? allThreads
+    : allThreads.filter(thread => thread.projectId === projectScope), [allThreads, projectScope]);
+  const actions = useRadarThreadActions();
   const sdk = useSdk();
+  const scheduledThreads = useScheduledThreads(threads, sdk);
   const { providers } = experimental_useProviders();
   const providerById = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider])),
@@ -564,6 +551,7 @@ export function RadarThreadList({
     projects,
     sections,
     now,
+    scheduledThreads,
   });
 
   const activeGroup = useMemo(
@@ -776,6 +764,9 @@ export function RadarThreadList({
     () => new Set(visibleFlattenedThreadIds),
     [visibleFlattenedThreadIds],
   );
+  const contributions = useContributions(visibleFlattenedThreadIds, settings.disabledContributors);
+  const contributionRows = contributions.rows;
+  const contributionClient = contributions.client;
   // Every host snapshot rebuilds the flattened order. Rows read it through a
   // ref so their select handler stays stable and the memo keeps them still.
   const visibleOrderRef = useRef(visibleFlattenedThreadIds);
@@ -895,7 +886,7 @@ export function RadarThreadList({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Another handler (a host menu, dialog or select) already owns this key.
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || isComposingKey(event)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
 
       if (target !== null && target === searchInputRef.current) {
@@ -1118,9 +1109,9 @@ export function RadarThreadList({
   );
 
   const openMenu = useCallback(
-    (clientX: number, clientY: number, thread: PluginSidebarThread) => {
+    (clientX: number, clientY: number, thread: PluginSidebarThread, trigger: HTMLElement) => {
       setEditingId(null);
-      setMenu({ x: clientX, y: clientY, threadId: thread.id });
+      setMenu({ x: clientX, y: clientY, threadId: thread.id, trigger });
     },
     [],
   );
@@ -1206,8 +1197,17 @@ export function RadarThreadList({
         danger: true,
       },
     ];
+    const pluginActions = contributionRows.get(menuThread.id)?.actions ?? [];
+    if (pluginActions.length > 0) {
+      items.push({ kind: "separator" }, { kind: "header", label: "Plugin actions" });
+      items.push(...pluginActions.map((action): RadarMenuItem => ({
+        kind: "item", id: contributionActionId(action), label: `${action.pluginName}: ${action.label}`,
+        icon: action.icon ?? "Puzzle", hostIcon: true, disabled: action.disabled,
+        href: action.kind === "link" ? action.href : undefined,
+      })));
+    }
     return items;
-  }, [menuThread, sections, childrenOf]);
+  }, [menuThread, sections, childrenOf, contributionRows]);
 
   const handleMenuSelect = useCallback(
     async (id: string) => {
@@ -1215,6 +1215,15 @@ export function RadarThreadList({
       setMenu(null);
       if (!thread) return;
       try {
+        if (id.startsWith("radar-extension:")) {
+          const action = contributionClient.getSnapshot().rows.get(thread.id)?.actions.find((item) => contributionActionId(item) === id);
+          if (!action || action.disabled) throw new Error("This contributor action is no longer available.");
+          if (action.kind === "link") return;
+          if (action.confirmation && !window.confirm(action.confirmation)) return;
+          const result = await contributionClient.execute(thread.id, action.key);
+          if (result.message) toast.success(result.message);
+          return;
+        }
         if (id === "open-split") {
           actions.open(thread.id, { split: true });
           onNavigate();
@@ -1249,7 +1258,7 @@ export function RadarThreadList({
         toast.error(problem(cause));
       }
     },
-    [menuThread, actions, sdk, onNavigate, markFamilyRead],
+    [menuThread, actions, sdk, onNavigate, markFamilyRead, contributionClient],
   );
 
   const commitRename = useCallback(
@@ -1292,6 +1301,7 @@ export function RadarThreadList({
     ) => {
       const kidCount = (shownChildren.get(thread.id) ?? []).length;
       const counts = kidCount > 0 ? countSubtree(thread) : null;
+      const attention = threadAttention(thread, scheduledThreads.get(thread.id));
       const collapse =
         kidCount > 0 && counts
           ? {
@@ -1300,14 +1310,10 @@ export function RadarThreadList({
               hiddenUnread:
                 counts.unread - (thread.isUnread ? 1 : 0),
               hiddenLive: counts.live - Number(isRunningThread(thread)) > 0,
-              hiddenNeedsUser:
-                counts.needsUser -
-                  Number(thread.indicator === "waiting-for-input") > 0,
-              hiddenFailed:
-                counts.failed - Number(
-                  thread.indicator === "unread-error" ||
-                  thread.indicator === "queued-failed",
-                ) > 0,
+              hiddenNeedsUser: counts.needsUser - Number(attention === "needs-user") > 0,
+              hiddenQueued: counts.queued - Number(attention === "queued") > 0,
+              hiddenScheduled: counts.scheduled - Number(attention === "scheduled") > 0,
+              hiddenFailed: counts.failed - Number(attention === "failed") > 0,
               hiddenKids: counts.kids,
               onToggle: () => toggleThreadCollapse(thread.id),
             }
@@ -1317,6 +1323,8 @@ export function RadarThreadList({
         <RadarThreadRow
           key={thread.id}
           thread={thread}
+          scheduledFor={scheduledThreads.get(thread.id)}
+          contributions={contributionRows.get(thread.id) ?? EMPTY_CONTRIBUTIONS}
           depth={depth}
           isLastChild={isLastChild}
           projectName={projectNameFor(thread)}
@@ -1367,6 +1375,8 @@ export function RadarThreadList({
       );
     },
     [
+      contributionRows,
+      scheduledThreads,
       projectNameFor,
       sectionById,
       celebrateIds,
@@ -1410,7 +1420,11 @@ export function RadarThreadList({
 
       const groupContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
         event.preventDefault();
-        setGroupMenu({ x: event.clientX, y: event.clientY });
+        const button = event.target instanceof Element ? event.target.closest("button") : null;
+        const trigger = button && event.currentTarget.contains(button)
+          ? button
+          : event.currentTarget.querySelector<HTMLElement>(".radar-group-toggle");
+        if (trigger) setGroupMenu({ x: event.clientX, y: event.clientY, trigger });
       };
 
       const foldContent = (
@@ -1443,10 +1457,13 @@ export function RadarThreadList({
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="h-auto min-h-8 whitespace-normal text-left"
                       aria-expanded={preview.toggle === "less"}
                       onClick={() => toggleShowMore(group.id)}
                     >
-                      {preview.toggle === "more" ? `Show ${preview.hidden} more` : "Show less"}
+                      {preview.toggle === "more"
+                        ? `Show ${preview.hidden} more thread ${preview.hidden === 1 ? "family" : "families"}`
+                        : "Show less"}
                     </Button>
                   </div>
                 ) : null}
@@ -1557,6 +1574,14 @@ export function RadarThreadList({
       }
     >
       <div className="radar-list-header">
+        {projectScope !== null ? (
+          <div className="radar-project-scope" aria-label={`Project filter: ${projectScopeName}`}>
+            <Icon name="Folder" aria-hidden="true" />
+            <span title={projectScopeName}>{projectScopeName}</span>
+            <button type="button" aria-label="Show all projects" title="Show all projects"
+              onClick={() => setProjectScope(null)}><Icon name="X" aria-hidden="true" /></button>
+          </div>
+        ) : null}
         <div className="radar-search">
           <Icon
             name="Search"
@@ -2036,6 +2061,7 @@ export function RadarThreadList({
         <RadarMenu
           x={groupMenu.x}
           y={groupMenu.y}
+          trigger={groupMenu.trigger}
           items={[
             {
               kind: "item",
@@ -2085,6 +2111,7 @@ export function RadarThreadList({
         <RadarMenu
           x={menu.x}
           y={menu.y}
+          trigger={menu.trigger}
           items={menuItems}
           onSelect={handleMenuSelect}
           onClose={() => setMenu(null)}

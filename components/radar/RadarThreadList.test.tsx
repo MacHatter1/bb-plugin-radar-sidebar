@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
-import { act, cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createElement, Fragment, type FunctionComponent } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import * as pluginSdk from "@get-bb/plugin-sdk/app";
 import type { PluginSidebarThread, PluginSidebarThreadsState } from "@get-bb/plugin-sdk/app";
-import { DAY, HOUR, NOW, makeProject, makeSection, makeThread } from "./fixtures";
+import {
+  DAY,
+  HOUR,
+  NOW,
+  makeProject,
+  makeSection,
+  makeThread,
+  recordCoreThreadActions,
+  threadActionCalls,
+  type ThreadActionCall,
+} from "./fixtures";
 
 // Expose configurable test exports while retaining the SDK's slot runtime.
 vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => ({
@@ -27,6 +37,9 @@ function sdkFakes(
       update: async () => ({ ok: true }),
       unarchive: async () => ({ ok: true }),
       markRead: async () => ({ ok: true }),
+      markUnread: async () => ({ ok: true }),
+      pin: async () => ({ ok: true }),
+      unpin: async () => ({ ok: true }),
       context: async () => ({ usage: null }),
     },
     providers: { models: async () => ({ models: [] }) },
@@ -51,7 +64,8 @@ function renderThreads(
     activeThreadId?: string | null;
   } = {},
 ) {
-  return renderSlot(
+  const runs: ThreadActionCall[] = [];
+  const slot = renderSlot(
     threadList,
     {
       activeThreadId: options.activeThreadId ?? null,
@@ -62,6 +76,7 @@ function renderThreads(
     },
     {
       sdk: sdkFakes(options.execution),
+      threadActions: recordCoreThreadActions(runs),
       ...options,
       sidebarThreads: {
         status: "ready",
@@ -72,6 +87,10 @@ function renderThreads(
       },
     },
   );
+  return Object.assign(slot, {
+    /** What the list did to threads, oldest first. */
+    actionCalls: () => threadActionCalls(slot.inspection, runs),
+  });
 }
 
 /** Row anchors are the stable handle: ThreadTitle renders empty in the
@@ -148,14 +167,14 @@ describe("project folder preview", () => {
     localStorage.setItem("radar-sidebar:grouping:v1", "project");
     const { container } = renderThreads(family(5));
     expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
-    expect(screen.queryByRole("button", { name: /show \d+ more/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /show \d+ more thread famil/i })).toBeNull();
   });
 
   it("caps a folder to its most recent threads and opens the rest on demand", () => {
     localStorage.setItem("radar-sidebar:grouping:v1", "project");
     const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
     expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
-    fireEvent.click(screen.getByRole("button", { name: "Show 2 more" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
     expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
     expect(localStorage.getItem("radar-sidebar:expanded-groups:v1")).toBe(JSON.stringify(["project:proj_a"]));
     fireEvent.click(screen.getByRole("button", { name: "Show less" }));
@@ -168,7 +187,7 @@ describe("project folder preview", () => {
     threads[4] = makeThread({ id: "t5", latestAttentionAt: NOW - 5 * HOUR, isUnread: true });
     const { container } = renderThreads(threads, { settings: { projectThreadLimit: "3" } });
     expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t5"]);
-    expect(screen.getByRole("button", { name: "Show 1 more" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show 1 more thread family" })).toBeTruthy();
   });
 
   it("keeps a quiet family visible when a child has queued work", () => {
@@ -207,6 +226,162 @@ describe("project folder preview", () => {
     const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Thread" } });
     expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("keeps empty projects omitted without an expansion control", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads([], { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual([]);
+    expect(screen.getByText("No threads yet.")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Project proj_a" })).toBeNull();
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+  });
+
+  it.each([1, 2, 3])("shows all %i families without a control at or below the cap", (count) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads(family(count), { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(family(count).map((thread) => thread.id));
+    expect(container.querySelector(".radar-group-count")?.textContent).toBe(String(count));
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+  });
+
+  it.each([5, 10])("supports a cap of %i families", (limit) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const threads = family(limit + 2);
+    const { container } = renderThreads(threads, { settings: { projectThreadLimit: String(limit) } });
+    expect(visibleRowIds(container)).toEqual(threads.slice(0, limit).map((thread) => thread.id));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(container)).toEqual(threads.map((thread) => thread.id));
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(visibleRowIds(container)).toEqual(threads.slice(0, limit).map((thread) => thread.id));
+  });
+
+  it("caps and expands projects independently while preserving their saved order", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    localStorage.setItem("radar-sidebar:project-order:v1", JSON.stringify(["proj_b", "proj_a"]));
+    const other = family(4).map((thread) => ({ ...thread, id: `b${thread.id}`, projectId: "proj_b" }));
+    const { container } = renderThreads([...family(5), ...other], {
+      settings: { projectThreadLimit: "3" },
+      projects: [makeProject({ id: "proj_a", name: "Alpha" }), makeProject({ id: "proj_b", name: "Beta" })],
+    });
+    const alpha = screen.getByRole("region", { name: "Alpha" });
+    const beta = screen.getByRole("region", { name: "Beta" });
+    expect(visibleRowIds(container)).toEqual(["bt1", "bt2", "bt3", "t1", "t2", "t3"]);
+    fireEvent.click(within(alpha).getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(alpha)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(visibleRowIds(beta)).toEqual(["bt1", "bt2", "bt3"]);
+    fireEvent.click(within(beta).getByRole("button", { name: "Show 1 more thread family" }));
+    fireEvent.click(within(alpha).getByRole("button", { name: "Show less" }));
+    expect(visibleRowIds(alpha)).toEqual(["t1", "t2", "t3"]);
+    expect(visibleRowIds(beta)).toEqual(["bt1", "bt2", "bt3", "bt4"]);
+    expect(JSON.parse(localStorage.getItem("radar-sidebar:expanded-groups:v1")!)).toEqual(["project:proj_b"]);
+  });
+
+  it("restores expansion after remount and remembers Show less too", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const options = { settings: { projectThreadLimit: "3" } };
+    const first = renderThreads(family(5), options);
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    first.lifecycle.unmount();
+    const second = renderThreads(family(5), options);
+    expect(visibleRowIds(second.container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    const folder = screen.getByRole("button", { name: "Project proj_a, 5 threads" });
+    fireEvent.click(folder);
+    fireEvent.click(folder);
+    expect(screen.getByRole("button", { name: "Show less" }).getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    second.lifecycle.unmount();
+    const third = renderThreads(family(5), options);
+    expect(visibleRowIds(third.container)).toEqual(["t1", "t2", "t3"]);
+    expect(screen.getByRole("button", { name: "Show 2 more thread families" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it.each(["Live", "Waiting", "Unread"])("lifts the cap for the %s status filter without losing expansion", (filter) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const threads = family(6).map((thread, index) => index >= 4 ? thread : {
+      ...thread,
+      status: filter === "Live" ? "active" as const : "idle" as const,
+      indicator: filter === "Waiting" ? "waiting-for-input" as const : "none" as const,
+      hasPendingInteraction: filter === "Waiting",
+      isUnread: filter === "Unread",
+    });
+    const { container } = renderThreads(threads, { settings: { projectThreadLimit: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    fireEvent.click(screen.getByRole("radio", { name: filter }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: filter }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5", "t6"]);
+    expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+  });
+
+  it("keeps pinned roots uncapped and pinned children nested without consuming a family slot", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const pinned = family(5).map((thread) => ({ ...thread, id: `pin${thread.id}`, isPinned: true }));
+    const child = makeThread({ id: "child", parentThreadId: "t1", isPinned: true, latestAttentionAt: NOW - 8 * HOUR });
+    const { container } = renderThreads([...family(5), ...pinned, child], { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(screen.getByRole("region", { name: "Pinned" }))).toEqual(pinned.map((thread) => thread.id));
+    expect(visibleRowIds(screen.getByRole("region", { name: "Project proj_a" }))).toEqual(["t1", "child", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(visibleRowIds(container)).toHaveLength(11);
+  });
+
+  it.each(["time", "section"])("leaves %s groups uncapped", (grouping) => {
+    localStorage.setItem("radar-sidebar:grouping:v1", grouping);
+    const { container } = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    expect(container.querySelector(".radar-group-more")).toBeNull();
+  });
+
+  it("counts hidden families separately from the header's total thread count", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const children = ["child1", "child2"].map((id) => makeThread({
+      id, parentThreadId: "t4", latestAttentionAt: NOW - 8 * HOUR,
+    }));
+    const { container } = renderThreads([...family(4), ...children], { settings: { projectThreadLimit: "3" } });
+    expect(container.querySelector(".radar-group-count")?.textContent).toBe("6");
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Show 1 more thread family" }));
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3", "t4", "child1", "child2"]);
+    expect(container.querySelector(".radar-group-count")?.textContent).toBe("6");
+  });
+
+  it("excludes hidden helpers from the cap, family exceptions and jump targets", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const { container } = renderThreads([
+      makeThread({ id: "helper", isHidden: true, latestAttentionAt: NOW }),
+      ...family(5),
+      makeThread({ id: "hidden-child", parentThreadId: "t5", isHidden: true, isUnread: true }),
+    ], { settings: { projectThreadLimit: "3" } });
+    expect(visibleRowIds(container)).toEqual(["t1", "t2", "t3"]);
+    expect(shortcutTargetIds(container)).toEqual(["t1", "t2", "t3"]);
+    expect(screen.getByRole("button", { name: "Show 2 more thread families" })).toBeTruthy();
+  });
+
+  it("removes hidden selections and keyboard targets when Show less restores the preview", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const slot = renderThreads(family(5), { settings: { projectThreadLimit: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+    fireEvent.keyDown(document.activeElement!, { key: "x" });
+    for (let index = 0; index < 4; index++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("data-sidebar-thread-id")).toBe("t5");
+    fireEvent.keyDown(document.activeElement!, { key: "x" });
+    expect(screen.getByText("2 selected")).toBeTruthy();
+    const less = screen.getByRole("button", { name: "Show less" });
+    less.focus();
+    fireEvent.click(less);
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Show 2 more thread families" }));
+    expect(shortcutTargetIds(slot.container)).toEqual(["t1", "t2", "t3"]);
+    fireEvent.click(screen.getByRole("button", { name: "Deselect all" }));
+    fireEvent.keyDown(document.body, { key: "e" });
+    expect(slot.actionCalls()).toEqual([]);
+    fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement?.getAttribute("data-sidebar-thread-id")).toBe("t3");
   });
 });
 
@@ -400,7 +575,7 @@ describe("actions", () => {
     const slot = renderThreads([thread]);
 
     fireEvent.click(screen.getByLabelText("Archive thread"));
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+    expect(slot.actionCalls()).toContainEqual({
       method: "archive",
       threadId: "t",
     });
@@ -411,11 +586,150 @@ describe("actions", () => {
     const slot = renderThreads([thread]);
 
     fireEvent.click(screen.getByLabelText("Pin thread"));
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+    expect(slot.actionCalls()).toContainEqual({
       method: "setPinned",
       threadId: "t",
       pinned: true,
     });
+  });
+
+  it("opens bb's own delete confirmation rather than deleting", async () => {
+    const slot = renderThreads([makeThread({ id: "t" })]);
+    fireEvent.contextMenu(slot.container.querySelector('[data-sidebar-thread-id="t"]')!);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete…" }));
+    await waitFor(() => {
+      expect(slot.actionCalls()).toEqual([{ method: "requestDelete", threadId: "t" }]);
+    });
+    expect(slot.inspection.sdkCalls.map((call) => call.method)).not.toContain("threads.delete");
+  });
+
+  it("leaves an archived thread alone when archive is pressed", () => {
+    localStorage.setItem("radar-sidebar:lifecycles:v1", "archived");
+    const slot = renderThreads([makeThread({ id: "t", isArchived: true })]);
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("data-sidebar-thread-id")).toBe("t");
+    fireEvent.keyDown(document.body, { key: "e" });
+    expect(slot.actionCalls()).toEqual([]);
+  });
+
+  it("starts a project's new thread in bb's composer", () => {
+    localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const slot = renderThreads([makeThread({ id: "t" })], {
+      projects: [makeProject({ id: "proj_a", name: "Alpha" })],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start new thread in Alpha" }));
+    expect(slot.inspection.navigateCalls).toContainEqual({
+      method: "toCompose",
+      options: { projectId: "proj_a", focusPrompt: true },
+    });
+  });
+});
+
+describe("context menus", () => {
+  function threadTrigger(container: HTMLElement) {
+    return container.querySelector<HTMLElement>('[data-sidebar-thread-id="one"]')!;
+  }
+
+  it.each(["thread", "group"])("keeps the %s menu open for sibling and internal scrolls, then closes on its ancestor scroll", (kind) => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = kind === "thread"
+      ? threadTrigger(slot.container)
+      : slot.container.querySelector<HTMLElement>(".radar-group-toggle")!;
+    fireEvent.contextMenu(trigger);
+    const menu = screen.getByRole("menu");
+    const conversation = document.createElement("div");
+    document.body.appendChild(conversation);
+    try {
+      fireEvent.scroll(conversation);
+      expect(screen.queryByRole("menu")).toBe(menu);
+      fireEvent.scroll(menu);
+      expect(screen.queryByRole("menu")).toBe(menu);
+      fireEvent.scroll(document);
+      expect(screen.queryByRole("menu")).toBeNull();
+    } finally {
+      conversation.remove();
+    }
+  });
+
+  it.each(["thread", "group"])("closes the %s menu when its invoking control scrolls", (kind) => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = kind === "thread"
+      ? threadTrigger(slot.container)
+      : slot.container.querySelector<HTMLElement>(".radar-group-toggle")!;
+    fireEvent.contextMenu(trigger);
+    expect(screen.getByRole("menu").getAttribute("aria-label")).toBe("Thread actions");
+    fireEvent.scroll(trigger);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it.each(["row", "more", "group", "group label", "group whitespace", "new thread"])("returns focus to the %s invoker after Escape", (kind) => {
+    if (kind === "new thread") localStorage.setItem("radar-sidebar:grouping:v1", "project");
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const row = threadTrigger(slot.container);
+    const toggle = slot.container.querySelector<HTMLElement>(".radar-group-toggle")!;
+    const trigger = kind === "row" ? row
+      : kind === "more" ? screen.getByRole("button", { name: "More actions" })
+      : kind === "new thread" ? screen.getByRole("button", { name: /Start new thread in/ })
+      : toggle;
+    trigger.focus();
+    if (kind === "more") fireEvent.click(trigger);
+    else fireEvent.contextMenu(kind === "group label"
+      ? toggle.querySelector(".radar-group-label")!
+      : kind === "group whitespace" ? toggle.parentElement! : trigger);
+    const menu = screen.getByRole("menu");
+    expect(document.activeElement).toBe(menu);
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("uses Escape only to dismiss the menu while selection and search remain", () => {
+    const slot = renderThreads([makeThread({ id: "one", title: "Keep this thread" })]);
+    const search = screen.getByRole("searchbox");
+    fireEvent.change(search, { target: { value: "Keep" } });
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    fireEvent.keyDown(document.body, { key: "x" });
+    expect(screen.getByText("1 selected").textContent).toBe("1 selected");
+    const trigger = threadTrigger(slot.container);
+    fireEvent.contextMenu(trigger);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByText("1 selected").textContent).toBe("1 selected");
+    expect((search as HTMLInputElement).value).toBe("Keep");
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(screen.queryByText("1 selected")).toBeNull();
+    expect((search as HTMLInputElement).value).toBe("Keep");
+  });
+
+  it("leaves focus outside the menu on pointer dismissal or Escape", () => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = threadTrigger(slot.container);
+    const search = screen.getByRole("searchbox");
+    fireEvent.contextMenu(trigger);
+    search.focus();
+    fireEvent.pointerDown(search);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(search);
+    fireEvent.contextMenu(trigger);
+    search.focus();
+    fireEvent.keyDown(search, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("does not restore focus to a disconnected invoker", () => {
+    const slot = renderThreads([makeThread({ id: "one" })]);
+    const trigger = threadTrigger(slot.container);
+    fireEvent.contextMenu(trigger);
+    trigger.remove();
+    const focus = vi.spyOn(trigger, "focus");
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+    expect(focus).not.toHaveBeenCalled();
   });
 });
 
@@ -443,6 +757,21 @@ describe("swipe actions", () => {
     options: Parameters<typeof renderThreads>[1] = {},
   ) => renderThreads(threads, { settings: {}, ...options });
 
+  it("anchors a swipe menu to the row and returns focus there on Escape", () => {
+    const slot = renderSwipe([makeThread({ id: "one" })], {
+      settings: { swipeLeft: "More actions" },
+    });
+    const trigger = slot.container.querySelector<HTMLElement>('[data-sidebar-thread-id="one"]')!;
+    swipe(slot.container, -160);
+    const menu = screen.getByRole("menu");
+    expect(document.activeElement).toBe(menu);
+    fireEvent.scroll(screen.getByRole("searchbox"));
+    expect(screen.queryByRole("menu")).toBe(menu);
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   const originalOffsetWidth = Object.getOwnPropertyDescriptor(
     HTMLElement.prototype,
     "offsetWidth",
@@ -467,7 +796,7 @@ describe("swipe actions", () => {
       makeThread({ id: "t", lastReadAt: null, latestAttentionAt: NOW }),
     ]);
     swipe(slot.container, 160);
-    expect(slot.inspection.sidebarActionCalls).toContainEqual(
+    expect(slot.actionCalls()).toContainEqual(
       expect.objectContaining({ method: "setRead", threadId: "t" }),
     );
   });
@@ -478,11 +807,11 @@ describe("swipe actions", () => {
       const slot = renderSwipe([makeThread({ id: "t" })]);
       swipe(slot.container, -160);
       expect(row(slot.container).dataset.swipePhase).toBe("out");
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       act(() => {
         vi.advanceTimersByTime(600);
       });
-      expect(slot.inspection.sidebarActionCalls).toContainEqual({
+      expect(slot.actionCalls()).toContainEqual({
         method: "archive",
         threadId: "t",
       });
@@ -496,7 +825,7 @@ describe("swipe actions", () => {
       settings: { swipeLeft: "Pin / unpin" },
     });
     swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toContainEqual({
+    expect(slot.actionCalls()).toContainEqual({
       method: "setPinned",
       threadId: "t",
       pinned: true,
@@ -523,7 +852,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -532,14 +861,14 @@ describe("swipe actions", () => {
   it("springs back without acting on a short drag", () => {
     const slot = renderSwipe([makeThread({ id: "t" })]);
     swipe(slot.container, -30);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(row(slot.container).dataset.swipePhase).toBe("settle");
   });
 
   it("leaves vertical movement to the scroller", () => {
     const slot = renderSwipe([makeThread({ id: "t" })]);
     swipe(slot.container, -20, 160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(row(slot.container).dataset.swipePhase).toBeUndefined();
   });
 
@@ -579,14 +908,14 @@ describe("swipe actions", () => {
       });
       expect(row(slot.container).dataset.swipePhase).toBe("open");
       expect(row(slot.container).style.transform).toContain("-96px");
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       // Moving again carries on from there.
       wheelSwipe(slot.container, -100);
       momentumTail(slot.container, -1);
       act(() => {
         vi.advanceTimersByTime(150);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
     } finally {
@@ -611,7 +940,7 @@ describe("swipe actions", () => {
       const button = slot.container.querySelector(".radar-swipe-underlay") as HTMLElement;
       fireEvent.pointerDown(button);
       fireEvent.click(button);
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
       act(() => {
@@ -649,7 +978,7 @@ describe("swipe actions", () => {
         // The harness's split-drag stand-in logs any press on a row link as
         // "open"; the real host only drags once the pointer leaves the list.
         expect(
-          slot.inspection.sidebarActionCalls.filter((call) => call.method !== "open"),
+          slot.actionCalls().filter((call) => call.method !== "open"),
         ).toEqual([]);
       } finally {
         vi.useRealTimers();
@@ -793,7 +1122,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(2000);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(target.dataset.swipePhase).toBeUndefined();
       expect(target.style.transform).toBe("");
     } finally {
@@ -809,11 +1138,11 @@ describe("swipe actions", () => {
       });
       wheelSwipe(slot.container, -160);
       momentumTail(slot.container, -1);
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       act(() => {
         vi.advanceTimersByTime(120);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
 
@@ -827,7 +1156,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
-      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+      expect(slot.actionCalls()).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -855,7 +1184,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(150);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "setPinned", threadId: "t", pinned: true },
       ]);
     } finally {
@@ -874,7 +1203,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1000);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -890,11 +1219,11 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       act(() => {
         vi.advanceTimersByTime(300);
       });
-      expect(slot.inspection.sidebarActionCalls).toHaveLength(1);
+      expect(slot.actionCalls()).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -908,7 +1237,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     } finally {
       vi.useRealTimers();
@@ -927,7 +1256,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(target.dataset.swipePhase).toBeUndefined();
     } finally {
       vi.useRealTimers();
@@ -944,7 +1273,7 @@ describe("swipe actions", () => {
       act(() => {
         vi.advanceTimersByTime(1500);
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([]);
+      expect(slot.actionCalls()).toEqual([]);
       expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     } finally {
       vi.useRealTimers();
@@ -956,18 +1285,10 @@ describe("swipe actions", () => {
       settings: { swipeActions: false },
     });
     swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(row(slot.container).dataset.swipePhase).toBeUndefined();
     expect(slot.container.querySelector("[data-radar-swipe=\"off\"]")).not.toBeNull();
   });
-  it("waits for the saved settings before a swipe can act", () => {
-    // No `settings`: still loading, so a swipe must not run on the defaults.
-    const slot = renderThreads([makeThread({ id: "t" })]);
-    swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
-    expect(row(slot.container).dataset.swipePhase).toBeUndefined();
-  });
-
   it("lets a locked drag go home when a second finger lands", () => {
     vi.useFakeTimers();
     try {
@@ -1006,7 +1327,7 @@ describe("swipe actions", () => {
     fireEvent.touchMove(target, { touches: [{ clientX: 0, clientY: 20 }] });
     fireEvent.touchCancel(target, { touches: [] });
     expect(target.dataset.swipePhase).toBe("settle");
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
   });
 
   it("leaves a touch on the drag grip to its section drag", () => {
@@ -1019,7 +1340,7 @@ describe("swipe actions", () => {
     fireEvent.touchMove(grip, { touches: [{ clientX: 138, clientY: 20 }] });
     fireEvent.touchMove(grip, { touches: [{ clientX: 0, clientY: 20 }] });
     fireEvent.touchEnd(grip, { touches: [] });
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
     expect(target.dataset.swipePhase).toBeUndefined();
   });
 
@@ -1032,7 +1353,7 @@ describe("swipe actions", () => {
       act(() => {
         slot.unmount();
       });
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "t" },
       ]);
     } finally {
@@ -1063,15 +1384,22 @@ describe("swipe actions", () => {
     }
   });
 
-  it("does not fold away a parent whose archive the host may confirm", () => {
+  it.each(["time", "section"])("does not fold away a parent whose archive the host may confirm in %s mode", (grouping) => {
     vi.useFakeTimers();
     try {
+      localStorage.setItem("radar-sidebar:grouping:v1", grouping);
       const slot = renderSwipe([
-        makeThread({ id: "p" }),
-        makeThread({ id: "c", parentThreadId: "p" }),
-      ]);
+        makeThread({ id: "p", sectionId: "a" }),
+        makeThread({ id: "c", parentThreadId: "p", sectionId: "b" }),
+      ], { sections: [makeSection({ id: "a", name: "A" }), makeSection({ id: "b", name: "B" })] });
+      if (grouping === "section") {
+        expect(visibleRowIds(screen.getByRole("region", { name: "A" }))).toEqual(["p"]);
+        expect(visibleRowIds(screen.getByRole("region", { name: "B" }))).toEqual(["c"]);
+      } else {
+        expect(visibleRowIds(slot.container)).toEqual(["p", "c"]);
+      }
       swipe(slot.container, -160);
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "p" },
       ]);
       expect(row(slot.container).dataset.swipePhase).toBe("settle");
@@ -1093,7 +1421,7 @@ describe("swipe actions", () => {
       expect(visibleRowIds(slot.container)).toEqual(["p"]);
       swipe(slot.container, -160);
       // The host still confirms archiving the replies it cannot see here.
-      expect(slot.inspection.sidebarActionCalls).toEqual([
+      expect(slot.actionCalls()).toEqual([
         { method: "archive", threadId: "p" },
       ]);
       expect(row(slot.container).dataset.swipePhase).toBe("settle");
@@ -1123,7 +1451,7 @@ describe("swipe actions", () => {
     localStorage.setItem("radar-sidebar:lifecycles:v1", "all");
     const slot = renderSwipe([makeThread({ id: "t" })]);
     swipe(slot.container, -160);
-    expect(slot.inspection.sidebarActionCalls).toEqual([
+    expect(slot.actionCalls()).toEqual([
       { method: "archive", threadId: "t" },
     ]);
     expect(row(slot.container).dataset.swipePhase).toBe("settle");
@@ -1189,43 +1517,10 @@ describe("density", () => {
 });
 
 describe("settings gates", () => {
-  it("shows rows on the shipped defaults while settings load", () => {
-    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
-      values: undefined, isLoading: true,
-    });
+  it("shows rows on the shipped defaults when nothing is saved", () => {
     const slot = renderThreads([makeThread({ id: "t" })]);
     expect(visibleRowIds(slot.container)).toEqual(["t"]);
     expect(screen.queryByRole("status", { name: "Loading threads" })).toBeNull();
-    expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
-      .toBeNull();
-  });
-
-  it("paints the last-seen density and title mode while settings load", () => {
-    // A first render on settings remembers them for this client...
-    renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: true, defaultDensity: "compact" },
-    });
-    cleanup();
-
-    // ...so the next load sizes rows correctly before settings resolve.
-    vi.spyOn(pluginSdk, "useSettings").mockReturnValue({
-      values: undefined, isLoading: true,
-    });
-    const slot = renderThreads([makeThread({ id: "t" })]);
-    expect(visibleRowIds(slot.container)).toEqual(["t"]);
-    expect(slot.container.querySelector(".radar-title-wrap.radar-density-compact"))
-      .not.toBeNull();
-  });
-
-  it("follows the loaded settings over the last-seen ones", () => {
-    renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: true, defaultDensity: "compact" },
-    });
-    cleanup();
-
-    const slot = renderThreads([makeThread({ id: "t" })], {
-      settings: { twoLineTitles: false },
-    });
     expect(slot.container.querySelector(".radar-title-wrap, .radar-density-compact"))
       .toBeNull();
   });
@@ -1581,7 +1876,7 @@ describe("Pinned smart view", () => {
 
 describe("keyboard shortcuts", () => {
   const archived = (slot: ReturnType<typeof renderThreads>) =>
-    slot.inspection.sidebarActionCalls.filter(
+    slot.actionCalls().filter(
       (call) => call.method === "archive",
     );
 
@@ -1707,7 +2002,7 @@ describe("review regressions", () => {
     slot.container.querySelector<HTMLElement>('[data-sidebar-thread-id="a"]')!.focus();
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement!, { key: "e" });
-    expect(slot.inspection.sidebarActionCalls).toEqual([
+    expect(slot.actionCalls()).toEqual([
       { method: "archive", threadId: "b" },
     ]);
   });
@@ -1839,7 +2134,7 @@ describe("section creation", () => {
     expect((screen.getByRole("textbox", { name: "Section name" }) as HTMLInputElement).value).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(create).not.toHaveBeenCalled();
-    expect(slot.inspection.sidebarActionCalls).toEqual([]);
+    expect(slot.actionCalls()).toEqual([]);
   });
 
   it("keeps a failed name for retry and shows the API error", async () => {
@@ -1910,4 +2205,34 @@ describe("selection", () => {
     );
     expect(screen.queryByText("1 selected")).toBeNull();
   });
+});
+
+it("files only the chosen child through its menu and displays the host update under B", async () => {
+  localStorage.setItem("radar-sidebar:grouping:v1", "section");
+  const parent = makeThread({ id: "file-parent", title: "Parent", sectionId: "a" });
+  const child = makeThread({ id: "file-child", title: "Child", parentThreadId: parent.id, sectionId: "a" });
+  const state: PluginSidebarThreadsState = { status: "ready", threads: [parent, child],
+    projects: [makeProject({ id: "proj_a" })],
+    sections: [makeSection({ id: "a", name: "A" }), makeSection({ id: "b", name: "B" })], experimental_archived: null };
+  const snapshot = vi.spyOn(pluginSdk, "experimental_useSidebarThreads").mockReturnValue(state);
+  const slot = renderThreads([parent, child], { sections: state.sections as ReturnType<typeof makeSection>[] });
+  fireEvent.contextMenu(slot.container.querySelector('[data-sidebar-thread-id="file-child"]')!);
+  fireEvent.click(screen.getByRole("menuitem", { name: "B" }));
+  await waitFor(() => expect(slot.inspection.sdkCalls.filter(call => call.method === "threads.update")).toEqual([
+    { method: "threads.update", args: [{ threadId: "file-child", sectionId: "b" }] },
+  ]));
+  snapshot.mockReturnValue({ ...state, threads: [parent, { ...child, sectionId: "b" }] });
+  slot.rerender(createElement(threadList.component, { activeThreadId: null, activeProjectId: "proj_a",
+    isCompactViewport: false, onNavigate: () => {}, searchQuery: "" }));
+  expect(visibleRowIds(screen.getByRole("region", { name: "A" }))).toEqual(["file-parent"]);
+  expect(visibleRowIds(screen.getByRole("region", { name: "B" }))).toEqual(["file-child"]);
+  expect(visibleRowIds(slot.container)).toEqual(["file-parent", "file-child"]);
+  expect(within(screen.getByRole("region", { name: "A" })).getByRole("button", { name: "A, 1 thread" }).querySelector(".radar-group-count")?.textContent).toBe("1");
+  expect(within(screen.getByRole("region", { name: "B" })).getByRole("button", { name: "B, 1 thread" }).querySelector(".radar-group-count")?.textContent).toBe("1");
+  fireEvent.contextMenu(slot.container.querySelector('[data-sidebar-thread-id="file-child"]')!);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Mark family read" }));
+  await waitFor(() => expect(slot.inspection.sdkCalls.filter(call => call.method === "threads.markRead")).toEqual([
+    { method: "threads.markRead", args: [{ threadId: "file-parent" }] },
+    { method: "threads.markRead", args: [{ threadId: "file-child" }] },
+  ]));
 });

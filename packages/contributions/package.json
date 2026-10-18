@@ -1,0 +1,33 @@
+{
+  "name": "bb-radar-contributions",
+  "version": "0.1.0",
+  "description": "Versioned, data-only contribution contracts for BB's Radar Sidebar.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "peerDependencies": {
+    "@get-bb/plugin-sdk": ">=0.5.29"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "0.5.29",
+    "typescript": "^5.7.0"
+  }
+}

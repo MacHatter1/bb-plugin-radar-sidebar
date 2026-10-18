@@ -9,9 +9,74 @@ All notable changes to Radar Sidebar are documented here. The format follows
 ### Added
 
 - **Threads per project** (`projectThreadLimit`): cap each project folder to
-  its 3, 5 or 10 most recent threads, with **Show more** and **Show less**
-  below. The open thread and threads that need you stay visible past the cap,
-  and searching or a status filter shows everything. Off (`all`) by default.
+  its 3, 5 or 10 most recent thread families, with **Show N more thread
+  families** and **Show less** below. Families containing the open thread or
+  threads that need you stay visible past the cap, and searching or a status
+  filter shows everything. Off (`all`) by default; expanded folders are
+  remembered per client. Configurable in Radar's Thread rows settings card.
+
+## 0.1.11
+
+Changes merged in [PR #17](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/17).
+
+### Fixed
+
+- Selecting a project tile filters the thread list without opening its card.
+  Right-click or Shift+F10 opens the card and its project actions.
+
+## 0.1.10
+
+Changes merged in [PR #15](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/15).
+
+### Fixed
+
+- Clicking a project tile or selecting a project in the rail's picker filters
+  Radar's thread list to that project. The filter is remembered per client;
+  **Show all projects** in the list header clears it. Project cards remain
+  available, and selecting a project opens a collapsed sidebar.
+
+## 0.1.9
+
+Changes merged in [PR #12](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/12).
+
+### Added
+
+- An optional **Radar projects** section on BB hosts exposing
+  `experimental_navRailSection`, with project tiles, status badges, project
+  cards, recent threads, project actions, pins, collections and ordering.
+  Registration is skipped on hosts without the extension.
+- Scheduled queue indicators with a clock, Scheduled label and local run time,
+  including folded thread families and group headers.
+- Experimental Radar v1 contributions for thread badges, plugin-panel links
+  and context-menu RPC actions, with batched reads, timeouts, cancellation,
+  failure isolation and shared per-plugin toggles.
+- A locally packable `bb-radar-contributions` contract package, contributor
+  documentation and a tested Agent Teams integration example. The package is
+  not published and the example is not activated automatically.
+- Grouped settings cards with previews and a repository-local sidebar
+  integration map linked from the README.
+
+### Changed
+
+- Requires BB 0.46 or later and Plugin SDK 0.6.37 or later.
+- Archive and delete use BB's thread actions, preserving host confirmations
+  and undo. Opening, pinning, read state and renaming use BB's navigation and
+  SDK instead of the retired `experimental_useSidebarThreadActions` hook.
+- Preferences move from BB's plugin settings to shared plugin KV storage,
+  with versioned snapshots, atomic updates and realtime synchronisation.
+  Earlier BB-managed preferences reset to defaults once; settings are edited
+  in Radar's settings page rather than `bb plugin config`.
+- The optional project section reuses saved project pins and collections;
+  navigation remains owned by BB.
+
+### Fixed
+
+- Pending settings edits are retained while saves complete; stale responses
+  cannot overwrite newer snapshots, and reconnects reconcile missed updates.
+- Search and inline rename respect IME composition, including the legacy
+  key-code fallback when confirming a candidate.
+- Folded families and group headers distinguish queued work from threads
+  waiting for user input.
 
 ## 0.5.3 - 2026-10-10
 

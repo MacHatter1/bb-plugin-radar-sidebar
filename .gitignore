@@ -11,6 +11,9 @@ coverage/
 .cursor/
 CLAUDE.local.md
 
+# Promo video sources and renders
+docs/promo/
+
 # Local environment and secrets
 .env
 .env.*

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { UrlLink, experimental_Icon as HostIcon } from "@get-bb/plugin-sdk/app";
 import { Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +10,8 @@ export type RadarMenuItem =
       id: string;
       label: string;
       icon?: string;
+      hostIcon?: boolean;
+      href?: string;
       checked?: boolean;
       danger?: boolean;
       disabled?: boolean;
@@ -16,24 +19,22 @@ export type RadarMenuItem =
   | { kind: "separator" }
   | { kind: "header"; label: string };
 
-/**
- * A small viewport-fixed context menu. Rendered with `position: fixed` from
- * client coordinates, clamped into the window. It closes on outside
- * pointer-down, Escape, scroll, or resize, and every listener is removed on
- * unmount.
- */
 export function RadarMenu({
   x,
   y,
   items,
   onSelect,
   onClose,
+  label = "Thread actions",
+  trigger,
 }: {
   x: number;
   y: number;
   items: RadarMenuItem[];
   onSelect: (id: string) => void;
   onClose: () => void;
+  label?: string;
+  trigger: HTMLElement;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -49,11 +50,18 @@ export function RadarMenu({
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (ref.current?.contains(document.activeElement) && trigger.isConnected) {
+        trigger.focus({ preventScroll: true });
+      }
+      onClose();
     };
     const onScroll = (event: Event) => {
-      if (ref.current && ref.current.contains(event.target as Node)) return;
-      onClose();
+      if (!(event.target instanceof Node)) return;
+      if (ref.current?.contains(event.target)) return;
+      if (event.target.contains(trigger)) onClose();
     };
     const onResize = () => onClose();
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -66,7 +74,7 @@ export function RadarMenu({
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [onClose]);
+  }, [onClose, trigger]);
 
   useEffect(() => {
     ref.current?.focus();
@@ -74,8 +82,8 @@ export function RadarMenu({
 
   const moveFocus = (direction: 1 | -1 | "first" | "last") => {
     const buttons = Array.from(
-      ref.current?.querySelectorAll<HTMLButtonElement>(
-        'button[data-menu-item]:not(:disabled)',
+      ref.current?.querySelectorAll<HTMLElement>(
+        '[data-menu-item]:not(:disabled):not([aria-disabled="true"])',
       ) ?? [],
     );
     if (buttons.length === 0) return;
@@ -99,7 +107,7 @@ export function RadarMenu({
       ref={ref}
       role="menu"
       tabIndex={-1}
-      aria-label="Thread actions"
+      aria-label={label}
       className="radar-menu"
       style={{ left, top, width }}
       onKeyDown={(event) => {
@@ -133,6 +141,18 @@ export function RadarMenu({
             </div>
           );
         }
+        const content = <>
+          {item.icon ? (
+            item.hostIcon ? <HostIcon name={item.icon} aria-hidden="true" className="radar-menu-icon" />
+              : <Icon name={item.icon} aria-hidden="true" className="radar-menu-icon" />
+          ) : <span className="radar-menu-icon" aria-hidden="true" />}
+          <span className="radar-menu-label">{item.label}</span>
+          {item.checked ? <Icon name="Check" aria-hidden="true" className="radar-menu-check" /> : null}
+        </>;
+        if (item.href && !item.disabled) {
+          return <UrlLink key={item.id} href={item.href} role="menuitem" data-menu-item=""
+            className="radar-menu-item" onClick={onClose}>{content}</UrlLink>;
+        }
         return (
           <button
             key={item.id}
@@ -146,15 +166,7 @@ export function RadarMenu({
             )}
             onClick={() => onSelect(item.id)}
           >
-            {item.icon ? (
-              <Icon name={item.icon} aria-hidden="true" className="radar-menu-icon" />
-            ) : (
-              <span className="radar-menu-icon" aria-hidden="true" />
-            )}
-            <span className="radar-menu-label">{item.label}</span>
-            {item.checked ? (
-              <Icon name="Check" aria-hidden="true" className="radar-menu-check" />
-            ) : null}
+            {content}
           </button>
         );
       })}
