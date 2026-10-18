@@ -6,6 +6,15 @@ All notable changes to Radar Sidebar are documented here. The format follows
 
 ## Unreleased
 
+## 0.1.12
+
+Thanks to Ivan ([@ivkiwi](https://github.com/ivkiwi)) for
+[PR #13](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/13).
+Also includes
+[PR #19](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/19)
+and
+[PR #20](https://github.com/MacHatter1/bb-plugin-radar-sidebar/pull/20).
+
 ### Added
 
 - **Threads per project** (`projectThreadLimit`): cap each project folder to
@@ -14,6 +23,17 @@ All notable changes to Radar Sidebar are documented here. The format follows
   threads that need you stay visible past the cap, and searching or a status
   filter shows everything. Off (`all`) by default; expanded folders are
   remembered per client. Configurable in Radar's Thread rows settings card.
+
+### Fixed
+
+- A reply filed into another section stays in that section. Section display
+  is separate from the logical family, so family actions keep their original
+  relationships.
+- A project selected while browser storage is full stays selected for the
+  session. The selection does not survive a reload.
+- Sidebar menus stay open when an unrelated pane scrolls, and Escape returns
+  focus to the control that opened them.
+- Loading placeholders stay still when reduced motion is requested.
 
 ## 0.1.11
 
